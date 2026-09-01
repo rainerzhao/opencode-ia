@@ -25,6 +25,17 @@ test('rejects a sibling directory with the same string prefix', () => {
   );
 });
 
+test('rejects Windows-style traversal on macOS and Linux', () => {
+  assert.throws(
+    () => resolveWithinRoot('/srv/knowledge', '..\\secret.md'),
+    /unsafe path/i
+  );
+  assert.throws(
+    () => resolveWithinRoot('/srv/knowledge', 'gpu\\..\\..\\secret.md'),
+    /unsafe path/i
+  );
+});
+
 test('enforces an optional extension allowlist', () => {
   assert.throws(
     () => resolveWithinRoot('/srv/knowledge', 'gpu/选型指南.txt', { extensions: ['.md'] }),
@@ -41,6 +52,11 @@ for (const name of ['folder/file.md', 'folder\\file.md', '.', '..']) {
     assert.throws(() => validateFileName(name), /unsafe file name/i);
   });
 }
+
+test('validateFileName rejects control characters', () => {
+  assert.throws(() => validateFileName('guide\n.md'), /unsafe file name/i);
+  assert.throws(() => validateFileName('guide\u007f.md'), /unsafe file name/i);
+});
 
 test('rejects an existing intermediate symlink that escapes the root', (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'path-policy-'));

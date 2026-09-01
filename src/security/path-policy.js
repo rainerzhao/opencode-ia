@@ -38,7 +38,7 @@ function nearestExistingAncestor(target) {
 function resolveWithinRoot(root, relativePath, options = {}) {
   if (typeof root !== 'string' || typeof relativePath !== 'string' ||
       root.includes('\0') || relativePath.includes('\0') ||
-      path.isAbsolute(relativePath) || path.win32.isAbsolute(relativePath)) {
+      relativePath.includes('\\') || path.isAbsolute(relativePath) || path.win32.isAbsolute(relativePath)) {
     throw unsafePath();
   }
 
@@ -75,7 +75,8 @@ function validateFileName(name) {
 
   const normalized = name.normalize('NFC');
   if (!normalized || normalized === '.' || normalized === '..' ||
-      normalized.includes('\0') || normalized.includes('/') || normalized.includes('\\') ||
+      /[\u0000-\u001f\u007f]/.test(normalized) ||
+      normalized.includes('/') || normalized.includes('\\') ||
       path.basename(normalized) !== normalized || Buffer.byteLength(normalized, 'utf8') > 255) {
     throw new Error('unsafe file name');
   }

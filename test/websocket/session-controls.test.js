@@ -389,7 +389,10 @@ test('removes a disconnected session from the active session count', async (t) =
 
 test('forces hanging HTTP connections closed within the shutdown deadline', async (t) => {
   const projectDir = useTempDir(t);
-  const config = loadConfig({ env: {}, projectDir });
+  const config = loadConfig({
+    env: { KNOWLEDGE_FETCH_ALLOWED_HOSTS: 'docs.example.com' },
+    projectDir
+  });
   let signalUpstreamRequest;
   const upstreamRequested = new Promise((resolve) => { signalUpstreamRequest = resolve; });
   let signalUpstreamSocketClosed;
@@ -408,13 +411,20 @@ test('forces hanging HTTP connections closed within the shutdown deadline', asyn
   const workbench = createWorkbenchServer({
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
-    logger: { log() {}, error() {} }
+    logger: { log() {}, error() {} },
+    urlFetchOptions: {
+      resolver: async () => [{ address: '93.184.216.34', family: 4 }],
+      fetchImpl: (url, options) => {
+        const source = new URL(url);
+        return fetch(`http://127.0.0.1:${upstreamPort}${source.pathname}`, options);
+      }
+    }
   });
   const address = await workbench.start(0);
   const pendingRequest = fetch(`http://127.0.0.1:${address.port}/api/knowledge/fetch-url`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url: `http://127.0.0.1:${upstreamPort}/never-finishes` })
+    body: JSON.stringify({ url: 'https://docs.example.com/never-finishes' })
   });
 
   try {
@@ -426,7 +436,7 @@ test('forces hanging HTTP connections closed within the shutdown deadline', asyn
       (error) => ({ error })
     );
     assert.equal(
-      requestOutcome.status === 500 || requestOutcome.error instanceof Error,
+      requestOutcome.status === 499 || requestOutcome.status === 500 || requestOutcome.error instanceof Error,
       true
     );
     assert.equal(workbench.httpServer.listening, false);

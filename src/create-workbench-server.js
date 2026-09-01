@@ -3,8 +3,18 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('node:crypto');
 const multer = require('multer');
-function createWorkbenchServer({ config, promptRunner, logger = console }) {
+const { resolveWithinRoot, validateFileName } = require('./security/path-policy');
+const { fetchAllowedText } = require('./security/url-policy');
+
+function createWorkbenchServer({
+  config,
+  promptRunner,
+  logger = console,
+  urlFetchOptions = {},
+  fetchAllowedTextImpl = fetchAllowedText
+}) {
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -25,38 +35,63 @@ const PUBLIC_RUNNER_ERRORS = Object.freeze({
 });
 
 // 中间件
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader('x-request-id', req.requestId);
+  next();
+});
 app.use(express.json());
 app.use(express.static(path.join(config.projectDir, 'public')));
 
-// 文件上传配置
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const category = req.body.category || '';
-    const uploadDir = path.join(config.knowledgeDir, category);
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // 保留原文件名，中文文件名编码处理
-    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    cb(null, originalName);
+function apiError(code, message, status = 400) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  return error;
+}
+
+function safePath(root, relativePath, options) {
+  try {
+    return resolveWithinRoot(root, relativePath, options);
+  } catch {
+    throw apiError('UNSAFE_PATH', 'The requested path is not allowed');
   }
+}
+
+function safeFileName(name) {
+  try {
+    return validateFileName(name);
+  } catch {
+    throw apiError('UNSAFE_FILE_NAME', 'The requested file name is not allowed');
+  }
+}
+
+function safeCategory(root, category) {
+  if (category === undefined || category === null || category === '') {
+    return { absolute: safePath(root, '.'), relative: '' };
+  }
+  if (typeof category !== 'string' || category.includes('\\')) {
+    throw apiError('UNSAFE_PATH', 'The requested path is not allowed');
+  }
+  const segments = category.split('/');
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    throw apiError('UNSAFE_PATH', 'The requested path is not allowed');
+  }
+  const normalized = segments.map(safeFileName).join('/');
+  return { absolute: safePath(root, normalized), relative: normalized };
+}
+
+// 文件上传配置
+fs.mkdirSync(config.uploadTempDir, { recursive: true });
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, config.uploadTempDir),
+  filename: (_req, _file, cb) => cb(null, crypto.randomUUID())
 });
 
 const upload = multer({
+  preservePath: true,
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.md', '.txt', '.docx', '.pdf', '.json', '.csv'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('不支持的文件格式'));
-    }
-  }
+  limits: { fileSize: 50 * 1024 * 1024 }
 });
 
 // 会话管理
@@ -92,7 +127,7 @@ app.get('/api/skills', (req, res) => {
     const dirs = fs.readdirSync(config.skillsDir, { withFileTypes: true })
       .filter(d => d.isDirectory())
       .map(d => {
-        const skillPath = path.join(config.skillsDir, d.name, 'SKILL.md');
+        const skillPath = safePath(config.skillsDir, `${safeFileName(d.name)}/SKILL.md`, { extensions: ['.md'] });
         let description = '';
         if (fs.existsSync(skillPath)) {
           const content = fs.readFileSync(skillPath, 'utf-8');
@@ -132,12 +167,11 @@ app.post('/api/solutions', (req, res) => {
     createdBy: 'anonymous'
   };
 
-  // 保存到文件
   if (!fs.existsSync(config.solutionsDir)) {
     fs.mkdirSync(config.solutionsDir, { recursive: true });
   }
 
-  const filePath = path.join(config.solutionsDir, `${record.id}.json`);
+  const filePath = safePath(config.solutionsDir, `${safeFileName(record.id)}.json`, { extensions: ['.json'] });
   fs.writeFileSync(filePath, JSON.stringify(record, null, 2));
 
   res.json({ success: true, id: record.id });
@@ -152,7 +186,7 @@ app.get('/api/solutions', (req, res) => {
     const files = fs.readdirSync(config.solutionsDir)
       .filter(f => f.endsWith('.json'))
       .map(f => {
-        const content = fs.readFileSync(path.join(config.solutionsDir, f), 'utf-8');
+        const content = fs.readFileSync(safePath(config.solutionsDir, safeFileName(f), { extensions: ['.json'] }), 'utf-8');
         return JSON.parse(content);
       })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -181,7 +215,12 @@ function buildKnowledgeTree(dirPath, relativePath = '') {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
+    let fullPath;
+    try {
+      fullPath = safePath(config.knowledgeDir, relativePath ? `${relativePath}/${entry.name}` : entry.name);
+    } catch {
+      continue;
+    }
     const itemPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
     if (entry.isDirectory()) {
@@ -216,12 +255,12 @@ function buildKnowledgeTree(dirPath, relativePath = '') {
 app.get('/api/knowledge/article', (req, res) => {
   const filePath = req.query.path;
   if (!filePath) {
-    return res.status(400).json({ error: 'path is required' });
+    throw apiError('INVALID_REQUEST', 'path is required');
   }
 
-  const fullPath = path.join(config.knowledgeDir, filePath);
+  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
   if (!fs.existsSync(fullPath)) {
-    return res.status(404).json({ error: 'File not found' });
+    throw apiError('NOT_FOUND', 'File not found', 404);
   }
 
   const content = fs.readFileSync(fullPath, 'utf-8');
@@ -231,11 +270,11 @@ app.get('/api/knowledge/article', (req, res) => {
 // API: 保存知识库文章
 app.post('/api/knowledge/article', (req, res) => {
   const { filePath, content } = req.body;
-  if (!filePath || content === undefined) {
-    return res.status(400).json({ error: 'filePath and content are required' });
+  if (!filePath || typeof content !== 'string') {
+    throw apiError('INVALID_REQUEST', 'filePath and string content are required');
   }
 
-  const fullPath = path.join(config.knowledgeDir, filePath);
+  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
   const dir = path.dirname(fullPath);
 
   if (!fs.existsSync(dir)) {
@@ -249,14 +288,14 @@ app.post('/api/knowledge/article', (req, res) => {
 // API: 新建知识库文章
 app.post('/api/knowledge/article/new', (req, res) => {
   const { title, category, content } = req.body;
-  if (!title) {
-    return res.status(400).json({ error: 'title is required' });
+  if (typeof title !== 'string' || !title || (content !== undefined && typeof content !== 'string')) {
+    throw apiError('INVALID_REQUEST', 'title and content must be strings');
   }
 
-  const fileName = `${title}.md`;
-  const dirPath = category || '';
-  const filePath = dirPath ? path.join(dirPath, fileName) : fileName;
-  const fullPath = path.join(config.knowledgeDir, filePath);
+  const fileName = safeFileName(`${title}.md`);
+  const destination = safeCategory(config.knowledgeDir, category);
+  const filePath = destination.relative ? `${destination.relative}/${fileName}` : fileName;
+  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
   const dir = path.dirname(fullPath);
 
   if (!fs.existsSync(dir)) {
@@ -273,10 +312,10 @@ app.post('/api/knowledge/article/new', (req, res) => {
 app.delete('/api/knowledge/article', (req, res) => {
   const filePath = req.query.path;
   if (!filePath) {
-    return res.status(400).json({ error: 'path is required' });
+    throw apiError('INVALID_REQUEST', 'path is required');
   }
 
-  const fullPath = path.join(config.knowledgeDir, filePath);
+  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath);
   }
@@ -300,7 +339,12 @@ function searchKnowledgeDir(dirPath, query, results, relativePath) {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
+    let fullPath;
+    try {
+      fullPath = safePath(config.knowledgeDir, relativePath ? `${relativePath}/${entry.name}` : entry.name);
+    } catch {
+      continue;
+    }
     const itemPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
     if (entry.isDirectory()) {
@@ -321,41 +365,105 @@ function searchKnowledgeDir(dirPath, query, results, relativePath) {
   }
 }
 
+function removeExplicitFiles(files) {
+  for (const filePath of files) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') logger.error('[Upload] temporary file cleanup failed');
+    }
+  }
+}
+
+function decodeUploadName(originalName) {
+  return Buffer.from(originalName, 'latin1').toString('utf8');
+}
+
 // API: 上传文件到知识库
-app.post('/api/knowledge/upload', upload.array('files', 10), (req, res) => {
-  try {
-    const category = req.body.category || '';
-    const results = [];
-
-    for (const file of req.files) {
-      const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      const ext = path.extname(originalName).toLowerCase();
-      const relativePath = category ? `${category}/${originalName}` : originalName;
-
-      // 如果是 txt 或其他文本文件，转换为 md
-      if (ext === '.txt') {
-        const content = fs.readFileSync(file.path, 'utf-8');
-        const mdPath = file.path.replace(ext, '.md');
-        const title = originalName.replace(ext, '');
-        fs.writeFileSync(mdPath, `# ${title}\n\n${content}`);
-        fs.unlinkSync(file.path);
-        results.push({ name: `${title}.md`, path: relativePath.replace(ext, '.md') });
-      } else {
-        results.push({ name: originalName, path: relativePath });
-      }
+app.post('/api/knowledge/upload', (req, res, next) => {
+  upload.array('files', 10)(req, res, (multerError) => {
+    const temporaryFiles = (req.files || []).map((file) => file.path);
+    if (multerError) {
+      removeExplicitFiles(temporaryFiles);
+      next(apiError(
+        multerError.code === 'LIMIT_FILE_SIZE' ? 'UPLOAD_TOO_LARGE' : 'INVALID_UPLOAD',
+        multerError.code === 'LIMIT_FILE_SIZE'
+          ? 'Uploaded file exceeds the size limit'
+          : 'Upload could not be processed'
+      ));
+      return;
     }
 
-    res.json({ success: true, files: results });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const promoted = [];
+    const backups = [];
+    try {
+      if (!req.files?.length) throw apiError('INVALID_UPLOAD', 'At least one file is required');
+      const category = safeCategory(config.knowledgeDir, req.body.category);
+      const allowedExtensions = new Set(['.md', '.txt', '.docx', '.pdf', '.json', '.csv']);
+      const targets = new Set();
+      const entries = req.files.map((file) => {
+        const originalName = safeFileName(decodeUploadName(file.originalname));
+        const extension = path.extname(originalName).toLowerCase();
+        if (!allowedExtensions.has(extension)) {
+          throw apiError('UPLOAD_EXTENSION_NOT_ALLOWED', 'Uploaded file extension is not allowed');
+        }
+        const finalName = extension === '.txt'
+          ? safeFileName(`${originalName.slice(0, -extension.length)}.md`)
+          : originalName;
+        const relativePath = category.relative ? `${category.relative}/${finalName}` : finalName;
+        const target = safePath(config.knowledgeDir, relativePath);
+        if (targets.has(target)) throw apiError('DUPLICATE_UPLOAD', 'Upload contains duplicate destinations');
+        targets.add(target);
+        return { file, originalName, extension, finalName, relativePath, target };
+      });
+
+      fs.mkdirSync(category.absolute, { recursive: true });
+      for (const entry of entries) {
+        if (fs.existsSync(entry.target)) {
+          const backup = safePath(config.uploadTempDir, crypto.randomUUID());
+          fs.renameSync(entry.target, backup);
+          backups.push({ target: entry.target, backup });
+        }
+
+        if (entry.extension === '.txt') {
+          const content = fs.readFileSync(entry.file.path, 'utf8');
+          const title = entry.finalName.slice(0, -3);
+          fs.writeFileSync(entry.target, `# ${title}\n\n${content}`, { flag: 'wx' });
+          promoted.push(entry.target);
+          fs.unlinkSync(entry.file.path);
+        } else {
+          fs.renameSync(entry.file.path, entry.target);
+          promoted.push(entry.target);
+        }
+      }
+
+      removeExplicitFiles(backups.map(({ backup }) => backup));
+      res.json({
+        success: true,
+        files: entries.map(({ finalName, relativePath }) => ({ name: finalName, path: relativePath }))
+      });
+    } catch (error) {
+      removeExplicitFiles(promoted);
+      for (const { target, backup } of backups.reverse()) {
+        try {
+          if (fs.existsSync(backup)) fs.renameSync(backup, target);
+        } catch {
+          logger.error('[Upload] destination rollback failed');
+        }
+      }
+      removeExplicitFiles(temporaryFiles);
+      removeExplicitFiles(backups.map(({ backup }) => backup));
+      next(error);
+    }
+  });
 });
 
 // API: 从 URL 抓取内容
-app.post('/api/knowledge/fetch-url', async (req, res) => {
+app.post('/api/knowledge/fetch-url', async (req, res, next) => {
   const { url, category } = req.body;
-  if (!url) {
-    return res.status(400).json({ error: 'url is required' });
+  if (typeof url !== 'string' || !url) {
+    next(apiError('INVALID_REQUEST', 'url is required'));
+    return;
   }
 
   const controller = new AbortController();
@@ -365,42 +473,62 @@ app.post('/api/knowledge/fetch-url', async (req, res) => {
   activeHttpControllers.add(controller);
   res.once('close', abortIfClientClosed);
   try {
-    // 简单的 HTTP 抓取（实际项目中应使用更完善的爬虫）
-    const response = await fetch(url, { signal: controller.signal });
-    const html = await response.text();
+    const destination = safeCategory(config.knowledgeDir, category);
+    const fetched = await fetchAllowedTextImpl(url, {
+      ...urlFetchOptions,
+      allowedHosts: config.fetchAllowedHosts,
+      signal: controller.signal
+    });
 
-    // 简单提取文本内容（去除 HTML 标签）
-    const text = html
+    const text = fetched.text
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-    // 生成文件名
-    const urlObj = new URL(url);
-    const title = urlObj.pathname.split('/').filter(Boolean).join('_') || 'web_content';
-    const fileName = `${title}.md`;
-    const filePath = category ? `${category}/${fileName}` : fileName;
-    const fullPath = path.join(config.knowledgeDir, filePath);
+    const finalUrl = new URL(fetched.finalUrl);
+    let title = finalUrl.pathname.split('/').filter(Boolean).join('_') || 'web_content';
+    try { title = decodeURIComponent(title); } catch {}
+    title = title
+      .normalize('NFC')
+      .replace(/[\u0000-\u001f\u007f/\\]/g, '_')
+      .replace(/^\.+|\.+$/g, '')
+      .slice(0, 160) || 'web_content';
+    const fileName = safeFileName(`${title}.md`);
+    const filePath = destination.relative ? `${destination.relative}/${fileName}` : fileName;
+    const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
 
-    // 保存文件
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    fs.writeFileSync(fullPath, `# ${title}\n\n来源: ${url}\n\n${text}`);
+    fs.writeFileSync(fullPath, `# ${title}\n\n来源: ${fetched.finalUrl}\n\n${text}`);
 
     res.json({ success: true, path: filePath });
-  } catch (err) {
+  } catch (error) {
     if (!res.headersSent && !res.destroyed) {
-      res.status(500).json({ error: controller.signal.aborted ? 'Request cancelled' : err.message });
+      next(error);
     }
   } finally {
     res.removeListener('close', abortIfClientClosed);
     activeHttpControllers.delete(controller);
   }
+});
+
+app.use((error, req, res, _next) => {
+  if (res.headersSent || res.destroyed) return;
+  const knownStatus = Number.isInteger(error.status) && error.status >= 400 && error.status <= 599;
+  const status = knownStatus ? error.status : 500;
+  const code = typeof error.code === 'string' && (knownStatus || error.code.startsWith('URL_'))
+    ? error.code
+    : 'INTERNAL_ERROR';
+  const message = knownStatus && typeof error.message === 'string'
+    ? error.message
+    : 'The request could not be completed';
+  if (status >= 500) logger.error(`[HTTP] ${req.requestId} ${code}`);
+  res.status(status).json({ error: { code, message, requestId: req.requestId } });
 });
 
 // WebSocket: 终端连接
