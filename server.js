@@ -1,11 +1,11 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { loadConfig } = require('./src/config');
+const { createPromptRunner } = require('./src/opencode/run-prompt');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,6 +13,21 @@ const wss = new WebSocket.Server({ server });
 
 // 配置
 const CONFIG = loadConfig({ env: process.env, projectDir: __dirname });
+const promptRunner = createPromptRunner({
+  command: CONFIG.opencodeCmd,
+  cwd: CONFIG.opencodeCwd,
+  env: process.env,
+  timeoutMs: CONFIG.opencodeTimeoutMs,
+  maxOutputBytes: CONFIG.opencodeMaxOutputBytes
+});
+const PUBLIC_RUNNER_ERRORS = Object.freeze({
+  OPENCODE_TIMEOUT: 'OpenCode request timed out',
+  OPENCODE_ABORTED: 'OpenCode request was cancelled',
+  OPENCODE_OUTPUT_LIMIT: 'OpenCode response exceeded the output limit',
+  OPENCODE_EXIT_ERROR: 'OpenCode process exited unsuccessfully',
+  OPENCODE_EMPTY_RESPONSE: 'OpenCode returned no text response',
+  OPENCODE_SPAWN_ERROR: 'OpenCode process could not be started'
+});
 
 // 中间件
 app.use(express.json());
@@ -382,18 +397,10 @@ app.post('/api/knowledge/fetch-url', async (req, res) => {
   }
 });
 
-// 检查 opencode 是否可用
-let opencodeAvailable = false;
-try {
-  fs.accessSync(CONFIG.opencodeCmd, fs.constants.X_OK);
-  opencodeAvailable = true;
-} catch (e) {
-  console.log(`[Info] opencode 未安装或不可执行: ${CONFIG.opencodeCmd}，使用模拟模式`);
-}
-
 // WebSocket: 终端连接
 wss.on('connection', (ws, req) => {
   const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const activeRuns = new Set();
 
   console.log(`[Session] 新建会话: ${sessionId}`);
 
@@ -406,74 +413,65 @@ wss.on('connection', (ws, req) => {
   ws.send(JSON.stringify({ type: 'connected', sessionId, pid: process.pid }));
 
   // 消息处理 - 使用 opencode run --format json
-  ws.on('message', (msg) => {
+  ws.on('message', async (msg) => {
     try {
       const parsed = JSON.parse(msg.toString());
       if (parsed.type === 'input') {
         const input = parsed.data.trim();
         if (!input) return;
 
-        console.log(`[Session] ${sessionId} 收到消息: ${input.substring(0, 50)}...`);
+        console.log(`[Session] ${sessionId} 收到输入`);
 
         // 发送思考中状态
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'thinking' }));
         }
 
-        // 使用 exec 执行 opencode run
-        const cmd = `${CONFIG.opencodeCmd} run --format json "${input.replace(/"/g, '\\"')}"`;
-        console.log(`[Session] ${sessionId} 执行命令: ${cmd}`);
-        
-        exec(cmd, {
-          cwd: CONFIG.opencodeCwd,
-          env: process.env,
-          maxBuffer: 1024 * 1024 * 10
-        }, (error, stdout, stderr) => {
-          console.log(`[Session] ${sessionId} 命令完成`);
-          
-          if (error) {
-            console.error(`[Session] ${sessionId} 错误:`, error.message);
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'error', message: error.message }));
-            }
-            return;
-          }
-
-          // 解析 JSON 输出
-          let responseText = '';
-          const lines = stdout.split('\n');
-          
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const event = JSON.parse(line);
-              if (event.type === 'text' && event.part && event.part.text) {
-                responseText += event.part.text;
+        const controller = new AbortController();
+        activeRuns.add(controller);
+        try {
+          const result = await promptRunner.runPrompt(input, {
+            signal: controller.signal,
+            onEvent: (event) => {
+              if (
+                event.type === 'text' &&
+                event.part &&
+                typeof event.part.text === 'string' &&
+                ws.readyState === WebSocket.OPEN
+              ) {
+                ws.send(JSON.stringify({ type: 'output', data: event.part.text }));
               }
-            } catch (e) {
-              // 忽略非 JSON 行（如 "build · deepseek-v4-flash"）
             }
-          }
+          });
 
-          // 发送回复
           if (ws.readyState === WebSocket.OPEN) {
-            if (responseText) {
-              ws.send(JSON.stringify({ type: 'response', data: responseText }));
-            } else if (stderr) {
-              ws.send(JSON.stringify({ type: 'error', message: stderr }));
-            } else {
-              ws.send(JSON.stringify({ type: 'error', message: '未获取到回复' }));
-            }
+            ws.send(JSON.stringify({ type: 'response', data: result.text }));
             ws.send(JSON.stringify({ type: 'done', code: 0 }));
           }
-        });
+        } catch (error) {
+          const code = Object.hasOwn(PUBLIC_RUNNER_ERRORS, error.code)
+            ? error.code
+            : 'OPENCODE_ERROR';
+          console.error(`[Session] ${sessionId} OpenCode 失败: ${code}`);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              code,
+              message: PUBLIC_RUNNER_ERRORS[code] || 'OpenCode request failed'
+            }));
+          }
+        } finally {
+          activeRuns.delete(controller);
+        }
       }
     } catch (e) {
-      console.error(`[Session] 消息处理错误:`, e.message);
+      console.error(`[Session] ${sessionId} 消息处理失败`);
     }
   });
 
   ws.on('close', () => {
+    for (const controller of activeRuns) controller.abort();
+    activeRuns.clear();
     console.log(`[Session] 会话关闭: ${sessionId}`);
     sessions.delete(sessionId);
   });
