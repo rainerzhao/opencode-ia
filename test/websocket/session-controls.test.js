@@ -157,6 +157,26 @@ test('makes start and stop idempotent and rejects restart after shutdown', async
   assert.equal(workbench.httpServer.listening, false);
 });
 
+test('settles an in-flight start when stop is called immediately', async (t) => {
+  const projectDir = useTempDir(t);
+  const config = loadConfig({ env: {}, projectDir });
+  const workbench = createWorkbenchServer({
+    config,
+    promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
+    logger: { log() {}, error() {} }
+  });
+
+  const startPromise = workbench.start(0);
+  const stopPromise = workbench.stop();
+
+  await assert.rejects(
+    withTimeout(startPromise, 'start promise remained pending after stop'),
+    (error) => error.code === 'SERVER_STOPPED'
+  );
+  await withTimeout(stopPromise, 'stop did not settle after cancelling startup');
+  assert.equal(workbench.httpServer.listening, false);
+});
+
 test('rejects a WebSocket connection when the global session limit is reached', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: { MAX_SESSIONS: '1' }, projectDir });
@@ -372,8 +392,11 @@ test('forces hanging HTTP connections closed within the shutdown deadline', asyn
   const config = loadConfig({ env: {}, projectDir });
   let signalUpstreamRequest;
   const upstreamRequested = new Promise((resolve) => { signalUpstreamRequest = resolve; });
+  let signalUpstreamSocketClosed;
+  const upstreamSocketClosed = new Promise((resolve) => { signalUpstreamSocketClosed = resolve; });
   const hangingUpstream = http.createServer((request, response) => {
     signalUpstreamRequest();
+    request.socket.once('close', signalUpstreamSocketClosed);
     request.on('close', () => response.destroy());
   });
   await new Promise((resolve, reject) => {
@@ -397,7 +420,15 @@ test('forces hanging HTTP connections closed within the shutdown deadline', asyn
   try {
     await withTimeout(upstreamRequested, 'workbench did not start the upstream request');
     await withTimeout(workbench.stop(), 'server stop hung on an active HTTP request', 500);
-    await assert.rejects(pendingRequest);
+    await withTimeout(upstreamSocketClosed, 'server stop left the outbound fetch socket open', 500);
+    const requestOutcome = await pendingRequest.then(
+      (response) => ({ status: response.status }),
+      (error) => ({ error })
+    );
+    assert.equal(
+      requestOutcome.status === 500 || requestOutcome.error instanceof Error,
+      true
+    );
     assert.equal(workbench.httpServer.listening, false);
     await verifyPortCanBeRebound(address.port);
   } finally {

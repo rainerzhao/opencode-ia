@@ -11,7 +11,10 @@ const httpServer = http.createServer(app);
 const wss = new WebSocket.Server({ server: httpServer });
 let lifecycle = 'idle';
 let starting = null;
+let rejectStarting = null;
+let startErrorHandler = null;
 let stopping = null;
+const activeHttpControllers = new Set();
 const PUBLIC_RUNNER_ERRORS = Object.freeze({
   OPENCODE_TIMEOUT: 'OpenCode request timed out',
   OPENCODE_ABORTED: 'OpenCode request was cancelled',
@@ -355,9 +358,15 @@ app.post('/api/knowledge/fetch-url', async (req, res) => {
     return res.status(400).json({ error: 'url is required' });
   }
 
+  const controller = new AbortController();
+  const abortIfClientClosed = () => {
+    if (!res.writableEnded) controller.abort();
+  };
+  activeHttpControllers.add(controller);
+  res.once('close', abortIfClientClosed);
   try {
     // 简单的 HTTP 抓取（实际项目中应使用更完善的爬虫）
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: controller.signal });
     const html = await response.text();
 
     // 简单提取文本内容（去除 HTML 标签）
@@ -385,7 +394,12 @@ app.post('/api/knowledge/fetch-url', async (req, res) => {
 
     res.json({ success: true, path: filePath });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent && !res.destroyed) {
+      res.status(500).json({ error: controller.signal.aborted ? 'Request cancelled' : err.message });
+    }
+  } finally {
+    res.removeListener('close', abortIfClientClosed);
+    activeHttpControllers.delete(controller);
   }
 });
 
@@ -502,14 +516,20 @@ function start(port = config.port) {
 
   lifecycle = 'starting';
   starting = new Promise((resolve, reject) => {
-    const onError = (error) => {
+    rejectStarting = reject;
+    startErrorHandler = (error) => {
       lifecycle = 'idle';
       starting = null;
+      rejectStarting = null;
+      startErrorHandler = null;
       reject(error);
     };
-    httpServer.once('error', onError);
+    httpServer.once('error', startErrorHandler);
     httpServer.listen(port, () => {
-      httpServer.removeListener('error', onError);
+      if (lifecycle !== 'starting') return;
+      if (startErrorHandler) httpServer.removeListener('error', startErrorHandler);
+      rejectStarting = null;
+      startErrorHandler = null;
       lifecycle = 'running';
       resolve(httpServer.address());
     });
@@ -520,8 +540,17 @@ function start(port = config.port) {
 function stop() {
   if (stopping) return stopping;
 
+  if (lifecycle === 'starting' && rejectStarting) {
+    if (startErrorHandler) httpServer.removeListener('error', startErrorHandler);
+    const error = new Error('Workbench server stopped before startup completed');
+    error.code = 'SERVER_STOPPED';
+    rejectStarting(error);
+    rejectStarting = null;
+    startErrorHandler = null;
+  }
   lifecycle = 'stopping';
 
+  for (const controller of activeHttpControllers) controller.abort();
   for (const session of sessions.values()) {
     session.activeAbortController?.abort();
   }
