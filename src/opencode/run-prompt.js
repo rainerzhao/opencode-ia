@@ -35,7 +35,7 @@ function createPromptRunner(options) {
     return new Promise((resolve, reject) => {
       const child = spawn(
         command,
-        [...baseArgs, 'run', '--format', 'json', input],
+        [...baseArgs, 'run', '--format', 'json', '--', input],
         { cwd, env, shell: false, stdio: ['ignore', 'pipe', 'pipe'] }
       );
       const events = [];

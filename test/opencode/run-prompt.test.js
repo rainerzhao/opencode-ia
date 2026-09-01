@@ -41,6 +41,27 @@ test('passes shell metacharacters as one message argument', async (t) => {
   assert.equal(fs.existsSync(marker), false);
 });
 
+for (const prompt of [
+  '--auto',
+  '--file=/tmp/private.txt',
+  '--model=untrusted/model',
+  '--attach=untrusted-session',
+  '--dir=/tmp/untrusted',
+  '--share'
+]) {
+  test(`passes leading-dash input as message text: ${prompt}`, async (t) => {
+    const tempDir = useTempDir(t);
+    const runner = createFixtureRunner(tempDir);
+
+    const result = await runner.runPrompt(prompt);
+
+    assert.equal(result.text, prompt);
+    assert.deepEqual(result.events, [
+      { type: 'text', part: { text: prompt } }
+    ]);
+  });
+}
+
 test('terminates a delayed process after the configured timeout', async (t) => {
   const tempDir = useTempDir(t);
   const marker = path.join(tempDir, 'timeout-terminated');
@@ -93,4 +114,46 @@ test('rejects a successful process that emits no text response', async (t) => {
   await assert.rejects(runner.runPrompt('__TEST_EMPTY__'), {
     code: 'OPENCODE_EMPTY_RESPONSE'
   });
+});
+
+test('escalates to SIGKILL when a timed-out child ignores SIGTERM', async (t) => {
+  const tempDir = useTempDir(t);
+  const termMarker = path.join(tempDir, 'sigterm-received');
+  const pidMarker = path.join(tempDir, 'child.pid');
+  const runner = createFixtureRunner(tempDir, {
+    baseArgs: [
+      fixturePath,
+      `--term-marker=${termMarker}`,
+      `--pid-marker=${pidMarker}`
+    ],
+    timeoutMs: 300,
+    killGraceMs: 100
+  });
+
+  await assert.rejects(runner.runPrompt('__TEST_IGNORE_SIGTERM__'), {
+    code: 'OPENCODE_TIMEOUT'
+  });
+
+  assert.equal(fs.readFileSync(termMarker, 'utf8'), 'terminated');
+  const childPid = Number(fs.readFileSync(pidMarker, 'utf8'));
+  assert.ok(Number.isSafeInteger(childPid));
+  assert.throws(
+    () => process.kill(childPid, 0),
+    (error) => error && error.code === 'ESRCH'
+  );
+});
+
+test('parses line JSON split across stdout chunks and a UTF-8 boundary', async (t) => {
+  const tempDir = useTempDir(t);
+  const runner = createFixtureRunner(tempDir);
+  const observedEvents = [];
+
+  const result = await runner.runPrompt('__TEST_CHUNKED_UTF8__', {
+    onEvent: (event) => observedEvents.push(event)
+  });
+
+  const expectedEvent = { type: 'text', part: { text: '分块🙂完成' } };
+  assert.equal(result.text, '分块🙂完成');
+  assert.deepEqual(result.events, [expectedEvent]);
+  assert.deepEqual(observedEvents, [expectedEvent]);
 });
