@@ -28,6 +28,26 @@ function useTempDir(t) {
   return tempDir;
 }
 
+function createReadinessLatch() {
+  let resolveReady;
+  const wait = new Promise((resolve) => {
+    resolveReady = resolve;
+  });
+  let seen = false;
+
+  return {
+    wait,
+    get seen() {
+      return seen;
+    },
+    onEvent(event) {
+      if (event.type !== 'fixture-ready' || seen) return;
+      seen = true;
+      resolveReady();
+    }
+  };
+}
+
 test('passes shell metacharacters as one message argument', async (t) => {
   const tempDir = useTempDir(t);
 
@@ -67,10 +87,15 @@ test('terminates a delayed process after the configured timeout', async (t) => {
   const marker = path.join(tempDir, 'timeout-terminated');
   const runner = createFixtureRunner(tempDir, {
     baseArgs: [fixturePath, `--term-marker=${marker}`],
-    timeoutMs: 300
+    timeoutMs: 1000
   });
+  const readiness = createReadinessLatch();
 
-  await assert.rejects(runner.runPrompt('__TEST_DELAY__'), { code: 'OPENCODE_TIMEOUT' });
+  const run = runner.runPrompt('__TEST_DELAY__', { onEvent: readiness.onEvent });
+
+  await Promise.race([readiness.wait, run]);
+  assert.equal(readiness.seen, true);
+  await assert.rejects(run, { code: 'OPENCODE_TIMEOUT' });
   assert.equal(fs.readFileSync(marker, 'utf8'), 'terminated');
 });
 
@@ -81,11 +106,17 @@ test('aborts and terminates a running process when signaled', async (t) => {
     baseArgs: [fixturePath, `--term-marker=${marker}`]
   });
   const controller = new AbortController();
-  const run = runner.runPrompt('__TEST_DELAY__', { signal: controller.signal });
+  const readiness = createReadinessLatch();
+  const run = runner.runPrompt('__TEST_DELAY__', {
+    signal: controller.signal,
+    onEvent: readiness.onEvent
+  });
 
-  setTimeout(() => controller.abort(), 300);
+  await Promise.race([readiness.wait, run]);
+  controller.abort();
 
   await assert.rejects(run, { code: 'OPENCODE_ABORTED' });
+  assert.equal(readiness.seen, true);
   assert.equal(fs.readFileSync(marker, 'utf8'), 'terminated');
 });
 
@@ -126,14 +157,18 @@ test('escalates to SIGKILL when a timed-out child ignores SIGTERM', async (t) =>
       `--term-marker=${termMarker}`,
       `--pid-marker=${pidMarker}`
     ],
-    timeoutMs: 300,
+    timeoutMs: 1000,
     killGraceMs: 100
   });
+  const readiness = createReadinessLatch();
 
-  await assert.rejects(runner.runPrompt('__TEST_IGNORE_SIGTERM__'), {
-    code: 'OPENCODE_TIMEOUT'
+  const run = runner.runPrompt('__TEST_IGNORE_SIGTERM__', {
+    onEvent: readiness.onEvent
   });
 
+  await Promise.race([readiness.wait, run]);
+  assert.equal(readiness.seen, true);
+  await assert.rejects(run, { code: 'OPENCODE_TIMEOUT' });
   assert.equal(fs.readFileSync(termMarker, 'utf8'), 'terminated');
   const childPid = Number(fs.readFileSync(pidMarker, 'utf8'));
   assert.ok(Number.isSafeInteger(childPid));
@@ -152,8 +187,13 @@ test('parses line JSON split across stdout chunks and a UTF-8 boundary', async (
     onEvent: (event) => observedEvents.push(event)
   });
 
-  const expectedEvent = { type: 'text', part: { text: '分块🙂完成' } };
-  assert.equal(result.text, '分块🙂完成');
-  assert.deepEqual(result.events, [expectedEvent]);
-  assert.deepEqual(observedEvents, [expectedEvent]);
+  const expectedEvents = [
+    { type: 'text', part: { text: '开头' } },
+    { type: 'status', status: 'working' },
+    { type: 'text', part: { text: '中间🙂' } },
+    { type: 'text', part: { text: '结尾' } }
+  ];
+  assert.equal(result.text, '开头中间🙂结尾');
+  assert.deepEqual(result.events, expectedEvents);
+  assert.deepEqual(observedEvents, expectedEvents);
 });

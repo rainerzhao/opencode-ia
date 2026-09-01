@@ -19,6 +19,14 @@ const markerPath = markerArg ? markerArg.slice('--term-marker='.length) : null;
 const pidArg = args.find((arg) => arg.startsWith('--pid-marker='));
 const pidPath = pidArg ? pidArg.slice('--pid-marker='.length) : null;
 
+function writeEvent(event) {
+  process.stdout.write(`${JSON.stringify(event)}\n`);
+}
+
+function writeReady() {
+  writeEvent({ type: 'fixture-ready' });
+}
+
 process.on('SIGTERM', () => {
   if (markerPath) fs.writeFileSync(markerPath, 'terminated', 'utf8');
   if (message === '__TEST_IGNORE_SIGTERM__') return;
@@ -29,6 +37,7 @@ if (!hasPromptBoundary) {
   process.stderr.write('invalid fake opencode arguments\n');
   process.exitCode = 2;
 } else if (message === '__TEST_DELAY__') {
+  writeReady();
   setInterval(() => {}, 1000);
 } else if (message === '__TEST_OVERSIZE__') {
   process.stdout.write('x'.repeat(160));
@@ -40,16 +49,24 @@ if (!hasPromptBoundary) {
   process.stdout.write(`${JSON.stringify({ type: 'status', status: 'complete' })}\n`);
 } else if (message === '__TEST_IGNORE_SIGTERM__') {
   if (pidPath) fs.writeFileSync(pidPath, String(process.pid), 'utf8');
+  writeReady();
   setInterval(() => {}, 1000);
 } else if (message === '__TEST_CHUNKED_UTF8__') {
-  const output = Buffer.from(`${JSON.stringify({
-    type: 'text',
-    part: { text: '分块🙂完成' }
-  })}\n`, 'utf8');
+  const events = [
+    { type: 'text', part: { text: '开头' } },
+    { type: 'status', status: 'working' },
+    { type: 'text', part: { text: '中间🙂' } },
+    { type: 'text', part: { text: '结尾' } }
+  ];
+  const output = Buffer.from(`${events.map(JSON.stringify).join('\n')}\n`, 'utf8');
+  const secondLineStart = output.indexOf(0x0a) + 1;
   const emojiStart = output.indexOf(Buffer.from('🙂', 'utf8'));
   const splitInsideEmoji = emojiStart + 2;
-  process.stdout.write(output.subarray(0, splitInsideEmoji));
-  setTimeout(() => process.stdout.write(output.subarray(splitInsideEmoji)), 25);
+  process.stdout.write(output.subarray(0, secondLineStart + 5));
+  setTimeout(() => {
+    process.stdout.write(output.subarray(secondLineStart + 5, splitInsideEmoji));
+  }, 20);
+  setTimeout(() => process.stdout.write(output.subarray(splitInsideEmoji)), 40);
 } else {
   process.stdout.write(`${JSON.stringify({ type: 'text', part: { text: message } })}\n`);
 }
