@@ -5,22 +5,14 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const { loadConfig } = require('./src/config');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // 配置
-const PROJECT_DIR = '/Users/yenini/Desktop/opencode-ia';
-const CONFIG = {
-  port: process.env.PORT || 3000,
-  opencodeCmd: '/Users/yenini/.opencode/bin/opencode',
-  opencodeCwd: PROJECT_DIR,
-  knowledgeDir: path.join(PROJECT_DIR, 'knowledge'),
-  solutionsDir: path.join(PROJECT_DIR, 'solutions'),
-  skillsDir: path.join(PROJECT_DIR, '.opencode', 'skills'),
-  maxSessions: parseInt(process.env.MAX_SESSIONS) || 20
-};
+const CONFIG = loadConfig({ env: process.env, projectDir: __dirname });
 
 // 中间件
 app.use(express.json());
