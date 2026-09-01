@@ -9,6 +9,8 @@ function createWorkbenchServer({ config, promptRunner, logger = console }) {
 const app = express();
 const httpServer = http.createServer(app);
 const wss = new WebSocket.Server({ server: httpServer });
+let lifecycle = 'idle';
+let starting = null;
 let stopping = null;
 const PUBLIC_RUNNER_ERRORS = Object.freeze({
   OPENCODE_TIMEOUT: 'OpenCode request timed out',
@@ -408,36 +410,46 @@ wss.on('connection', (ws, req) => {
 
   ws.send(JSON.stringify({ type: 'connected', sessionId, pid: process.pid }));
 
+  function sendSafeError(code, message) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'error', code, message }));
+  }
+
   // 消息处理 - 使用 opencode run --format json
   ws.on('message', async (msg) => {
     try {
-      const parsed = JSON.parse(msg.toString());
-      if (parsed.type === 'input') {
-        const input = parsed.data.trim();
-        if (!input) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(msg.toString());
+      } catch {
+        sendSafeError('INVALID_MESSAGE', 'Message must be valid JSON input');
+        return;
+      }
 
-        if (session.activeAbortController) {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'error',
-              code: 'SESSION_BUSY',
-              message: 'A request is already running for this session'
-            }));
-          }
-          return;
-        }
+      if (!parsed || parsed.type !== 'input' || typeof parsed.data !== 'string') {
+        sendSafeError('INVALID_MESSAGE', 'Message must contain string input data');
+        return;
+      }
 
-        logger.log(`[Session] ${sessionId} 收到输入`);
+      const input = parsed.data.trim();
+      if (!input) return;
+
+      if (session.activeAbortController) {
+        sendSafeError('SESSION_BUSY', 'A request is already running for this session');
+        return;
+      }
+
+      logger.log(`[Session] ${sessionId} 收到输入`);
 
         // 发送思考中状态
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'thinking' }));
         }
 
-        const controller = new AbortController();
-        session.activeAbortController = controller;
-        try {
-          const result = await promptRunner.runPrompt(input, {
+      const controller = new AbortController();
+      session.activeAbortController = controller;
+      try {
+        const result = await promptRunner.runPrompt(input, {
             signal: controller.signal,
             onEvent: (event) => {
               if (
@@ -449,32 +461,26 @@ wss.on('connection', (ws, req) => {
                 ws.send(JSON.stringify({ type: 'output', data: event.part.text }));
               }
             }
-          });
+        });
 
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'response', data: result.text }));
-            ws.send(JSON.stringify({ type: 'done', code: 0 }));
-          }
-        } catch (error) {
-          const code = Object.hasOwn(PUBLIC_RUNNER_ERRORS, error.code)
-            ? error.code
-            : 'OPENCODE_ERROR';
-          logger.error(`[Session] ${sessionId} OpenCode 失败: ${code}`);
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'error',
-              code,
-              message: PUBLIC_RUNNER_ERRORS[code] || 'OpenCode request failed'
-            }));
-          }
-        } finally {
-          if (session.activeAbortController === controller) {
-            session.activeAbortController = null;
-          }
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'response', data: result.text }));
+          ws.send(JSON.stringify({ type: 'done', code: 0 }));
+        }
+      } catch (error) {
+        const code = Object.hasOwn(PUBLIC_RUNNER_ERRORS, error.code)
+          ? error.code
+          : 'OPENCODE_ERROR';
+        logger.error(`[Session] ${sessionId} OpenCode 失败: ${code}`);
+        sendSafeError(code, PUBLIC_RUNNER_ERRORS[code] || 'OpenCode request failed');
+      } finally {
+        if (session.activeAbortController === controller) {
+          session.activeAbortController = null;
         }
       }
     } catch (e) {
       logger.error(`[Session] ${sessionId} 消息处理失败`);
+      sendSafeError('INVALID_MESSAGE', 'Message could not be processed');
     }
   });
 
@@ -486,18 +492,35 @@ wss.on('connection', (ws, req) => {
 });
 
 function start(port = config.port) {
-  return new Promise((resolve, reject) => {
-    const onError = (error) => reject(error);
+  if (lifecycle === 'running') return Promise.resolve(httpServer.address());
+  if (lifecycle === 'starting') return starting;
+  if (lifecycle === 'stopping' || lifecycle === 'stopped') {
+    const error = new Error('Workbench server has been stopped');
+    error.code = 'SERVER_STOPPED';
+    return Promise.reject(error);
+  }
+
+  lifecycle = 'starting';
+  starting = new Promise((resolve, reject) => {
+    const onError = (error) => {
+      lifecycle = 'idle';
+      starting = null;
+      reject(error);
+    };
     httpServer.once('error', onError);
     httpServer.listen(port, () => {
       httpServer.removeListener('error', onError);
+      lifecycle = 'running';
       resolve(httpServer.address());
     });
   });
+  return starting;
 }
 
 function stop() {
   if (stopping) return stopping;
+
+  lifecycle = 'stopping';
 
   for (const session of sessions.values()) {
     session.activeAbortController?.abort();
@@ -512,11 +535,26 @@ function stop() {
     let firstError = null;
     const forceCloseTimer = setTimeout(() => {
       for (const client of wss.clients) client.terminate();
+      httpServer.closeAllConnections?.();
     }, 100);
+    forceCloseTimer.unref?.();
+
+    const settlementTimer = setTimeout(() => {
+      if (wsClosed && httpClosed) return;
+      const error = new Error('Workbench server shutdown timed out');
+      error.code = 'SERVER_STOP_TIMEOUT';
+      firstError ||= error;
+      wsClosed = true;
+      httpClosed = true;
+      finish();
+    }, 1000);
+    settlementTimer.unref?.();
 
     function finish() {
       if (!wsClosed || !httpClosed) return;
       clearTimeout(forceCloseTimer);
+      clearTimeout(settlementTimer);
+      lifecycle = 'stopped';
       if (firstError) reject(firstError);
       else resolve();
     }

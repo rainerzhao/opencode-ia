@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const http = require('node:http');
 const net = require('node:net');
 const WebSocket = require('ws');
 const { loadConfig } = require('../../src/config');
@@ -77,13 +78,13 @@ function terminateSocket(ws) {
   });
 }
 
-async function waitForFile(filePath, timeoutMs = 1000) {
+async function waitForFileContent(filePath, expected, timeoutMs = 1000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (fs.existsSync(filePath)) return;
+    if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === expected) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error(`timed out waiting for file: ${path.basename(filePath)}`);
+  throw new Error(`timed out waiting for complete file: ${path.basename(filePath)}`);
 }
 
 async function fetchConfig(port) {
@@ -129,6 +130,31 @@ test('starts on an ephemeral port and stops cleanly', async (t) => {
   assert.equal((await response.json()).activeSessions, 0);
 
   await workbench.stop();
+});
+
+test('makes start and stop idempotent and rejects restart after shutdown', async (t) => {
+  const projectDir = useTempDir(t);
+  const config = loadConfig({ env: {}, projectDir });
+  const workbench = createWorkbenchServer({
+    config,
+    promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
+    logger: { log() {}, error() {} }
+  });
+
+  const firstAddress = await workbench.start(0);
+  const secondAddress = await workbench.start(12345);
+  assert.deepEqual(secondAddress, firstAddress);
+
+  const firstStop = workbench.stop();
+  const secondStop = workbench.stop();
+  assert.equal(secondStop, firstStop);
+  await firstStop;
+
+  await assert.rejects(
+    workbench.start(0),
+    (error) => error.code === 'SERVER_STOPPED'
+  );
+  assert.equal(workbench.httpServer.listening, false);
 });
 
 test('rejects a WebSocket connection when the global session limit is reached', async (t) => {
@@ -238,6 +264,39 @@ test('maps runner failures to stable WebSocket errors without leaking details', 
   }
 });
 
+test('returns stable safe errors for malformed WebSocket messages', async (t) => {
+  const projectDir = useTempDir(t);
+  const config = loadConfig({ env: {}, projectDir });
+  const workbench = createWorkbenchServer({
+    config,
+    promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
+    logger: { log() {}, error() {} }
+  });
+  const address = await workbench.start(0);
+  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+
+  try {
+    await waitForJson(ws, (message) => message.type === 'connected');
+
+    ws.send('{not-json');
+    assert.deepEqual(await waitForJson(ws, (message) => message.type === 'error'), {
+      type: 'error',
+      code: 'INVALID_MESSAGE',
+      message: 'Message must be valid JSON input'
+    });
+
+    ws.send(JSON.stringify({ type: 'input', data: { unexpected: 'object' } }));
+    assert.deepEqual(await waitForJson(ws, (message) => message.type === 'error'), {
+      type: 'error',
+      code: 'INVALID_MESSAGE',
+      message: 'Message must contain string input data'
+    });
+  } finally {
+    await terminateSocket(ws);
+    await workbench.stop();
+  }
+});
+
 test('aborts the active child process when its WebSocket disconnects', async (t) => {
   const projectDir = useTempDir(t);
   const marker = path.join(projectDir, 'socket-close-terminated');
@@ -277,9 +336,7 @@ test('aborts the active child process when its WebSocket disconnects', async (t)
     await ready;
 
     await terminateSocket(ws);
-    await waitForFile(marker);
-
-    assert.equal(fs.readFileSync(marker, 'utf8'), 'terminated');
+    await waitForFileContent(marker, 'terminated');
   } finally {
     await terminateSocket(ws);
     await workbench.stop();
@@ -306,6 +363,46 @@ test('removes a disconnected session from the active session count', async (t) =
     assert.equal((await fetchConfig(address.port)).activeSessions, 0);
   } finally {
     await terminateSocket(ws);
+    await workbench.stop();
+  }
+});
+
+test('forces hanging HTTP connections closed within the shutdown deadline', async (t) => {
+  const projectDir = useTempDir(t);
+  const config = loadConfig({ env: {}, projectDir });
+  let signalUpstreamRequest;
+  const upstreamRequested = new Promise((resolve) => { signalUpstreamRequest = resolve; });
+  const hangingUpstream = http.createServer((request, response) => {
+    signalUpstreamRequest();
+    request.on('close', () => response.destroy());
+  });
+  await new Promise((resolve, reject) => {
+    hangingUpstream.once('error', reject);
+    hangingUpstream.listen(0, '127.0.0.1', resolve);
+  });
+  const upstreamPort = hangingUpstream.address().port;
+
+  const workbench = createWorkbenchServer({
+    config,
+    promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
+    logger: { log() {}, error() {} }
+  });
+  const address = await workbench.start(0);
+  const pendingRequest = fetch(`http://127.0.0.1:${address.port}/api/knowledge/fetch-url`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: `http://127.0.0.1:${upstreamPort}/never-finishes` })
+  });
+
+  try {
+    await withTimeout(upstreamRequested, 'workbench did not start the upstream request');
+    await withTimeout(workbench.stop(), 'server stop hung on an active HTTP request', 500);
+    await assert.rejects(pendingRequest);
+    assert.equal(workbench.httpServer.listening, false);
+    await verifyPortCanBeRebound(address.port);
+  } finally {
+    hangingUpstream.closeAllConnections?.();
+    await new Promise((resolve) => hangingUpstream.close(() => resolve()));
     await workbench.stop();
   }
 });
@@ -351,13 +448,12 @@ test('stop closes sockets, aborts active runs, and releases the bound port', asy
 
     stopPromise = workbench.stop();
     await withTimeout(stopPromise, 'server stop did not close active WebSockets');
-    await waitForFile(marker);
+    await waitForFileContent(marker, 'terminated');
     if (ws.readyState !== WebSocket.CLOSED) await waitForClose(ws);
 
     assert.equal(ws.readyState, WebSocket.CLOSED);
     assert.equal(workbench.sessions.size, 0);
     assert.equal(workbench.httpServer.listening, false);
-    assert.equal(fs.readFileSync(marker, 'utf8'), 'terminated');
     await verifyPortCanBeRebound(address.port);
   } finally {
     await terminateSocket(ws);
