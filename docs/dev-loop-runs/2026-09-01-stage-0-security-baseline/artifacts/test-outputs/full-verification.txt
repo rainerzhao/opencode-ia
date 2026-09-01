@@ -1,0 +1,44 @@
+Stage 0 full verification
+Date: 2026-09-01 Asia/Shanghai
+Worktree: /Users/yenini/Desktop/opencode-ia/.worktrees/stage-0-security-baseline
+
+Command: npm test
+Exit code: 0
+Result: 63 tests, 63 passed, 0 failed, 0 skipped, 0 todo
+Coverage groups: knowledge APIs, config, OpenCode runner, path policy, secret scan,
+URL policy, HTTP/WebSocket lifecycle and concurrency.
+
+Command: npm run check
+Exit code: 0
+Result: JavaScript syntax check passed for 17 project-owned files.
+
+Command: npm run security:scan
+Exit code: 0
+Result: Secret scan passed with no findings.
+
+Browser smoke server:
+PORT=4317
+OPENCODE_CMD=test/fixtures/fake-opencode.js
+OPENCODE_TIMEOUT_MS=300
+
+HTTP evidence:
+- GET /api/config: 200; activeSessions=0; safe model display value returned.
+- GET /api/knowledge/tree: 200; three example Markdown documents returned.
+
+Browser evidence:
+- Desktop 1440x900: home, AI, and knowledge pages loaded; no root/body horizontal overflow.
+- Mobile 390x844: home, AI, and knowledge pages loaded; no root/body horizontal overflow.
+- Normal fake chat round trip returned the exact message.
+- Delayed fake chat returned the safe message: OpenCode request timed out.
+- Knowledge page rendered 算力评估, 选型指南, and 迁移流程.
+- Browser error collection was empty.
+
+Screenshots:
+- artifacts/screenshots/home.png
+- artifacts/screenshots/knowledge.png
+
+Notes:
+- Browser smoke used the deterministic fake OpenCode process boundary. Real Provider/model
+  quality and latency remain environment acceptance items.
+- The optional test-only shell:true mutation exercise was not run during the accelerated
+  preview release; the real-process metacharacter and leading-dash regressions passed.
