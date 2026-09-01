@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "demo": "node scripts/start-demo.js",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "check": "node scripts/check-js.js",
     "security:scan": "node scripts/scan-secrets.js"

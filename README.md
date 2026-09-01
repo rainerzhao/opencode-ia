@@ -1,50 +1,115 @@
 # OpenCode 团队 AI 工作台
 
-面向团队内部协作的 AI 工作台首版：浏览器负责交互，Express 后端负责会话、知识文件和安全边界，所有模型推理都经由 OpenCode 执行。Stage 0 已建立可移植配置、进程隔离、WebSocket 并发控制、文件路径保护、上传限制和默认拒绝的 URL 导入策略。
+面向 15–20 人内部团队的中心化 AI 工作台：成员通过浏览器使用 OpenCode、管理知识、沉淀方案，并逐步形成可校验、可发布、可回滚的团队 Skill 资产。
 
-> 当前公开版本是可演示的安全工程基线，不是生产终态。账号体系、SQLite 数据层、React/Vite 工程化、持久 OpenCode Gateway、正式 Skill 发布和审计将在后续阶段完成。
+> 当前研发阶段：**Stage 0 已完成，可公开演示；尚未达到生产上线条件。** 账号密码、SQLite、角色权限和审计是下一阶段，不应把当前版本直接开放给真实多用户使用。
 
-## 本机要求
+[查看完整路线图](docs/ROADMAP.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
 
-- macOS（当前开发与验收环境）
-- Node.js 24.x（当前验证版本：24.15.0）
+![工作台首页](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/artifacts/screenshots/home.png)
+
+## 三分钟体验
+
+无需 OpenCode、模型服务或 API Key，即可启动完整前后端 Demo：
+
+```bash
+git clone https://github.com/rainerzhao/opencode-ia.git
+cd opencode-ia
+npm ci
+npm run demo
+```
+
+打开终端显示的地址，默认是 `http://127.0.0.1:4317`。
+
+Demo 会：
+
+- 启动真实 Express、REST API 和 WebSocket 前后端链路；
+- 只监听本机回环地址 `127.0.0.1`，不会对局域网开放无认证服务；
+- 展示三篇示例知识文档；
+- 使用明确标注的“Demo 模拟回复”，不调用真实模型；
+- 把所有可写数据放进系统临时目录；
+- 按 `Ctrl+C` 后关闭服务并删除临时数据。
+
+如需指定端口：
+
+```bash
+DEMO_PORT=4321 npm run demo
+```
+
+## 当前能看到什么
+
+| 能力 | 当前状态 | 说明 |
+| --- | --- | --- |
+| 工作台前端 | ✅ 可演示 | 首页、AI 对话、知识库、方案、Skill、导航和 FAQ 页面 |
+| OpenCode 调用边界 | ✅ 已加固 | 参数化执行、超时、取消、输出限制、错误脱敏 |
+| 多会话控制 | ✅ 基线完成 | 全局会话上限、单会话串行、断线和关服取消 |
+| 知识文件与上传 | ✅ 基线完成 | 路径、符号链接、上传暂存、失败回滚保护 |
+| URL 导入 | ✅ 默认关闭 | 白名单、DNS 地址校验、逐跳重定向、超时和大小限制 |
+| 用户名/密码 | ⏳ Stage 1 | 管理员建号，不开放自注册 |
+| 角色与审计 | ⏳ Stage 1 | `admin/member`，操作绑定登录账号 |
+| SQLite 数据层 | ⏳ Stage 1 | WAL、会话/审计/元数据持久化 |
+| 常驻 OpenCode Gateway | ⏳ Stage 2 | 当前仍是每条消息一次有界 `opencode run` |
+| Skill 发布中心 | ⏳ Stage 4 | 校验、版本、安装、启用、回滚和归档 |
+| Linux 生产部署 | ⏳ Stage 5 | 内部模型、备份、监控和 15–20 人容量验收 |
+
+## 产品原则
+
+- 所有模型推理、Agent、Skill 和工具执行必须经过 OpenCode；工作台不直连模型 API。
+- 对话和个人产物默认私有，用户明确确认后才能发布为团队知识或解决方案。
+- 普通成员可以开发 Skill；发布前必须经过自动校验，并保留版本、禁用和回滚能力。
+- AI 辅助处理和生成，人负责判断、风险复核与最终交付。
+- IP 只可用于网络层限制，不作为用户身份；审计身份来自账号登录。
+
+## 架构概览
+
+```mermaid
+flowchart LR
+    U[团队成员浏览器] --> W[工作台 Web UI]
+    W --> A[Express REST API]
+    W --> S[WebSocket 会话层]
+    A --> F[Markdown / 文件资产]
+    A --> D[(SQLite WAL<br/>Stage 1)]
+    S --> G[OpenCode 执行边界]
+    G --> O[OpenCode]
+    O --> M[内部 OpenAI 兼容模型<br/>Linux 阶段]
+    O --> K[团队 Skills]
+```
+
+当前 Stage 0 使用静态前端 + 模块化 Express 后端。Stage 1 迁移 React/Vite 并加入账号和 SQLite；Stage 2 再把每消息进程模式替换为常驻 OpenCode Gateway。
+
+## 真实模式：Mac 开发启动
+
+### 要求
+
+- macOS（当前开发和验收环境）
+- Node.js 24.x（已验证：24.15.0）
 - npm 11.x
 - 已安装并能独立运行的 OpenCode
 
-安装锁定版本依赖：
+安装依赖：
 
 ```bash
 npm ci
 ```
 
-项目不接收模型 API Key。模型地址和 Provider 凭证只配置在 OpenCode 自己的受保护运行环境中，不写入本仓库、前端、日志或工作台环境变量。
+复制并检查环境变量：
 
-## Mac 快速启动
+```bash
+cp .env.example .env
+```
 
-1. 复制环境变量模板并按本机实际路径修改：
+至少确认 `OPENCODE_CMD` 和 `OPENCODE_CWD`。项目不接收模型 API Key；Provider 地址和凭证只配置在 OpenCode 自己的受保护环境中。
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+set -a
+. ./.env
+set +a
+npm start
+```
 
-2. 在 `.env` 中取消需要项的注释。至少确认 `OPENCODE_CMD` 和 `OPENCODE_CWD`；不要加入模型 API Key。
-
-3. 将配置导入当前终端并启动：
-
-   ```bash
-   set -a
-   . ./.env
-   set +a
-   npm start
-   ```
-
-4. 打开 `http://127.0.0.1:3000`。如修改了 `PORT`，使用对应端口。
-
-默认 `OPENCODE_CMD` 为 `$HOME/.opencode/bin/opencode`，工作目录为项目根目录。每条聊天消息都以参数数组调用一次受超时、输出大小和取消控制的 `opencode run --format json -- <message>`，不使用 Shell 字符串拼接。
+默认打开 `http://127.0.0.1:3000`。
 
 ## 配置
-
-`.env.example` 覆盖当前全部运行参数：
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -52,18 +117,18 @@ npm ci
 | `PORT` | `3000` | HTTP/WebSocket 端口 |
 | `MAX_SESSIONS` | `20` | WebSocket 全局会话上限 |
 | `OPENCODE_CMD` | `$HOME/.opencode/bin/opencode` | OpenCode 可执行文件 |
-| `OPENCODE_CWD` | 工作台根目录 | OpenCode 每次运行的工作目录 |
-| `OPENCODE_TIMEOUT_MS` | `120000` | 单次消息超时（毫秒） |
+| `OPENCODE_CWD` | 工作台根目录 | OpenCode 运行目录 |
+| `OPENCODE_TIMEOUT_MS` | `120000` | 单次消息超时，单位毫秒 |
 | `OPENCODE_MAX_OUTPUT_BYTES` | `10485760` | stdout 与 stderr 总字节上限 |
 | `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
 | `SOLUTIONS_DIR` | `<root>/solutions` | 方案目录 |
-| `SKILLS_DIR` | `<root>/.opencode/skills` | 工作台展示的 Skill 目录 |
+| `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
 | `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
 | `KNOWLEDGE_FETCH_ALLOWED_HOSTS` | 空 | URL 导入精确主机白名单 |
 
-URL 导入默认禁用。只有明确设置 `KNOWLEDGE_FETCH_ALLOWED_HOSTS` 后才能访问列出的精确主机；不支持通配符，非默认端口必须写为 `host:port`。每次重定向都会重新校验，回环、链路本地、云元数据和未授权地址会被拒绝。
+URL 导入默认禁用。启用后不支持通配符，非默认端口必须写为 `host:port`；每次重定向都会重新校验，回环、链路本地、云元数据和未授权地址会被拒绝。
 
-## 发布前验证
+## 验证与安全
 
 ```bash
 npm test
@@ -71,33 +136,31 @@ npm run check
 npm run security:scan
 ```
 
-- `npm test` 只运行 `test/**/*.test.js`，不会把可执行 fixture 当测试发现。
-- `npm run check` 对仓库自有 JavaScript 文件执行 `node --check`。
-- `npm run security:scan` 扫描仓库文本，只输出相对路径和规则名，不输出疑似密钥原文。
+- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、路径、上传和 URL 安全边界。
+- 语法检查只检查仓库自有 JavaScript 文件。
+- 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
+- `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
 
-本机运维交接文件 `PROJECT_HANDOFF.md` 和真实 `.env` 被 Git 与扫描器排除，不能提交。若凭证曾在本地文档或其他渠道暴露，删除文本并不能使凭证失效，必须到对应 Provider 侧轮换。
+![知识库页面](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/artifacts/screenshots/knowledge.png)
 
-## 当前目录
+## 项目目录
 
 ```text
-public/       当前静态前端
-src/          后端服务、安全策略与 OpenCode 执行边界
+public/       当前前端页面
+src/          后端、OpenCode 执行和安全策略
 knowledge/    示例 Markdown 知识
-test/         Node 内置测试套件
-scripts/      语法检查与秘密扫描
-server.js     薄启动入口
+scripts/      Demo、语法检查和密钥扫描
+test/         Node 自动测试
+docs/         架构设计、路线图和验收证据
+server.js     生产模式薄启动入口
 ```
 
 ## Linux 迁移边界
 
-生产目标是公司内网单台 Linux 服务器。迁移时保持工作台代码不变，替换 OpenCode Provider 配置、绝对路径和运行环境；建议由非 root 进程运行，使用 Nginx 提供 HTTPS、反向代理和可选内网网段限制，并把应用、OpenCode 配置、数据目录和 Secret 分开管理。
+生产目标是公司内网单台 Linux 服务器。迁移时保持工作台与模型配置分离，由非 root 进程运行，使用 Nginx 提供 HTTPS、反向代理和可选内网网段限制。
 
-当前版本尚无本地用户名/密码、角色权限、持久会话数据库和正式审计，因此不能直接作为生产多用户系统开放。Linux 上的内部模型 API、权限、备份恢复和 15–20 用户容量仍需在真实环境验证。
+在账号、权限、SQLite 审计、备份恢复、内部模型联调和并发验收完成前，本项目只能用于开发和演示，不能宣称已生产上线。
 
-## Stage 0 已知限制
+## 参与开发
 
-- 前端仍为静态页面，React/Vite 工程迁移属于 Stage 1。
-- 聊天尚未绑定持久 OpenCode Session；每条消息启动一次有界的 `opencode run`。Stage 2 将引入常驻 OpenCode Gateway、会话映射和流式事件协议。
-- 知识库当前以文件为主，SQLite FTS5、版本和发布流程属于 Stage 3。
-- Skill 中心当前只展示目录，校验、自助发布、版本、回滚和审计属于 Stage 4。
-- 界面中的内部平台地址是演示占位链接，部署时必须替换为经确认的真实入口。
+开始修改前先阅读 [ROADMAP](docs/ROADMAP.md) 和 [架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)。提交前必须执行三项验证，并确保没有把真实 API Key、`.env`、运行数据或日志加入 Git。

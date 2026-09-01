@@ -633,7 +633,7 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-function start(port = config.port) {
+function start(port = config.port, host) {
   if (lifecycle === 'running') return Promise.resolve(httpServer.address());
   if (lifecycle === 'starting') return starting;
   if (lifecycle === 'stopping' || lifecycle === 'stopped') {
@@ -653,14 +653,16 @@ function start(port = config.port) {
       reject(error);
     };
     httpServer.once('error', startErrorHandler);
-    httpServer.listen(port, () => {
+    const onListening = () => {
       if (lifecycle !== 'starting') return;
       if (startErrorHandler) httpServer.removeListener('error', startErrorHandler);
       rejectStarting = null;
       startErrorHandler = null;
       lifecycle = 'running';
       resolve(httpServer.address());
-    });
+    };
+    if (host) httpServer.listen(port, host, onListening);
+    else httpServer.listen(port, onListening);
   });
   return starting;
 }
