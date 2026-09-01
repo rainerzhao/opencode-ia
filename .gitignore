@@ -4,6 +4,18 @@ node_modules/
 server.log
 data/
 
-# Temporary safeguard: this file contains a credential that must be
-# redacted and rotated before it can enter Git history (Stage 0 Task 5).
+# Local environment and operator-only handoff files may contain credentials.
+.env
+.env.*
+!.env.example
 PROJECT_HANDOFF.md
+
+# Runtime databases, logs, reports, and generated output.
+*.db*
+*.log
+coverage/
+dist/
+build/
+tmp/
+backups/
+data/tmp/uploads/
