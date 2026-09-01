@@ -1,0 +1,16 @@
+{
+  "name": "opencode-team-workbench",
+  "version": "1.0.0",
+  "description": "团队 AI 工作台 - 基于 OpenCode 的多人协作平台",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^2.3.0",
+    "node-pty": "^1.0.0",
+    "ws": "^8.16.0"
+  }
+}

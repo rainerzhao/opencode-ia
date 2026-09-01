@@ -1,0 +1,9 @@
+.worktrees/
+node_modules/
+.DS_Store
+server.log
+data/
+
+# Temporary safeguard: this file contains a credential that must be
+# redacted and rotated before it can enter Git history (Stage 0 Task 5).
+PROJECT_HANDOFF.md
