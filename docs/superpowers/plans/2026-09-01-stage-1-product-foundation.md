@@ -87,7 +87,7 @@
 - [x] Run the auth tests and confirm endpoint-not-found/authentication failures.
 - [x] Implement opaque 32-byte tokens, SHA-256 token/CSRF hashes, cookie parsing/serialization, auth service, bounded in-memory login limiter, middleware, and routes.
 - [x] Re-run auth tests and full verification.
-- [ ] Record evidence, commit in Chinese, push `main`, and verify remote SHA. Local commit is ready; remote authentication must be refreshed before push verification.
+- [x] Record evidence, commit in Chinese, push `main`, and verify remote SHA.
 
 ### Task 1C: Authorization, privacy, WebSocket identity, and audit
 

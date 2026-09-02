@@ -82,4 +82,4 @@ Status: implemented and verified.
 - Fix verification: targeted Service and real HTTP suites passed.
 - Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
 - Residual boundary: existing business REST and WebSocket remain anonymous until the independent Stage 1C cutover.
-- Git delivery: the verified local commit is prepared; remote push verification is pending refreshed GitHub authentication.
+- Git delivery: code commit `8f6c3a5fa43037c012eba963de013ab4d592037c` was pushed to `main` and matched the remote SHA.
