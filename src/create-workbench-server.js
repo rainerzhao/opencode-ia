@@ -7,14 +7,54 @@ const crypto = require('node:crypto');
 const multer = require('multer');
 const { resolveWithinRoot, validateFileName } = require('./security/path-policy');
 const { fetchAllowedText } = require('./security/url-policy');
+const { openDatabase } = require('./db/open-database');
+const { migrateDatabase } = require('./db/migrate');
+const { createLoginLimiter } = require('./auth/login-limiter');
+const { createAuthService } = require('./auth/auth-service');
+const { createAuthMiddleware } = require('./auth/auth-middleware');
+const { createAuthRouter } = require('./modules/auth/routes');
+const { createUserAdminRouter } = require('./modules/users/routes');
 
 function createWorkbenchServer({
   config,
+  database,
   promptRunner,
   logger = console,
   urlFetchOptions = {},
   fetchAllowedTextImpl = fetchAllowedText
 }) {
+
+let db = database;
+let ownsDatabase = false;
+try {
+  if (!db) {
+    db = openDatabase({ filename: config.databasePath || ':memory:' });
+    ownsDatabase = true;
+  }
+  migrateDatabase(db);
+} catch (error) {
+  if (ownsDatabase) db?.close();
+  throw error;
+}
+
+const authConfig = Object.freeze({
+  cookieSecure: config.cookieSecure === true,
+  sessionTtlSeconds: config.sessionTtlSeconds || 8 * 60 * 60,
+  loginMaxFailures: config.loginMaxFailures || 5,
+  loginWindowSeconds: config.loginWindowSeconds || 15 * 60,
+  loginLockSeconds: config.loginLockSeconds || 15 * 60
+});
+const loginLimiter = createLoginLimiter({
+  maxFailures: authConfig.loginMaxFailures,
+  windowMs: authConfig.loginWindowSeconds * 1000,
+  lockMs: authConfig.loginLockSeconds * 1000
+});
+const authService = createAuthService({
+  db,
+  loginLimiter,
+  sessionTtlSeconds: authConfig.sessionTtlSeconds
+});
+const authMiddleware = createAuthMiddleware({ authService });
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -24,6 +64,7 @@ let starting = null;
 let rejectStarting = null;
 let startErrorHandler = null;
 let stopping = null;
+let databaseClosed = false;
 const activeHttpControllers = new Set();
 const PUBLIC_RUNNER_ERRORS = Object.freeze({
   OPENCODE_TIMEOUT: 'OpenCode request timed out',
@@ -42,6 +83,8 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use(express.static(path.join(config.projectDir, 'public')));
+app.use('/api/auth', createAuthRouter({ authService, authMiddleware, config: authConfig }));
+app.use('/api/admin/users', createUserAdminRouter({ authService, authMiddleware }));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);
@@ -519,8 +562,19 @@ app.post('/api/knowledge/fetch-url', async (req, res, next) => {
 
 app.use((error, req, res, _next) => {
   if (res.headersSent || res.destroyed) return;
-  const knownStatus = Number.isInteger(error.status) && error.status >= 400 && error.status <= 599;
-  const status = knownStatus ? error.status : 500;
+  const mappedStatuses = Object.freeze({
+    PASSWORD_POLICY: 400,
+    INVALID_USERNAME: 400,
+    INVALID_DISPLAY_NAME: 400,
+    INVALID_ROLE: 400,
+    INVALID_USER_STATUS: 400,
+    USERNAME_TAKEN: 409
+  });
+  const explicitStatus = Number.isInteger(error.status) && error.status >= 400 && error.status <= 599
+    ? error.status
+    : null;
+  const status = explicitStatus || mappedStatuses[error.code] || 500;
+  const knownStatus = status !== 500;
   const code = typeof error.code === 'string' && (knownStatus || error.code.startsWith('URL_'))
     ? error.code
     : 'INTERNAL_ERROR';
@@ -713,6 +767,14 @@ function stop() {
       if (!wsClosed || !httpClosed) return;
       clearTimeout(forceCloseTimer);
       clearTimeout(settlementTimer);
+      if (ownsDatabase && !databaseClosed) {
+        try {
+          db.close();
+          databaseClosed = true;
+        } catch (error) {
+          firstError ||= error;
+        }
+      }
       lifecycle = 'stopped';
       if (firstError) reject(firstError);
       else resolve();
@@ -738,7 +800,7 @@ function stop() {
   return stopping;
 }
 
-return { app, httpServer, start, stop, sessions };
+return { app, httpServer, start, stop, sessions, authService };
 }
 
 module.exports = { createWorkbenchServer };

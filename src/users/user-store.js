@@ -60,6 +60,19 @@ function createUserStore(db) {
   const byIdStatement = db.prepare('SELECT * FROM users WHERE id = ?');
   const byUsernameStatement = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE');
   const listStatement = db.prepare('SELECT * FROM users ORDER BY username LIMIT ? OFFSET ?');
+  const updateLastLoginStatement = db.prepare(`
+    UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?
+  `);
+  const updatePasswordStatement = db.prepare(`
+    UPDATE users
+    SET password_hash = ?, session_version = session_version + 1, updated_at = ?
+    WHERE id = ?
+  `);
+  const updateStatusStatement = db.prepare(`
+    UPDATE users
+    SET status = ?, session_version = session_version + 1, updated_at = ?
+    WHERE id = ?
+  `);
 
   function countUsers() {
     return countStatement.get().count;
@@ -102,6 +115,10 @@ function createUserStore(db) {
     return toPublicUser(byIdStatement.get(id));
   }
 
+  function findAuthById(id) {
+    return toAuthUser(byIdStatement.get(id));
+  }
+
   function findByUsername(username) {
     let normalized;
     try {
@@ -122,7 +139,38 @@ function createUserStore(db) {
     return listStatement.all(limit, offset).map(toPublicUser);
   }
 
-  return { countUsers, createUser, findById, findByUsername, listUsers };
+  function updateLastLogin(id, now) {
+    if (updateLastLoginStatement.run(now, now, id).changes !== 1) return null;
+    return findById(id);
+  }
+
+  function updatePassword(id, passwordHash, now) {
+    if (typeof passwordHash !== 'string' || passwordHash === '') {
+      throw createError('INVALID_PASSWORD_HASH', 'password hash is invalid');
+    }
+    if (updatePasswordStatement.run(passwordHash, now, id).changes !== 1) return null;
+    return findById(id);
+  }
+
+  function setStatus(id, status, now) {
+    if (status !== 'active' && status !== 'disabled') {
+      throw createError('INVALID_USER_STATUS', 'user status is invalid');
+    }
+    if (updateStatusStatement.run(status, now, id).changes !== 1) return null;
+    return findById(id);
+  }
+
+  return {
+    countUsers,
+    createUser,
+    findById,
+    findAuthById,
+    findByUsername,
+    listUsers,
+    updateLastLogin,
+    updatePassword,
+    setStatus
+  };
 }
 
 module.exports = { createUserStore, normalizeUsername, normalizeDisplayName };

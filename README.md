@@ -2,7 +2,7 @@
 
 面向 15–20 人内部团队的中心化 AI 工作台：成员通过浏览器使用 OpenCode、管理知识、沉淀方案，并逐步形成可校验、可发布、可回滚的团队 Skill 资产。
 
-> 当前研发阶段：**Stage 0 已完成，Stage 1A 数据与账号基础已完成；尚未达到生产上线条件。** 登录 API、权限接入和前端登录仍在开发，不应把当前版本直接开放给真实多用户使用。
+> 当前研发阶段：**Stage 0、Stage 1A 和 Stage 1B 已完成；尚未达到生产上线条件。** 后端登录与账号管理 API 已接通，业务 REST/WebSocket 权限和前端登录仍在开发，不应把当前版本直接开放给真实多用户使用。
 
 [查看完整路线图](docs/ROADMAP.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
 
@@ -45,8 +45,8 @@ DEMO_PORT=4321 npm run demo
 | 多会话控制 | ✅ 基线完成 | 全局会话上限、单会话串行、断线和关服取消 |
 | 知识文件与上传 | ✅ 基线完成 | 路径、符号链接、上传暂存、失败回滚保护 |
 | URL 导入 | ✅ 默认关闭 | 白名单、DNS 地址校验、逐跳重定向、超时和大小限制 |
-| 用户名/密码 | 🚧 Stage 1A | 首位管理员 CLI 已完成；登录 API 在 Stage 1B |
-| 角色与审计 | ⏳ Stage 1 | `admin/member`，操作绑定登录账号 |
+| 用户名/密码 | ✅ Stage 1B | 登录、退出、当前用户、改密、Session 撤销和限速 |
+| 角色与账号管理 | 🚧 Stage 1B | 管理员可建号、重置密码、停用账号；业务权限在 1C 接入 |
 | SQLite 数据层 | ✅ Stage 1A | WAL、版本化迁移、用户/Session/审计仓储 |
 | 常驻 OpenCode Gateway | ⏳ Stage 2 | 当前仍是每条消息一次有界 `opencode run` |
 | Skill 发布中心 | ⏳ Stage 4 | 校验、版本、安装、启用、回滚和归档 |
@@ -125,6 +125,11 @@ npm start
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
 | `DATABASE_PATH` | `<root>/data/workbench.db` | SQLite 运行数据库；被 Git 忽略 |
 | `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
+| `COOKIE_SECURE` | 生产环境为 `true` | HTTPS 下为认证 Cookie 增加 `Secure` |
+| `SESSION_TTL_SECONDS` | `28800` | 登录 Session 有效期，单位秒 |
+| `LOGIN_MAX_FAILURES` | `5` | 登录窗口内最大失败次数 |
+| `LOGIN_WINDOW_SECONDS` | `900` | 登录失败统计窗口，单位秒 |
+| `LOGIN_LOCK_SECONDS` | `900` | 触发限速后的锁定时长，单位秒 |
 | `KNOWLEDGE_FETCH_ALLOWED_HOSTS` | 空 | URL 导入精确主机白名单 |
 
 URL 导入默认禁用。启用后不支持通配符，非默认端口必须写为 `host:port`；每次重定向都会重新校验，回环、链路本地、云元数据和未授权地址会被拒绝。
@@ -137,7 +142,18 @@ URL 导入默认禁用。启用后不支持通配符，非默认端口必须写�
 npm run admin:create -- --username admin --display-name 管理员
 ```
 
-密码会隐藏输入两次，并使用 `scrypt` 和独立随机盐保存。该命令只完成账号数据库初始化；浏览器登录将在 Stage 1B–1D 接通，当前 `npm run demo` 仍是隔离的无密钥演示模式。
+密码会隐藏输入两次，并使用 `scrypt` 和独立随机盐保存。
+
+### Stage 1B：后端认证接口
+
+当前已提供以下后端接口，供 Stage 1D 前端登录和账号管理界面使用：
+
+- `POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`；
+- `POST /api/auth/change-password`；
+- `GET/POST /api/admin/users`；
+- 管理员密码重置、账号启停和 Session 强制撤销接口。
+
+Session 使用高熵不透明 Cookie，数据库只保存 SHA-256 摘要；写操作同时校验 Session Cookie、可读 CSRF Cookie、`X-CSRF-Token` 请求头与数据库摘要。当前静态前端尚未接入这些接口，现有业务 REST/WebSocket 也要到 Stage 1C 才会统一要求登录；`npm run demo` 仍是隔离、无密钥的 Stage 0 演示模式。
 
 ## 验证与安全
 

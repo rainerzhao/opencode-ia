@@ -83,11 +83,11 @@
 - `requireAuth(req, res, next)` and `requireRole('admin')`
 - Routes: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/change-password`, admin user/session routes.
 
-- [ ] Write real HTTP tests for generic invalid-login errors, secure cookie attributes, CSRF enforcement, session expiry, logout, password change, admin create/reset/disable, and rate limiting.
-- [ ] Run the auth tests and confirm endpoint-not-found/authentication failures.
-- [ ] Implement opaque 32-byte tokens, SHA-256 token/CSRF hashes, cookie parsing/serialization, auth service, bounded in-memory login limiter, middleware, and routes.
-- [ ] Re-run auth tests and full verification.
-- [ ] Record evidence, commit in Chinese, push `main`, and verify remote SHA.
+- [x] Write real HTTP tests for generic invalid-login errors, secure cookie attributes, CSRF enforcement, session expiry, logout, password change, admin create/reset/disable, and rate limiting.
+- [x] Run the auth tests and confirm endpoint-not-found/authentication failures.
+- [x] Implement opaque 32-byte tokens, SHA-256 token/CSRF hashes, cookie parsing/serialization, auth service, bounded in-memory login limiter, middleware, and routes.
+- [x] Re-run auth tests and full verification.
+- [ ] Record evidence, commit in Chinese, push `main`, and verify remote SHA. Local commit is ready; remote authentication must be refreshed before push verification.
 
 ### Task 1C: Authorization, privacy, WebSocket identity, and audit
 

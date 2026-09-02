@@ -19,6 +19,13 @@ function parseHostList(value) {
   return Object.freeze(value.split(',').map((host) => host.trim()).filter(Boolean));
 }
 
+function booleanValue(value, defaultValue, name) {
+  if (value === undefined) return defaultValue;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error(`${name} must be true or false`);
+}
+
 function loadConfig({ env = process.env, projectDir }) {
   const root = path.resolve(env.WORKBENCH_ROOT || projectDir);
 
@@ -35,7 +42,12 @@ function loadConfig({ env = process.env, projectDir }) {
     skillsDir: path.resolve(env.SKILLS_DIR || path.join(root, '.opencode/skills')),
     databasePath: path.resolve(env.DATABASE_PATH || path.join(root, 'data/workbench.db')),
     uploadTempDir: path.resolve(env.UPLOAD_TEMP_DIR || path.join(root, 'data/tmp/uploads')),
-    fetchAllowedHosts: parseHostList(env.KNOWLEDGE_FETCH_ALLOWED_HOSTS || '')
+    fetchAllowedHosts: parseHostList(env.KNOWLEDGE_FETCH_ALLOWED_HOSTS || ''),
+    cookieSecure: booleanValue(env.COOKIE_SECURE, env.NODE_ENV === 'production', 'COOKIE_SECURE'),
+    sessionTtlSeconds: positiveInteger(env.SESSION_TTL_SECONDS, 8 * 60 * 60, 'SESSION_TTL_SECONDS'),
+    loginMaxFailures: positiveInteger(env.LOGIN_MAX_FAILURES, 5, 'LOGIN_MAX_FAILURES'),
+    loginWindowSeconds: positiveInteger(env.LOGIN_WINDOW_SECONDS, 15 * 60, 'LOGIN_WINDOW_SECONDS'),
+    loginLockSeconds: positiveInteger(env.LOGIN_LOCK_SECONDS, 15 * 60, 'LOGIN_LOCK_SECONDS')
   });
 }
 
