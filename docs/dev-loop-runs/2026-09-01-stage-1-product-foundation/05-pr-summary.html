@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenCode 团队 AI 工作台 · Stage 1A–1D 评审摘要</title>
+  <title>OpenCode 团队 AI 工作台 · Stage 1 产品底座评审摘要</title>
   <style>
     :root {
       --paper: #f7f7f5; --paper-edge: #efefea; --ink: #1a1a1a;
@@ -69,10 +69,10 @@
   <article class="doc">
     <header class="doc-header">
       <div class="doc-eyebrow"><span class="mascot"></span>OPENCODE TEAM WORKBENCH · REVIEW SUMMARY</div>
-      <h1 class="doc-title">Stage 1A–1D 产品底座评审摘要</h1>
-      <p class="doc-subtitle">从持久账号与安全 Session，推进到可登录、可管理、默认私有的浏览器闭环</p>
+      <h1 class="doc-title">Stage 1 产品底座评审摘要</h1>
+      <p class="doc-subtitle">从持久账号与安全 Session，推进到 React 前后端、默认私有和可演示的浏览器闭环</p>
       <div class="doc-meta">
-        <span>STATUS · STAGE 1D PASS</span>
+        <span>STATUS · STAGE 1 PASS</span>
         <span>DATE · 2026-09-03</span>
         <span>BRANCH · MAIN</span>
       </div>
@@ -115,7 +115,7 @@
           <tr><td><strong>管理</strong></td><td>账号列表、建号、密码重置、启停、Session 强制撤销</td><td class="accent">1B 完成</td></tr>
           <tr><td><strong>业务权限</strong></td><td>REST/WS 强制认证、CSRF、角色矩阵、方案与知识所有者隔离</td><td class="accent">1C 完成</td></tr>
           <tr><td><strong>执行安全</strong></td><td>Socket 同源检查、Session 撤销重验证、用户身份和脱敏审计绑定</td><td class="accent">1C 完成</td></tr>
-          <tr><td><strong>用户界面</strong></td><td>登录/退出、当前角色、管理员账号管理、桌面/手机适配</td><td class="accent">1D 完成</td></tr>
+          <tr><td><strong>用户界面</strong></td><td>React/Vite、本地资源、登录/角色、账号管理、知识编辑上传、对话沉淀方案</td><td class="accent">1E 完成</td></tr>
         </tbody>
       </table>
     </section>
@@ -131,7 +131,7 @@
         <li><strong>文件边界。</strong>私人目录和文件强制 <code>0700/0600</code>，不依赖运行系统的默认 <code>umask</code>。</li>
         <li><strong>前端安全。</strong>业务请求统一使用 CSRF 客户端，方案不再保存到 <code>localStorage</code>，动态内容进入 HTML 前完成转义。</li>
         <li><strong>浏览器验收。</strong>1440×1000 与 390×844 完成管理员/成员登录、退出、建号、角色隐藏、遮蔽密码输入与横向溢出检查。</li>
-        <li><strong>验收结果。</strong><code>npm test</code> 116/116，通过 56 个 JS 文件语法检查和零发现密钥扫描。</li>
+        <li><strong>验收结果。</strong><code>npm test</code> 118/118，Vite 生产构建、JS 语法检查和零发现密钥扫描通过。</li>
         <li><strong>发布门禁。</strong><code>npm test</code>、<code>npm run check</code>、<code>npm run security:scan</code> 和 <code>git diff --check</code> 在提交前重新执行。</li>
       </ul>
     </section>
@@ -141,6 +141,8 @@
       <div class="evidence">
         <figure><img src="artifacts/screenshots/stage-1d-login-desktop.png" alt="桌面登录页"><figcaption>桌面登录页 · 不保存前端凭证</figcaption></figure>
         <figure><img src="artifacts/screenshots/stage-1d-account-admin-desktop.png" alt="管理员账号管理页面"><figcaption>账号管理 · 建号、重置、撤销、启停</figcaption></figure>
+        <figure><img src="artifacts/screenshots/stage-1e-react-admin-desktop.png" alt="React 管理员工作台"><figcaption>Stage 1E · React 管理员桌面体验</figcaption></figure>
+        <figure><img src="artifacts/screenshots/stage-1e-react-member-mobile.png" alt="React 成员移动端"><figcaption>Stage 1E · 390px 成员界面，无管理入口</figcaption></figure>
       </div>
     </section>
 
@@ -148,9 +150,9 @@
       <h2><span class="num">05</span>残余边界与下一步</h2>
       <div class="callout warn">
         <div class="callout-label">NOT PRODUCTION READY</div>
-        Stage 1D 已完成 Mac 浏览器多用户体验，但前端仍是静态 JavaScript，xterm 仍依赖公共 CDN；常驻 Gateway、Linux HTTPS、备份恢复、监控和容量验收尚未完成，不能宣称生产就绪。
+        Stage 1 已完成 Mac 上的 React 多用户产品底座，但常驻 Gateway、真实内部模型、Linux HTTPS、备份恢复、监控和容量验收尚未完成，不能宣称生产就绪。
       </div>
-      <p><strong>下一步 Stage 1E：</strong>完成 React/Vite 迁移、前端资源本地打包、Demo 更新与 Stage 1 总验收，同时保证现有认证、CSRF、角色、默认私有和 OpenCode 单一执行边界不回退。</p>
+      <p><strong>下一步 Stage 2：</strong>实现一个常驻 Gateway、2 个起步的 OpenCode Worker 池、多逻辑 Session、按用户公平排队和 SQLite 恢复，不按用户固定进程。</p>
     </section>
 
     <footer>
@@ -159,6 +161,7 @@
         <li><code>docs/superpowers/plans/2026-09-01-stage-1-product-foundation.md</code></li>
         <li><code>docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/04-acceptance-report.md</code></li>
         <li><code>docs/ROADMAP.md</code></li>
+        <li><code>docs/architecture/stage-2-opencode-gateway.md</code></li>
       </ul>
     </footer>
   </article>

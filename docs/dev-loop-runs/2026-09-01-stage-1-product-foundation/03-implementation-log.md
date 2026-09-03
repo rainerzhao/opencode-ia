@@ -168,3 +168,32 @@ Status: implemented, verified and delivered to GitHub `main`.
 - Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
 - Residual boundary: xterm remains CDN-hosted and must be locally bundled before internal Linux deployment; React/Vite migration remains Stage 1E.
 - Git delivery: code commit `8b7b4d183fee18222162898dc9619bc6554c1c19` was pushed to `main`; `git ls-remote origin refs/heads/main` matched the local SHA.
+
+## Stage 1E
+
+Status: implemented and in final release verification.
+
+### Delivered
+
+- 新增 `apps/web` React 19 + Vite 前端，按认证、工作台壳、对话、知识、方案、Skill 和账号管理拆分功能目录。
+- Express 在生产与 Demo 中统一提供 `dist/web` 构建产物；`/` 与 `/login.html` 兼容返回同一个 React 入口，前端不依赖公共 CDN。
+- 新增 `apps/server` 生产组合入口，根 `server.js` 只保留兼容启动职责。
+- 管理员 React 页面覆盖建号、遮蔽密码重置、会话撤销、启停、确认和错误态。
+- 知识 React 页面覆盖本地搜索、新建 Markdown、查看/编辑和多文件安全上传。
+- 对话页覆盖认证 WebSocket、连接状态、1008 登录失效处理和人工确认后的私有方案沉淀。
+- 退役旧 `public/` 静态实现及其源码级测试，使用构建/服务、React SSR 契约和真实浏览器验收替代。
+- Stage 2 正式确定为常驻 Gateway + 2 个起步的多 Worker + 多逻辑 Session，单机 SQLite 持久化，不按用户固定进程。
+
+### TDD and Debug Evidence
+
+- React build RED：缺少 `build` 脚本；GREEN：Vite 产出本地 JS/CSS，Express 两个入口路由均可服务。
+- React feature RED：管理员恢复控制、知识创作/上传入口和对话沉淀入口 0/3；GREEN：3/3。
+- Browser regression：编辑已有知识时稳定出现 `null.trim()`；追踪到 `disabled` 标题不会进入 `FormData`。新增回归用例后改为 `readOnly`，4/4 通过，真实浏览器重复保存且 errors 为空。
+
+### Browser Acceptance
+
+- 桌面 1440×1000：管理员登录、建号、密码重置、对话 Demo 回复、方案保存、知识搜索/新建/编辑/上传通过。
+- 手机 390×844：普通成员登录，管理入口数量为 0，页面 `scrollWidth === innerWidth`。
+- 私有边界：成员搜索不到管理员创建的私人知识。
+- `localStorage` 与 `sessionStorage` 均为空；前端无外部 script/link；最终浏览器 errors 为空。
+- 截图：`stage-1e-react-admin-desktop.png`、`stage-1e-react-member-mobile.png`。

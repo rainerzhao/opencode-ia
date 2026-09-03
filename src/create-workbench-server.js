@@ -86,7 +86,13 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
-app.use(express.static(path.join(config.projectDir, 'public')));
+const staticDir = config.staticDir || path.join(config.projectDir, 'public');
+app.use(express.static(staticDir));
+app.get(['/', '/login.html'], (req, res, next) => {
+  const entry = path.join(staticDir, 'index.html');
+  if (!fs.existsSync(entry)) return next();
+  res.sendFile(entry);
+});
 app.use('/api/auth', createAuthRouter({ authService, authMiddleware, config: authConfig }));
 app.use('/api/admin/users', createUserAdminRouter({ authService, authMiddleware }));
 app.use('/api', authMiddleware.requireAuth);

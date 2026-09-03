@@ -6,7 +6,8 @@
 **Stage 1B: PASS**
 **Stage 1C: PASS**
 **Stage 1D: PASS**
-**Whole Stage 1: IN PROGRESS**
+**Stage 1E: PASS**
+**Whole Stage 1: PASS**
 
 ## Scope Checked
 
@@ -35,8 +36,9 @@
 
 ## Tests Run
 
-- `npm test`: 116 tests passed, 0 failed in the final full regression.
-- `npm run check`: 56 JavaScript files passed.
+- `npm test`: 118 tests passed, 0 failed in the final full regression.
+- `npm run build`: Vite production build passed with 37 transformed modules and only local JS/CSS assets.
+- `npm run check`: 58 JavaScript files passed.
 - `npm run security:scan`: zero findings.
 - `git diff --check`: passed.
 - Browser acceptance: 1440×1000 and 390×844 login flows, administrator account creation, logout, member login, role visibility, password-reset masking, zero page-level overflow and empty browser storage passed.
@@ -49,12 +51,12 @@
 - Acceptance criteria 3–4: complete at the authentication/admin API boundary.
 - Acceptance criterion 5: complete for account management and current business write audit events.
 - Acceptance criterion 6: complete for current REST/WebSocket and filesystem-backed solution/knowledge boundaries.
-- Acceptance criterion 7: complete for Stage 1D Mac desktop/mobile browser login and account-management acceptance.
-- Acceptance criterion 8: complete through Stage 1C; Stage 1D commit/push is recorded after release.
+- Acceptance criterion 7: complete for Stage 1E Mac desktop/mobile React browser acceptance.
+- Acceptance criterion 8: complete through Stage 1D; Stage 1E commit/push is recorded after release.
 
 ## Findings
 
-No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A through Stage 1D.
+No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A through Stage 1E.
 
 ## Fixes Applied
 
@@ -73,15 +75,18 @@ No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A through
 - Replaced plaintext password-reset prompting with a masked dialog and added confirmation gates for destructive account actions.
 - Rejected cross-origin authentication-client requests before CSRF headers can be constructed or transmitted.
 - Escaped dynamic Skill, solution, knowledge and upload names before HTML rendering.
+- Replaced the legacy static frontend and public CDN resources with a locally bundled React/Vite application.
+- Fixed existing-knowledge saves by keeping the read-only title in submitted `FormData`; the browser regression now reports zero errors.
+- Added explicit conversation-to-private-solution and private knowledge authoring/upload flows.
 
 ## Residual Risks
 
 - Behind a future reverse proxy, source IP extraction requires an explicit trusted-proxy design before Linux production use.
-- The frontend is still static JavaScript; React/Vite migration and frontend module boundaries arrive in 1E.
-- xterm scripts and styles still load from a public CDN and must be bundled locally before internal Linux deployment.
+- The frontend is locally bundled React/Vite, but full client-side routing and a mature design system remain future refinements.
+- Real persistent OpenCode sessions are not implemented; Stage 1 still performs one bounded `opencode run` per message.
 - The current filesystem ownership layer is a Stage 1 bridge; versioned publication and richer cross-owner administration arrive with Stage 3 metadata.
-- React/Vite migration and Stage 1 release gate remain in 1E.
+- Linux HTTPS, process supervision, backup/restore, internal Provider integration and capacity tests remain incomplete.
 
 ## Follow-ups
 
-Stage 1D implementation and Mac browser acceptance are complete. Code commit `8b7b4d183fee18222162898dc9619bc6554c1c19` is on GitHub `main` and matched the remote SHA. Start Stage 1E React/Vite migration and the full Stage 1 release gate next.
+Stage 1 product foundation and Mac browser acceptance are complete. Stage 2 will implement the approved persistent Gateway, Worker pool, logical Session mapping, fair queue and recovery model before Linux productionization.

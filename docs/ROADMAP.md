@@ -63,7 +63,9 @@ Stage 1D 已在 Mac 上跑通管理员与成员浏览器闭环；Stage 1E 仍需
 
 目标：让 OpenCode 从“每消息启动一个进程”变成可管理的常驻服务。
 
-主要工作：用户会话映射到 OpenCode Session；统一流式事件、取消和恢复；管理员维护授权模型；会话并发、队列、健康检查和故障隔离。
+主要工作：一个常驻 Gateway 管理 2 个起步、可扩到 2–4 个的常驻 OpenCode Worker；每个 Worker 承载多个逻辑 Session；使用 `Conversation → OpenCode Session → Worker` 粘性映射；统一流式事件、取消和恢复；管理员维护授权模型；按用户公平排队，并实施全局、单用户和单 Session 并发限制；完成健康检查和故障隔离。
+
+首版是单机架构，任务与映射用 SQLite WAL 持久化，不按用户固定进程，也不引入 Redis 或 Kubernetes。详见 [Stage 2 Gateway 架构](architecture/stage-2-opencode-gateway.md)。
 
 出口标准：真实 OpenCode 与内部兼容 OpenAI 协议模型完成联调，Mac 上完成并发和恢复验证。
 

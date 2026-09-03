@@ -143,12 +143,12 @@
 - Vite build outputs static assets served by Express in production.
 - Existing REST/WebSocket contracts remain compatible unless changed through a tested shared contract.
 
-- [ ] Add build and route smoke tests before moving UI behavior.
-- [ ] Install pinned React/Vite dependencies and create the application shell.
-- [ ] Move one feature at a time while keeping existing API integration tests green; remove legacy `public/app.js` only after equivalent browser coverage passes.
-- [ ] Update Demo to create isolated demo users and a temporary SQLite database without a real Provider key.
-- [ ] Run full test, build, syntax, secret, responsive browser, shutdown cleanup, and public README verification.
-- [ ] Complete the acceptance report and self-contained HTML PR summary.
+- [x] Add build and route smoke tests before moving UI behavior.
+- [x] Install pinned React/Vite dependencies and create the application shell.
+- [x] Move one feature at a time while keeping existing API integration tests green; remove legacy `public/app.js` only after equivalent browser coverage passes.
+- [x] Update Demo to create isolated demo users and a temporary SQLite database without a real Provider key.
+- [x] Run full test, build, syntax, secret, responsive browser, shutdown cleanup, and public README verification.
+- [x] Complete the acceptance report and self-contained HTML PR summary.
 - [ ] Commit in Chinese, push `main`, verify public remote SHA, and mark Stage 1 complete only if all exit criteria pass.
 
 ## Self-review

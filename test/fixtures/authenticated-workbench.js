@@ -64,6 +64,7 @@ async function createAuthenticatedWorkbench(t, options = {}) {
   });
   const config = {
     projectDir: path.resolve(__dirname, '../..'),
+    staticDir: options.staticDir,
     port: 0,
     maxSessions: options.maxSessions || 4,
     opencodeCwd: root,

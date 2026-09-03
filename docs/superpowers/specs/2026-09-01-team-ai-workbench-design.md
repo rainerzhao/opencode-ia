@@ -168,6 +168,10 @@ IP 不作为用户身份。Linux 生产环境可以在 Nginx 层限制公司内�
 ### 6.1 常驻服务
 
 - OpenCode 以常驻服务运行，不为每条消息冷启动完整环境。
+- 工作台使用一个常驻 Gateway 控制面和多个常驻 Worker 执行面；Mac 默认 2 个 Worker，Linux 初始 2 个并根据压测调整到 2–4 个。
+- Worker 不与用户固定绑定。一个 Worker 可承载多个逻辑 Session，但同一 Session 同时只执行一个任务。
+- Gateway 使用 `Conversation → OpenCode Session → Worker` 粘性映射，实施全局并发、单用户并发和按用户公平排队。
+- 单机首版使用 SQLite 持久化映射与任务状态，不引入 Redis 或 Kubernetes。
 - OpenCode 只监听回环地址；工作台后端是唯一业务调用方。
 - OpenCode Gateway 封装具体调用协议。优先使用当前 OpenCode 版本支持的服务或 SDK 接口；若需要使用 `opencode run --attach`，必须参数化调用，禁止 Shell 字符串拼接。
 - Gateway 对上层暴露稳定的创建会话、发送消息、订阅事件、停止运行、恢复会话和健康检查接口。

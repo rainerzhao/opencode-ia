@@ -27,7 +27,7 @@ const demoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-workbench-demo-
 const demoHome = path.join(demoRoot, 'home');
 const demoConfigDir = path.join(demoHome, '.config', 'opencode');
 
-fs.cpSync(path.join(sourceRoot, 'public'), path.join(demoRoot, 'public'), { recursive: true });
+fs.cpSync(path.join(sourceRoot, 'dist', 'web'), path.join(demoRoot, 'public'), { recursive: true });
 fs.cpSync(path.join(sourceRoot, 'knowledge'), path.join(demoRoot, 'knowledge'), { recursive: true });
 fs.mkdirSync(path.join(demoRoot, 'solutions'), { recursive: true });
 fs.mkdirSync(path.join(demoRoot, '.opencode', 'skills'), { recursive: true });
@@ -42,6 +42,7 @@ process.env.HOME = demoHome;
 const env = {
   ...process.env,
   WORKBENCH_ROOT: demoRoot,
+  WEB_DIST_DIR: path.join(demoRoot, 'public'),
   OPENCODE_CWD: demoRoot,
   OPENCODE_CMD: path.join(sourceRoot, 'scripts', 'demo-opencode.js'),
   OPENCODE_TIMEOUT_MS: '3000',
