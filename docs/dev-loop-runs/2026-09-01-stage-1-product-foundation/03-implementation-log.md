@@ -129,7 +129,7 @@ Status: implemented, verified and delivered to GitHub `main`.
 
 ## Stage 1D
 
-Status: implemented and verified; Git delivery pending.
+Status: implemented, verified and delivered to GitHub `main`.
 
 ### Delivered
 
@@ -167,3 +167,4 @@ Status: implemented and verified; Git delivery pending.
 - Fix verification: masked reset dialog and UI contract tests passed; revoke/disable now require confirmation; cross-origin requests are rejected before `fetch`.
 - Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
 - Residual boundary: xterm remains CDN-hosted and must be locally bundled before internal Linux deployment; React/Vite migration remains Stage 1E.
+- Git delivery: code commit `8b7b4d183fee18222162898dc9619bc6554c1c19` was pushed to `main`; `git ls-remote origin refs/heads/main` matched the local SHA.

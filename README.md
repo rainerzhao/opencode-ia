@@ -4,6 +4,8 @@
 
 > 当前研发阶段：**Stage 0、Stage 1A–1D 已完成；Stage 1E 待开发，尚未达到生产上线条件。** Mac 上已经跑通登录、角色界面、管理员建号和成员访问闭环；React/Vite 迁移、常驻 OpenCode Gateway、Linux 部署与生产验收仍未完成。
 
+最新已验证交付：Stage 1D 主提交 [`8b7b4d1`](https://github.com/rainerzhao/opencode-ia/commit/8b7b4d183fee18222162898dc9619bc6554c1c19)，已于 2026-09-03 推送到公开仓库 `main`。
+
 [查看完整路线图](docs/ROADMAP.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
 
 ![Stage 1D 登录页](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/artifacts/screenshots/stage-1d-login-desktop.png)

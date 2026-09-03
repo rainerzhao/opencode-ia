@@ -128,7 +128,7 @@
 - [x] Run UI tests and confirm missing login shell failures.
 - [x] Implement the login shell, authenticated fetch wrapper, role-aware navigation, account management, and logout.
 - [x] Run tests and perform desktop/mobile browser acceptance with admin and member accounts, including console errors and overflow checks.
-- [ ] Save screenshots/evidence, commit in Chinese, push `main`, and verify remote SHA.
+- [x] Save screenshots/evidence, commit in Chinese, push `main`, and verify remote SHA.
 
 ### Task 1E: React/Vite migration and Stage 1 release gate
 

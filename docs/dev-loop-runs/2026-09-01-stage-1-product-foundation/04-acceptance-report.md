@@ -84,4 +84,4 @@ No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A through
 
 ## Follow-ups
 
-Stage 1D implementation and Mac browser acceptance are complete. Deliver the verified Stage 1D commit to GitHub `main`, then start Stage 1E React/Vite migration and the full Stage 1 release gate.
+Stage 1D implementation and Mac browser acceptance are complete. Code commit `8b7b4d183fee18222162898dc9619bc6554c1c19` is on GitHub `main` and matched the remote SHA. Start Stage 1E React/Vite migration and the full Stage 1 release gate next.
