@@ -1,51 +1,34 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-
-const { createWorkbenchServer } = require('../../src/create-workbench-server');
+const { createAuthenticatedWorkbench } = require('../fixtures/authenticated-workbench');
 
 const silentLogger = { log() {}, error() {} };
 
 async function createFixture(t, options = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-api-'));
-  const knowledgeDir = path.join(root, 'knowledge');
-  const solutionsDir = path.join(root, 'solutions');
-  const skillsDir = path.join(root, 'skills');
-  const uploadTempDir = path.join(root, 'upload-temp');
-  fs.mkdirSync(knowledgeDir, { recursive: true });
-  fs.mkdirSync(solutionsDir, { recursive: true });
-  fs.mkdirSync(skillsDir, { recursive: true });
-  fs.mkdirSync(uploadTempDir, { recursive: true });
-
-  const config = {
-    projectDir: path.resolve(__dirname, '../..'),
-    port: 0,
-    maxSessions: 2,
-    opencodeCwd: root,
-    knowledgeDir,
-    solutionsDir,
-    skillsDir,
-    uploadTempDir,
-    fetchAllowedHosts: options.fetchAllowedHosts || []
-  };
-  const workbench = createWorkbenchServer({
-    config,
-    promptRunner: { runPrompt: async () => ({ text: 'unused', events: [], stderr: '' }) },
+  const fixture = await createAuthenticatedWorkbench(t, {
     logger: silentLogger,
+    fetchAllowedHosts: options.fetchAllowedHosts,
     urlFetchOptions: options.urlFetchOptions,
     fetchAllowedTextImpl: options.fetchAllowedTextImpl
   });
-  const address = await workbench.start(0);
-  const origin = `http://127.0.0.1:${address.port}`;
-
-  t.after(async () => {
-    await workbench.stop().catch(() => {});
-    fs.rmSync(root, { recursive: true, force: true });
-  });
-  return { root, knowledgeDir, solutionsDir, skillsDir, uploadTempDir, workbench, origin };
+  const authenticatedFetch = (url, options = {}) => {
+    const headers = new Headers(options.headers);
+    headers.set('cookie', fixture.admin.cookie);
+    headers.set('x-csrf-token', fixture.admin.csrfToken);
+    return fetch(url, { ...options, headers });
+  };
+  return {
+    ...fixture,
+    knowledgeDir: fixture.config.knowledgeDir,
+    solutionsDir: fixture.config.solutionsDir,
+    skillsDir: fixture.config.skillsDir,
+    uploadTempDir: fixture.config.uploadTempDir,
+    privateKnowledgeDir: path.join(fixture.config.knowledgeDir, '.private', 'user-admin'),
+    fetch: authenticatedFetch
+  };
 }
 
 async function jsonResponse(response) {
@@ -72,12 +55,12 @@ test('article routes allow safe Markdown and reject traversal, absolute, NUL, an
   fs.writeFileSync(siblingSecret, '不得泄露');
   fs.symlinkSync(siblingSecret, path.join(fixture.knowledgeDir, 'linked.md'));
 
-  const safe = await fetch(`${fixture.origin}/api/knowledge/article?path=gpu%2Fguide.md`);
+  const safe = await fixture.fetch(`${fixture.origin}/api/knowledge/article?path=gpu%2Fguide.md`);
   assert.equal(safe.status, 200);
   assert.equal((await jsonResponse(safe)).content, '# GPU\n\n安全正文');
 
   for (const candidate of ['../secret.md', '..\\secret.md', '/etc/passwd', 'gpu/evil\0.md', 'linked.md']) {
-    const response = await fetch(
+    const response = await fixture.fetch(
       `${fixture.origin}/api/knowledge/article?path=${encodeURIComponent(candidate)}`
     );
     const body = await jsonResponse(response);
@@ -88,7 +71,7 @@ test('article routes allow safe Markdown and reject traversal, absolute, NUL, an
     assert.equal(JSON.stringify(body).includes('不得泄露'), false);
   }
 
-  const save = await fetch(`${fixture.origin}/api/knowledge/article`, {
+  const save = await fixture.fetch(`${fixture.origin}/api/knowledge/article`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ filePath: '../escape.md', content: 'escape' })
@@ -96,7 +79,7 @@ test('article routes allow safe Markdown and reject traversal, absolute, NUL, an
   assert.equal(save.status, 400);
   assert.equal(fs.existsSync(path.join(fixture.root, 'escape.md')), false);
 
-  const create = await fetch(`${fixture.origin}/api/knowledge/article/new`, {
+  const create = await fixture.fetch(`${fixture.origin}/api/knowledge/article/new`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ title: '../../escape', content: 'escape' })
@@ -105,7 +88,7 @@ test('article routes allow safe Markdown and reject traversal, absolute, NUL, an
 
   const outside = path.join(fixture.root, 'preserve.md');
   fs.writeFileSync(outside, 'preserve');
-  const remove = await fetch(
+  const remove = await fixture.fetch(
     `${fixture.origin}/api/knowledge/article?path=${encodeURIComponent(outside)}`,
     { method: 'DELETE' }
   );
@@ -120,10 +103,10 @@ test('tree and search skip escaping symlinks and never disclose sibling contents
   fs.writeFileSync(secret, '# Secret\n\nunique-private-marker');
   fs.symlinkSync(secret, path.join(fixture.knowledgeDir, 'linked.md'));
 
-  const tree = await jsonResponse(await fetch(`${fixture.origin}/api/knowledge/tree`));
+  const tree = await jsonResponse(await fixture.fetch(`${fixture.origin}/api/knowledge/tree`));
   assert.deepEqual(tree.map((item) => item.path), ['normal.md']);
 
-  const results = await jsonResponse(await fetch(
+  const results = await jsonResponse(await fixture.fetch(
     `${fixture.origin}/api/knowledge/search?q=unique-private-marker`
   ));
   assert.deepEqual(results, []);
@@ -139,7 +122,7 @@ test('URL import is default-deny and does not call DNS or the network', async (t
     }
   });
 
-  const response = await fetch(`${fixture.origin}/api/knowledge/fetch-url`, {
+  const response = await fixture.fetch(`${fixture.origin}/api/knowledge/fetch-url`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://docs.example.com/guide' })
@@ -166,7 +149,7 @@ test('allowed URL import uses the bounded policy and saves only a safe Markdown 
     }
   });
 
-  const response = await fetch(`${fixture.origin}/api/knowledge/fetch-url`, {
+  const response = await fixture.fetch(`${fixture.origin}/api/knowledge/fetch-url`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://docs.example.com/guide', category: 'gpu' })
@@ -174,7 +157,7 @@ test('allowed URL import uses the bounded policy and saves only a safe Markdown 
   const body = await jsonResponse(response);
   assert.equal(response.status, 200);
   assert.equal(body.path, 'gpu/guide.md');
-  const saved = fs.readFileSync(path.join(fixture.knowledgeDir, 'gpu', 'guide.md'), 'utf8');
+  const saved = fs.readFileSync(path.join(fixture.privateKnowledgeDir, 'gpu', 'guide.md'), 'utf8');
   assert.match(saved, /团队内容/);
   assert.doesNotMatch(saved, /hidden\(\)/);
 });
@@ -191,7 +174,7 @@ test('server shutdown aborts an in-flight policy fetch through the Task 3 contro
     }
   });
 
-  const request = fetch(`${fixture.origin}/api/knowledge/fetch-url`, {
+  const request = fixture.fetch(`${fixture.origin}/api/knowledge/fetch-url`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://docs.example.com/slow' })
@@ -211,14 +194,14 @@ test('upload promotes safe files from fixed temporary storage', async (t) => {
   form.append('category', 'gpu');
   form.append('files', new Blob(['# Guide\n\ncontent'], { type: 'text/markdown' }), 'guide.md');
 
-  const response = await fetch(`${fixture.origin}/api/knowledge/upload`, {
+  const response = await fixture.fetch(`${fixture.origin}/api/knowledge/upload`, {
     method: 'POST',
     body: form
   });
   const body = await jsonResponse(response);
   assert.equal(response.status, 200);
   assert.deepEqual(body.files, [{ name: 'guide.md', path: 'gpu/guide.md' }]);
-  assert.equal(fs.readFileSync(path.join(fixture.knowledgeDir, 'gpu', 'guide.md'), 'utf8'), '# Guide\n\ncontent');
+  assert.equal(fs.readFileSync(path.join(fixture.privateKnowledgeDir, 'gpu', 'guide.md'), 'utf8'), '# Guide\n\ncontent');
   assert.deepEqual(fs.readdirSync(fixture.uploadTempDir), []);
 });
 
@@ -226,7 +209,8 @@ test('upload rejects traversal, separator-bearing names, symlink categories, and
   const fixture = await createFixture(t);
   const outsideDir = path.join(fixture.root, 'outside');
   fs.mkdirSync(outsideDir);
-  fs.symlinkSync(outsideDir, path.join(fixture.knowledgeDir, 'linked'));
+  fs.mkdirSync(fixture.privateKnowledgeDir, { recursive: true });
+  fs.symlinkSync(outsideDir, path.join(fixture.privateKnowledgeDir, 'linked'));
 
   const cases = [
     { category: '../../outside', name: 'escape.md' },
@@ -241,7 +225,7 @@ test('upload rejects traversal, separator-bearing names, symlink categories, and
     const form = new FormData();
     form.append('category', item.category);
     form.append('files', new Blob(['blocked']), item.name);
-    const response = await fetch(`${fixture.origin}/api/knowledge/upload`, {
+    const response = await fixture.fetch(`${fixture.origin}/api/knowledge/upload`, {
       method: 'POST',
       body: form
     });
@@ -262,11 +246,11 @@ test('failed multi-file upload leaves neither temporary nor partially promoted f
   form.append('files', new Blob(['valid']), 'guide.md');
   form.append('files', new Blob(['invalid']), 'blocked.exe');
 
-  const response = await fetch(`${fixture.origin}/api/knowledge/upload`, {
+  const response = await fixture.fetch(`${fixture.origin}/api/knowledge/upload`, {
     method: 'POST',
     body: form
   });
   assert.equal(response.status, 400);
-  assert.equal(fs.existsSync(path.join(fixture.knowledgeDir, 'gpu', 'guide.md')), false);
+  assert.equal(fs.existsSync(path.join(fixture.privateKnowledgeDir, 'gpu', 'guide.md')), false);
   assert.deepEqual(fs.readdirSync(fixture.uploadTempDir), []);
 });

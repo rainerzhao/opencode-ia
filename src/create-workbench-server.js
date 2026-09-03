@@ -12,6 +12,9 @@ const { migrateDatabase } = require('./db/migrate');
 const { createLoginLimiter } = require('./auth/login-limiter');
 const { createAuthService } = require('./auth/auth-service');
 const { createAuthMiddleware } = require('./auth/auth-middleware');
+const { can } = require('./auth/permissions');
+const { createRequestAuditor } = require('./audit/request-audit');
+const { SESSION_COOKIE, readCookie } = require('./http/cookies');
 const { createAuthRouter } = require('./modules/auth/routes');
 const { createUserAdminRouter } = require('./modules/users/routes');
 
@@ -55,10 +58,11 @@ const authService = createAuthService({
   sessionTtlSeconds: authConfig.sessionTtlSeconds
 });
 const authMiddleware = createAuthMiddleware({ authService });
+const requestAuditor = createRequestAuditor({ db });
 
 const app = express();
 const httpServer = http.createServer(app);
-const wss = new WebSocket.Server({ server: httpServer });
+const wss = new WebSocket.Server({ noServer: true });
 let lifecycle = 'idle';
 let starting = null;
 let rejectStarting = null;
@@ -85,6 +89,25 @@ app.use(express.json());
 app.use(express.static(path.join(config.projectDir, 'public')));
 app.use('/api/auth', createAuthRouter({ authService, authMiddleware, config: authConfig }));
 app.use('/api/admin/users', createUserAdminRouter({ authService, authMiddleware }));
+app.use('/api', authMiddleware.requireAuth);
+app.use('/api', (_req, res, next) => {
+  res.setHeader('cache-control', 'no-store');
+  next();
+});
+app.use('/api', (req, _res, next) => {
+  if (!can(req.auth?.user, 'workbench:use')) {
+    next(apiError('FORBIDDEN', 'You do not have permission to perform this action', 403));
+    return;
+  }
+  next();
+});
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    next();
+    return;
+  }
+  authMiddleware.requireCsrf(req, res, next);
+});
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);
@@ -124,6 +147,72 @@ function safeCategory(root, category) {
   return { absolute: safePath(root, normalized), relative: normalized };
 }
 
+function assertVisibleKnowledgePath(relativePath) {
+  if (
+    typeof relativePath !== 'string' ||
+    relativePath === '.private' ||
+    relativePath.startsWith('.private/')
+  ) {
+    throw apiError('UNSAFE_PATH', 'The requested path is not allowed');
+  }
+}
+
+function privateKnowledgeRoot(user) {
+  if (!user?.id) throw apiError('SESSION_INVALID', 'Authentication is required', 401);
+  return safePath(config.knowledgeDir, `.private/${safeFileName(user.id)}`);
+}
+
+function privateKnowledgePath(user, relativePath, options) {
+  assertVisibleKnowledgePath(relativePath);
+  return safePath(privateKnowledgeRoot(user), relativePath, options);
+}
+
+function findReadableKnowledgeFile(user, relativePath) {
+  assertVisibleKnowledgePath(relativePath);
+  const privatePath = privateKnowledgePath(user, relativePath, { extensions: ['.md'] });
+  if (fs.existsSync(privatePath)) return privatePath;
+  const sharedPath = safePath(config.knowledgeDir, relativePath, { extensions: ['.md'] });
+  return fs.existsSync(sharedPath) ? sharedPath : null;
+}
+
+function ensurePrivateDirectory(directory) {
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.chmodSync(directory, 0o700);
+}
+
+function writePrivateFile(filePath, content, options) {
+  ensurePrivateDirectory(path.dirname(filePath));
+  const writeOptions = typeof options === 'string'
+    ? { encoding: options, mode: 0o600 }
+    : { ...(options || {}), mode: 0o600 };
+  fs.writeFileSync(filePath, content, writeOptions);
+  fs.chmodSync(filePath, 0o600);
+}
+
+function sortKnowledgeItems(items) {
+  return items.sort((a, b) => {
+    if (a.type === 'directory' && b.type !== 'directory') return -1;
+    if (a.type !== 'directory' && b.type === 'directory') return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function mergeKnowledgeTrees(privateItems, sharedItems) {
+  const merged = new Map(sharedItems.map((item) => [item.name, item]));
+  for (const privateItem of privateItems) {
+    const sharedItem = merged.get(privateItem.name);
+    if (privateItem.type === 'directory' && sharedItem?.type === 'directory') {
+      merged.set(privateItem.name, {
+        ...privateItem,
+        children: mergeKnowledgeTrees(privateItem.children, sharedItem.children)
+      });
+    } else {
+      merged.set(privateItem.name, privateItem);
+    }
+  }
+  return sortKnowledgeItems([...merged.values()]);
+}
+
 // 文件上传配置
 fs.mkdirSync(config.uploadTempDir, { recursive: true });
 const storage = multer.diskStorage({
@@ -156,7 +245,6 @@ app.get('/api/config', (req, res) => {
   res.json({
     maxSessions: config.maxSessions,
     activeSessions: sessions.size,
-    opencodeCwd: config.opencodeCwd,
     model
   });
 });
@@ -186,10 +274,16 @@ app.get('/api/skills', (req, res) => {
 });
 
 // API: 会话列表
-app.get('/api/sessions', (req, res) => {
+app.get('/api/sessions', authMiddleware.requireRole('admin'), (req, res) => {
   const list = [];
   sessions.forEach((info, id) => {
-    list.push({ id, user: info.user, startTime: info.startTime });
+    list.push({
+      id,
+      userId: info.userId,
+      username: info.username,
+      role: info.role,
+      startTime: info.startTime
+    });
   });
   res.json(list);
 });
@@ -207,15 +301,22 @@ app.post('/api/solutions', (req, res) => {
     skills: skills || [],
     chatHistory: chatHistory || [],
     createdAt: new Date().toISOString(),
-    createdBy: 'anonymous'
+    createdBy: req.auth.user.id,
+    visibility: 'private'
   };
 
   if (!fs.existsSync(config.solutionsDir)) {
-    fs.mkdirSync(config.solutionsDir, { recursive: true });
+    ensurePrivateDirectory(config.solutionsDir);
   }
 
   const filePath = safePath(config.solutionsDir, `${safeFileName(record.id)}.json`, { extensions: ['.json'] });
-  fs.writeFileSync(filePath, JSON.stringify(record, null, 2));
+  writePrivateFile(filePath, JSON.stringify(record, null, 2));
+  requestAuditor.record(req, {
+    action: 'solution.create',
+    targetType: 'solution',
+    targetId: record.id,
+    metadata: { visibility: record.visibility }
+  });
 
   res.json({ success: true, id: record.id });
 });
@@ -232,6 +333,10 @@ app.get('/api/solutions', (req, res) => {
         const content = fs.readFileSync(safePath(config.solutionsDir, safeFileName(f), { extensions: ['.json'] }), 'utf-8');
         return JSON.parse(content);
       })
+      .filter((record) => can(req.auth.user, 'resource:read', {
+        ownerUserId: record.createdBy,
+        visibility: record.visibility === 'shared' ? 'shared' : 'private'
+      }))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(files);
   } catch (err) {
@@ -245,22 +350,27 @@ app.get('/api/knowledge/tree', (req, res) => {
     if (!fs.existsSync(config.knowledgeDir)) {
       fs.mkdirSync(config.knowledgeDir, { recursive: true });
     }
-    const tree = buildKnowledgeTree(config.knowledgeDir);
-    res.json(tree);
+    const sharedTree = buildKnowledgeTree(config.knowledgeDir, config.knowledgeDir, '', true);
+    const privateRoot = privateKnowledgeRoot(req.auth.user);
+    const privateTree = fs.existsSync(privateRoot)
+      ? buildKnowledgeTree(privateRoot, privateRoot)
+      : [];
+    res.json(mergeKnowledgeTrees(privateTree, sharedTree));
   } catch (err) {
     res.json([]);
   }
 });
 
 // 递归构建知识库目录树
-function buildKnowledgeTree(dirPath, relativePath = '') {
+function buildKnowledgeTree(root, dirPath = root, relativePath = '', excludePrivate = false) {
   const items = [];
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
+    if (excludePrivate && relativePath === '' && entry.name === '.private') continue;
     let fullPath;
     try {
-      fullPath = safePath(config.knowledgeDir, relativePath ? `${relativePath}/${entry.name}` : entry.name);
+      fullPath = safePath(root, relativePath ? `${relativePath}/${entry.name}` : entry.name);
     } catch {
       continue;
     }
@@ -271,7 +381,7 @@ function buildKnowledgeTree(dirPath, relativePath = '') {
         name: entry.name,
         type: 'directory',
         path: itemPath,
-        children: buildKnowledgeTree(fullPath, itemPath)
+        children: buildKnowledgeTree(root, fullPath, itemPath, excludePrivate)
       });
     } else if (entry.name.endsWith('.md')) {
       const content = fs.readFileSync(fullPath, 'utf-8');
@@ -287,11 +397,7 @@ function buildKnowledgeTree(dirPath, relativePath = '') {
     }
   }
 
-  return items.sort((a, b) => {
-    if (a.type === 'directory' && b.type !== 'directory') return -1;
-    if (a.type !== 'directory' && b.type === 'directory') return 1;
-    return a.name.localeCompare(b.name);
-  });
+  return sortKnowledgeItems(items);
 }
 
 // API: 获取知识库文章内容
@@ -301,8 +407,8 @@ app.get('/api/knowledge/article', (req, res) => {
     throw apiError('INVALID_REQUEST', 'path is required');
   }
 
-  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
-  if (!fs.existsSync(fullPath)) {
+  const fullPath = findReadableKnowledgeFile(req.auth.user, filePath);
+  if (!fullPath) {
     throw apiError('NOT_FOUND', 'File not found', 404);
   }
 
@@ -317,14 +423,15 @@ app.post('/api/knowledge/article', (req, res) => {
     throw apiError('INVALID_REQUEST', 'filePath and string content are required');
   }
 
-  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
-  const dir = path.dirname(fullPath);
-
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  fs.writeFileSync(fullPath, content, 'utf-8');
+  const fullPath = privateKnowledgePath(req.auth.user, filePath, { extensions: ['.md'] });
+  ensurePrivateDirectory(privateKnowledgeRoot(req.auth.user));
+  writePrivateFile(fullPath, content, 'utf-8');
+  requestAuditor.record(req, {
+    action: 'knowledge.article.save',
+    targetType: 'knowledge_article',
+    targetId: filePath,
+    metadata: { contentLength: Buffer.byteLength(content, 'utf8') }
+  });
   res.json({ success: true });
 });
 
@@ -336,17 +443,19 @@ app.post('/api/knowledge/article/new', (req, res) => {
   }
 
   const fileName = safeFileName(`${title}.md`);
-  const destination = safeCategory(config.knowledgeDir, category);
+  const privateRoot = privateKnowledgeRoot(req.auth.user);
+  const destination = safeCategory(privateRoot, category);
   const filePath = destination.relative ? `${destination.relative}/${fileName}` : fileName;
-  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
-  const dir = path.dirname(fullPath);
-
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
+  const fullPath = safePath(privateRoot, filePath, { extensions: ['.md'] });
+  ensurePrivateDirectory(privateRoot);
   const mdContent = `# ${title}\n\n${content || ''}`;
-  fs.writeFileSync(fullPath, mdContent, 'utf-8');
+  writePrivateFile(fullPath, mdContent, 'utf-8');
+  requestAuditor.record(req, {
+    action: 'knowledge.article.create',
+    targetType: 'knowledge_article',
+    targetId: filePath,
+    metadata: { contentLength: Buffer.byteLength(mdContent, 'utf8') }
+  });
 
   res.json({ success: true, path: filePath });
 });
@@ -358,10 +467,20 @@ app.delete('/api/knowledge/article', (req, res) => {
     throw apiError('INVALID_REQUEST', 'path is required');
   }
 
-  const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
+  const resource = { ownerUserId: req.auth.user.id, visibility: 'private' };
+  if (!can(req.auth.user, 'resource:delete-permanently', resource)) {
+    throw apiError('FORBIDDEN', 'Permanent deletion requires administrator access', 403);
+  }
+  const fullPath = findReadableKnowledgeFile(req.auth.user, filePath)
+    || privateKnowledgePath(req.auth.user, filePath, { extensions: ['.md'] });
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath);
   }
+  requestAuditor.record(req, {
+    action: 'knowledge.article.delete',
+    targetType: 'knowledge_article',
+    targetId: filePath
+  });
 
   res.json({ success: true });
 });
@@ -374,24 +493,32 @@ app.get('/api/knowledge/search', (req, res) => {
   }
 
   const results = [];
-  searchKnowledgeDir(config.knowledgeDir, query, results, '');
-  res.json(results.slice(0, 20));
+  const privateRoot = privateKnowledgeRoot(req.auth.user);
+  if (fs.existsSync(privateRoot)) searchKnowledgeDir(privateRoot, privateRoot, query, results, '');
+  searchKnowledgeDir(config.knowledgeDir, config.knowledgeDir, query, results, '', true);
+  const seenPaths = new Set();
+  res.json(results.filter((item) => {
+    if (seenPaths.has(item.path)) return false;
+    seenPaths.add(item.path);
+    return true;
+  }).slice(0, 20));
 });
 
-function searchKnowledgeDir(dirPath, query, results, relativePath) {
+function searchKnowledgeDir(root, dirPath, query, results, relativePath, excludePrivate = false) {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
   for (const entry of entries) {
+    if (excludePrivate && relativePath === '' && entry.name === '.private') continue;
     let fullPath;
     try {
-      fullPath = safePath(config.knowledgeDir, relativePath ? `${relativePath}/${entry.name}` : entry.name);
+      fullPath = safePath(root, relativePath ? `${relativePath}/${entry.name}` : entry.name);
     } catch {
       continue;
     }
     const itemPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
     if (entry.isDirectory()) {
-      searchKnowledgeDir(fullPath, query, results, itemPath);
+      searchKnowledgeDir(root, fullPath, query, results, itemPath, excludePrivate);
     } else if (entry.name.endsWith('.md')) {
       const content = fs.readFileSync(fullPath, 'utf-8');
       if (content.toLowerCase().includes(query) || entry.name.toLowerCase().includes(query)) {
@@ -441,7 +568,8 @@ app.post('/api/knowledge/upload', (req, res, next) => {
     const backups = [];
     try {
       if (!req.files?.length) throw apiError('INVALID_UPLOAD', 'At least one file is required');
-      const category = safeCategory(config.knowledgeDir, req.body.category);
+      const privateRoot = privateKnowledgeRoot(req.auth.user);
+      const category = safeCategory(privateRoot, req.body.category);
       const allowedExtensions = new Set(['.md', '.txt', '.docx', '.pdf', '.json', '.csv']);
       const targets = new Set();
       const entries = req.files.map((file) => {
@@ -454,13 +582,14 @@ app.post('/api/knowledge/upload', (req, res, next) => {
           ? safeFileName(`${originalName.slice(0, -extension.length)}.md`)
           : originalName;
         const relativePath = category.relative ? `${category.relative}/${finalName}` : finalName;
-        const target = safePath(config.knowledgeDir, relativePath);
+        const target = safePath(privateRoot, relativePath);
         if (targets.has(target)) throw apiError('DUPLICATE_UPLOAD', 'Upload contains duplicate destinations');
         targets.add(target);
         return { file, originalName, extension, finalName, relativePath, target };
       });
 
-      fs.mkdirSync(category.absolute, { recursive: true });
+      ensurePrivateDirectory(privateRoot);
+      ensurePrivateDirectory(category.absolute);
       for (const entry of entries) {
         if (fs.existsSync(entry.target)) {
           const backup = safePath(config.uploadTempDir, crypto.randomUUID());
@@ -471,16 +600,28 @@ app.post('/api/knowledge/upload', (req, res, next) => {
         if (entry.extension === '.txt') {
           const content = fs.readFileSync(entry.file.path, 'utf8');
           const title = entry.finalName.slice(0, -3);
-          fs.writeFileSync(entry.target, `# ${title}\n\n${content}`, { flag: 'wx' });
+          fs.writeFileSync(entry.target, `# ${title}\n\n${content}`, { flag: 'wx', mode: 0o600 });
+          fs.chmodSync(entry.target, 0o600);
           promoted.push(entry.target);
           fs.unlinkSync(entry.file.path);
         } else {
+          fs.chmodSync(entry.file.path, 0o600);
           fs.renameSync(entry.file.path, entry.target);
+          fs.chmodSync(entry.target, 0o600);
           promoted.push(entry.target);
         }
       }
 
       removeExplicitFiles(backups.map(({ backup }) => backup));
+      requestAuditor.record(req, {
+        action: 'knowledge.upload',
+        targetType: 'knowledge_collection',
+        targetId: category.relative || '.',
+        metadata: {
+          fileCount: entries.length,
+          totalBytes: entries.reduce((sum, entry) => sum + entry.file.size, 0)
+        }
+      });
       res.json({
         success: true,
         files: entries.map(({ finalName, relativePath }) => ({ name: finalName, path: relativePath }))
@@ -516,7 +657,8 @@ app.post('/api/knowledge/fetch-url', async (req, res, next) => {
   activeHttpControllers.add(controller);
   res.once('close', abortIfClientClosed);
   try {
-    const destination = safeCategory(config.knowledgeDir, category);
+    const privateRoot = privateKnowledgeRoot(req.auth.user);
+    const destination = safeCategory(privateRoot, category);
     const fetched = await fetchAllowedTextImpl(url, {
       ...urlFetchOptions,
       allowedHosts: config.fetchAllowedHosts,
@@ -540,14 +682,16 @@ app.post('/api/knowledge/fetch-url', async (req, res, next) => {
       .slice(0, 160) || 'web_content';
     const fileName = safeFileName(`${title}.md`);
     const filePath = destination.relative ? `${destination.relative}/${fileName}` : fileName;
-    const fullPath = safePath(config.knowledgeDir, filePath, { extensions: ['.md'] });
+    const fullPath = safePath(privateRoot, filePath, { extensions: ['.md'] });
 
-    const dir = path.dirname(fullPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(fullPath, `# ${title}\n\n来源: ${fetched.finalUrl}\n\n${text}`);
+    ensurePrivateDirectory(privateRoot);
+    writePrivateFile(fullPath, `# ${title}\n\n来源: ${fetched.finalUrl}\n\n${text}`);
+    requestAuditor.record(req, {
+      action: 'knowledge.fetch_url',
+      targetType: 'knowledge_article',
+      targetId: filePath,
+      metadata: { sourceOrigin: finalUrl.origin }
+    });
 
     res.json({ success: true, path: filePath });
   } catch (error) {
@@ -585,6 +729,59 @@ app.use((error, req, res, _next) => {
   res.status(status).json({ error: { code, message, requestId: req.requestId } });
 });
 
+function requireSameOriginWebSocket(req) {
+  const origin = req.headers.origin;
+  if (origin === undefined) return;
+  if (typeof origin !== 'string' || typeof req.headers.host !== 'string') {
+    throw apiError('WS_ORIGIN_FORBIDDEN', 'WebSocket origin is not allowed', 403);
+  }
+  try {
+    const parsed = new URL(origin);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.host.toLowerCase() !== req.headers.host.toLowerCase()
+    ) {
+      throw new Error('origin mismatch');
+    }
+  } catch {
+    throw apiError('WS_ORIGIN_FORBIDDEN', 'WebSocket origin is not allowed', 403);
+  }
+}
+
+function rejectWebSocketUpgrade(socket, status) {
+  const reason = status === 403 ? 'Forbidden' : 'Unauthorized';
+  socket.write(
+    `HTTP/1.1 ${status} ${reason}\r\n` +
+    'Connection: close\r\n' +
+    'Cache-Control: no-store\r\n' +
+    'Content-Length: 0\r\n\r\n'
+  );
+  socket.destroy();
+}
+
+httpServer.on('upgrade', (req, socket, head) => {
+  try {
+    req.requestId = crypto.randomUUID();
+    requireSameOriginWebSocket(req);
+    const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+    req.authToken = token;
+    req.auth = authService.authenticate(token);
+    if (!can(req.auth.user, 'workbench:use')) {
+      throw apiError('FORBIDDEN', 'You do not have permission to perform this action', 403);
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  } catch (error) {
+    rejectWebSocketUpgrade(socket, error?.status === 403 ? 403 : 401);
+  }
+});
+
 // WebSocket: 终端连接
 wss.on('connection', (ws, req) => {
   if (sessions.size >= config.maxSessions) {
@@ -598,7 +795,10 @@ wss.on('connection', (ws, req) => {
 
   const session = {
     pid: process.pid,
-    user: 'anonymous',
+    userId: req.auth.user.id,
+    username: req.auth.user.username,
+    role: req.auth.user.role,
+    loginSessionId: req.auth.session.id,
     startTime: new Date().toISOString(),
     activeAbortController: null
   };
@@ -614,6 +814,13 @@ wss.on('connection', (ws, req) => {
   // 消息处理 - 使用 opencode run --format json
   ws.on('message', async (msg) => {
     try {
+      try {
+        req.auth = authService.authenticate(req.authToken);
+      } catch {
+        session.activeAbortController?.abort();
+        ws.close(1008, 'AUTHENTICATION_REQUIRED');
+        return;
+      }
       let parsed;
       try {
         parsed = JSON.parse(msg.toString());
@@ -636,6 +843,12 @@ wss.on('connection', (ws, req) => {
       }
 
       logger.log(`[Session] ${sessionId} 收到输入`);
+      requestAuditor.record(req, {
+        action: 'opencode.prompt.run',
+        targetType: 'workbench_session',
+        targetId: sessionId,
+        metadata: { inputLength: Array.from(input).length }
+      });
 
         // 发送思考中状态
         if (ws.readyState === WebSocket.OPEN) {

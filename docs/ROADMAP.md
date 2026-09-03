@@ -1,10 +1,10 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-01
+更新时间：2026-09-02
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1A、Stage 1B 完成，Stage 1C 待启动** 的状态。
+项目当前处于 **Stage 0、Stage 1A、Stage 1B、Stage 1C 完成，Stage 1D 待启动** 的状态。
 
 Stage 0 解决的是“代码能否安全地在 Mac 上演示和继续开发”，不是“是否已经可以在公司内网生产使用”。生产使用还依赖账号、权限、审计、持久化、真实 OpenCode Gateway 和 Linux 环境验收。
 
@@ -13,7 +13,7 @@ Stage 0 解决的是“代码能否安全地在 Mac 上演示和继续开发”�
 | 阶段 | 状态 | 核心目标 | 阶段出口 |
 | --- | --- | --- | --- |
 | Stage 0 安全基线 | ✅ 完成 | 让原型可测试、可演示、可公开协作 | 自动测试、密钥扫描、浏览器验收通过 |
-| Stage 1 产品底座 | 🚧 1B 已完成 | React/Vite、账号密码、SQLite、角色与审计 | 多用户身份清晰、数据可追踪、默认私有 |
+| Stage 1 产品底座 | 🚧 1C 已完成 | React/Vite、账号密码、SQLite、角色与审计 | 多用户身份清晰、数据可追踪、默认私有 |
 | Stage 2 OpenCode Gateway | ⏳ 规划完成 | 常驻 OpenCode 服务、会话映射、模型目录 | 不再每条消息冷启动，15–20 人会话可控 |
 | Stage 3 知识与方案 | ⏳ 待开发 | FTS5 检索、版本、私有到发布流程 | 知识可查、可审、可撤回、可追溯 |
 | Stage 4 Skill 中心 | ⏳ 待开发 | 校验、发布、安装、启用、版本和回滚 | 成员能安全生产并共享 Skill |
@@ -51,11 +51,11 @@ Stage 0 解决的是“代码能否安全地在 Mac 上演示和继续开发”�
 
 - ✅ Stage 1A：SQLite WAL、版本化迁移、用户/Session/审计仓储、首位管理员 CLI。
 - ✅ Stage 1B：登录、退出、当前用户、Cookie、CSRF、限速、账号管理和 Session 撤销。
-- ▶ Stage 1C：REST/WebSocket 权限、默认私有边界和写操作审计。
-- ⏳ Stage 1D：前端登录、账号管理和角色界面。
+- ✅ Stage 1C：REST/WebSocket 权限、默认私有边界、写操作审计、WebSocket Origin/撤销校验。
+- ▶ Stage 1D：前端登录、账号管理和角色界面。
 - ⏳ Stage 1E：React/Vite 迁移、Demo 更新和 Stage 1 总验收。
 
-Stage 1B 已接通后端账号和 Session，但前端仍未提供登录界面，现有业务 REST/WebSocket 也尚未受认证保护；在 1C–1D 完成前仍不能作为真实多用户系统开放。
+Stage 1C 已完成后端业务权限切换，但前端仍未提供登录界面；在 Stage 1D–1E 完成前仍不能作为真实多用户系统开放。
 
 出口标准：账号和权限测试通过；成员默认看不到彼此私有内容；管理和发布动作有审计；Mac 端到端验收通过。
 

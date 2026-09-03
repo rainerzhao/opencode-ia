@@ -10,7 +10,11 @@ const net = require('node:net');
 const WebSocket = require('ws');
 const { loadConfig } = require('../../src/config');
 const { createWorkbenchServer } = require('../../src/create-workbench-server');
+const { openDatabase } = require('../../src/db/open-database');
+const { migrateDatabase } = require('../../src/db/migrate');
+const { bootstrapAdmin } = require('../../src/bootstrap/bootstrap-admin');
 const { createPromptRunner } = require('../../src/opencode/run-prompt');
+const { login } = require('../fixtures/authenticated-workbench');
 
 const fixturePath = path.resolve(__dirname, '../fixtures/fake-opencode.js');
 
@@ -87,8 +91,49 @@ async function waitForFileContent(filePath, expected, timeoutMs = 1000) {
   throw new Error(`timed out waiting for complete file: ${path.basename(filePath)}`);
 }
 
-async function fetchConfig(port) {
-  const response = await fetch(`http://127.0.0.1:${port}/api/config`);
+async function createTestWorkbench(t, options) {
+  const db = openDatabase({ filename: ':memory:' });
+  migrateDatabase(db);
+  await bootstrapAdmin({
+    db,
+    username: 'admin',
+    displayName: 'Administrator',
+    password: 'Admin Password 2026!',
+    idFactory: () => 'user-admin'
+  });
+  const workbench = createWorkbenchServer({ ...options, database: db });
+  t.after(async () => {
+    await workbench.stop().catch(() => {});
+    db.close();
+  });
+  return workbench;
+}
+
+async function authenticatedSession(workbench, port) {
+  workbench.testLogin ||= login(
+    `http://127.0.0.1:${port}`,
+    'admin',
+    'Admin Password 2026!'
+  );
+  return workbench.testLogin;
+}
+
+async function openAuthenticatedWebSocket(workbench, url) {
+  const port = new URL(url).port;
+  const session = await authenticatedSession(workbench, port);
+  return new WebSocket(url, { headers: { cookie: session.cookie } });
+}
+
+async function authenticatedFetch(workbench, port, requestPath, options = {}) {
+  const session = await authenticatedSession(workbench, port);
+  const headers = new Headers(options.headers);
+  headers.set('cookie', session.cookie);
+  headers.set('x-csrf-token', session.csrfToken);
+  return fetch(`http://127.0.0.1:${port}${requestPath}`, { ...options, headers });
+}
+
+async function fetchConfig(workbench, port) {
+  const response = await authenticatedFetch(workbench, port, '/api/config');
   assert.equal(response.status, 200);
   return response.json();
 }
@@ -116,7 +161,7 @@ function verifyPortCanBeRebound(port) {
 test('starts on an ephemeral port and stops cleanly', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: {}, projectDir });
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} }
@@ -124,7 +169,7 @@ test('starts on an ephemeral port and stops cleanly', async (t) => {
   t.after(() => workbench.stop());
 
   const address = await workbench.start(0);
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/config`);
+  const response = await authenticatedFetch(workbench, address.port, '/api/config');
 
   assert.equal(response.status, 200);
   assert.equal((await response.json()).activeSessions, 0);
@@ -135,7 +180,7 @@ test('starts on an ephemeral port and stops cleanly', async (t) => {
 test('makes start and stop idempotent and rejects restart after shutdown', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: {}, projectDir });
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} }
@@ -160,7 +205,7 @@ test('makes start and stop idempotent and rejects restart after shutdown', async
 test('settles an in-flight start when stop is called immediately', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: {}, projectDir });
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} }
@@ -180,7 +225,7 @@ test('settles an in-flight start when stop is called immediately', async (t) => 
 test('rejects a WebSocket connection when the global session limit is reached', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: { MAX_SESSIONS: '1' }, projectDir });
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} }
@@ -190,10 +235,10 @@ test('rejects a WebSocket connection when the global session limit is reached', 
   let first;
   let second;
   try {
-    first = new WebSocket(url);
+    first = await openAuthenticatedWebSocket(workbench, url);
     assert.equal((await waitForJson(first)).type, 'connected');
 
-    second = new WebSocket(url);
+    second = await openAuthenticatedWebSocket(workbench, url);
     const closed = await waitForClose(second);
 
     assert.deepEqual(closed, {
@@ -224,13 +269,13 @@ test('rejects concurrent input in one session without starting a second run', as
       return fixtureRunner.runPrompt(input, options);
     }
   };
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner,
     logger: { log() {}, error() {} }
   });
   const address = await workbench.start(0);
-  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+  const ws = await openAuthenticatedWebSocket(workbench, `ws://127.0.0.1:${address.port}`);
 
   try {
     await waitForJson(ws, (message) => message.type === 'connected');
@@ -253,7 +298,7 @@ test('maps runner failures to stable WebSocket errors without leaking details', 
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: {}, projectDir });
   const leakedDetail = 'secret-command --token should-never-reach-the-client';
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: {
       async runPrompt() {
@@ -265,7 +310,7 @@ test('maps runner failures to stable WebSocket errors without leaking details', 
     logger: { log() {}, error() {} }
   });
   const address = await workbench.start(0);
-  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+  const ws = await openAuthenticatedWebSocket(workbench, `ws://127.0.0.1:${address.port}`);
 
   try {
     await waitForJson(ws, (message) => message.type === 'connected');
@@ -287,13 +332,13 @@ test('maps runner failures to stable WebSocket errors without leaking details', 
 test('returns stable safe errors for malformed WebSocket messages', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: {}, projectDir });
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} }
   });
   const address = await workbench.start(0);
-  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+  const ws = await openAuthenticatedWebSocket(workbench, `ws://127.0.0.1:${address.port}`);
 
   try {
     await waitForJson(ws, (message) => message.type === 'connected');
@@ -342,13 +387,13 @@ test('aborts the active child process when its WebSocket disconnects', async (t)
       });
     }
   };
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner,
     logger: { log() {}, error() {} }
   });
   const address = await workbench.start(0);
-  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+  const ws = await openAuthenticatedWebSocket(workbench, `ws://127.0.0.1:${address.port}`);
 
   try {
     await waitForJson(ws, (message) => message.type === 'connected');
@@ -366,21 +411,21 @@ test('aborts the active child process when its WebSocket disconnects', async (t)
 test('removes a disconnected session from the active session count', async (t) => {
   const projectDir = useTempDir(t);
   const config = loadConfig({ env: {}, projectDir });
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} }
   });
   const address = await workbench.start(0);
-  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+  const ws = await openAuthenticatedWebSocket(workbench, `ws://127.0.0.1:${address.port}`);
 
   try {
     await waitForJson(ws, (message) => message.type === 'connected');
-    assert.equal((await fetchConfig(address.port)).activeSessions, 1);
+    assert.equal((await fetchConfig(workbench, address.port)).activeSessions, 1);
 
     await terminateSocket(ws);
 
-    assert.equal((await fetchConfig(address.port)).activeSessions, 0);
+    assert.equal((await fetchConfig(workbench, address.port)).activeSessions, 0);
   } finally {
     await terminateSocket(ws);
     await workbench.stop();
@@ -408,7 +453,7 @@ test('forces hanging HTTP connections closed within the shutdown deadline', asyn
   });
   const upstreamPort = hangingUpstream.address().port;
 
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner: { runPrompt: async () => ({ text: 'unused', stderr: '', events: [] }) },
     logger: { log() {}, error() {} },
@@ -421,7 +466,7 @@ test('forces hanging HTTP connections closed within the shutdown deadline', asyn
     }
   });
   const address = await workbench.start(0);
-  const pendingRequest = fetch(`http://127.0.0.1:${address.port}/api/knowledge/fetch-url`, {
+  const pendingRequest = authenticatedFetch(workbench, address.port, '/api/knowledge/fetch-url', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://docs.example.com/never-finishes' })
@@ -473,13 +518,13 @@ test('stop closes sockets, aborts active runs, and releases the bound port', asy
       });
     }
   };
-  const workbench = createWorkbenchServer({
+  const workbench = await createTestWorkbench(t, {
     config,
     promptRunner,
     logger: { log() {}, error() {} }
   });
   const address = await workbench.start(0);
-  const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+  const ws = await openAuthenticatedWebSocket(workbench, `ws://127.0.0.1:${address.port}`);
   let stopPromise;
 
   try {

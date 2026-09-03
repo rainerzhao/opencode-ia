@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenCode 团队 AI 工作台 · Stage 1A–1B 评审摘要</title>
+  <title>OpenCode 团队 AI 工作台 · Stage 1A–1C 评审摘要</title>
   <style>
     :root {
       --paper: #f7f7f5; --paper-edge: #efefea; --ink: #1a1a1a;
@@ -64,10 +64,10 @@
   <article class="doc">
     <header class="doc-header">
       <div class="doc-eyebrow"><span class="mascot"></span>OPENCODE TEAM WORKBENCH · REVIEW SUMMARY</div>
-      <h1 class="doc-title">Stage 1A–1B 产品底座评审摘要</h1>
-      <p class="doc-subtitle">从可演示原型，推进到具备持久账号与安全 Session 的后端产品底座</p>
+      <h1 class="doc-title">Stage 1A–1C 产品底座评审摘要</h1>
+      <p class="doc-subtitle">从持久账号与安全 Session，推进到全业务认证、私有隔离与可追溯执行</p>
       <div class="doc-meta">
-        <span>STATUS · STAGE 1B PASS</span>
+        <span>STATUS · STAGE 1C PASS</span>
         <span>DATE · 2026-09-02</span>
         <span>BRANCH · MAIN</span>
       </div>
@@ -75,26 +75,26 @@
 
     <div class="tldr">
       <div class="tldr-label">TL;DR</div>
-      Stage 1A 建立 SQLite、迁移、账号与审计仓储；Stage 1B 接通登录、Cookie/CSRF、Session 撤销、限速和管理员账号 API。所有 AI 执行仍只经过 OpenCode，仓库不保存 Provider 密钥。当前业务 REST/WebSocket 尚未切换到强制认证，前端也没有登录页，因此仍是开发版本，不能直接作为内网多用户生产系统开放。
+      Stage 1A 建立 SQLite 与审计数据底座；Stage 1B 接通账号、Cookie/CSRF 和 Session 控制；Stage 1C 将全部业务 REST/WebSocket 切换到真实账号身份，加入默认私有、写操作审计、跨站 Socket 防护和撤销重验证。所有 AI 执行仍只经过 OpenCode，仓库不保存 Provider 密钥。前端登录仍在 Stage 1D，因此当前仍不能作为内网多用户生产系统开放。
     </div>
 
     <section>
       <h2><span class="num">01</span>本次解决的问题</h2>
       <div class="cards">
         <div class="card">
-          <div class="card-icon">IDENTITY</div>
-          <div class="card-name">账号身份</div>
-          <div class="card-desc">身份来自用户名和密码，不来自办公电脑 IP；管理员建号，不开放自注册。</div>
+          <div class="card-icon">BOUNDARY</div>
+          <div class="card-name">统一认证</div>
+          <div class="card-desc">REST 与 WebSocket 都从服务端 Session 获得身份，匿名访问在业务入口即被拒绝。</div>
         </div>
         <div class="card">
-          <div class="card-icon">SESSION</div>
-          <div class="card-name">会话安全</div>
-          <div class="card-desc">浏览器只持有高熵不透明 Cookie，数据库仅保存 Session 与 CSRF 摘要。</div>
+          <div class="card-icon">PRIVACY</div>
+          <div class="card-name">默认私有</div>
+          <div class="card-desc">方案和知识草稿绑定创建者，成员互不可见；共享知识与本人内容安全合并。</div>
         </div>
         <div class="card">
-          <div class="card-icon">CONTROL</div>
-          <div class="card-name">账号控制</div>
-          <div class="card-desc">管理员可建号、重置密码、停用账号和撤销 Session，成员不能调用管理接口。</div>
+          <div class="card-icon">TRACE</div>
+          <div class="card-name">操作追踪</div>
+          <div class="card-desc">关键写入和 OpenCode 执行绑定真实用户，只记录资源与长度等脱敏元数据。</div>
         </div>
       </div>
     </section>
@@ -108,7 +108,8 @@
           <tr><td><strong>认证</strong></td><td>登录、退出、当前用户、改密、过期/撤销验证</td><td class="accent">1B 完成</td></tr>
           <tr><td><strong>防护</strong></td><td>HttpOnly、SameSite、Secure 配置、CSRF 三方匹配、双维度限速、no-store</td><td class="accent">1B 完成</td></tr>
           <tr><td><strong>管理</strong></td><td>账号列表、建号、密码重置、启停、Session 强制撤销</td><td class="accent">1B 完成</td></tr>
-          <tr><td><strong>业务权限</strong></td><td>知识、方案、Skill 与 WebSocket 强制认证和所有者隔离</td><td>Stage 1C</td></tr>
+          <tr><td><strong>业务权限</strong></td><td>REST/WS 强制认证、CSRF、角色矩阵、方案与知识所有者隔离</td><td class="accent">1C 完成</td></tr>
+          <tr><td><strong>执行安全</strong></td><td>Socket 同源检查、Session 撤销重验证、用户身份和脱敏审计绑定</td><td class="accent">1C 完成</td></tr>
           <tr><td><strong>用户界面</strong></td><td>登录页、角色界面、管理员账号管理</td><td>Stage 1D</td></tr>
         </tbody>
       </table>
@@ -121,6 +122,9 @@
         <li><strong>错误一致。</strong>不存在的账号、错误密码和停用账号使用同一无泄漏错误；Session 失效返回稳定错误码。</li>
         <li><strong>审查修复。</strong>成功登录不再清空来源 IP 的失败累计，避免持有任意有效账号后绕过 IP 维度限速。</li>
         <li><strong>缓存边界。</strong>认证和管理员响应统一设置 <code>Cache-Control: no-store</code>。</li>
+        <li><strong>权限回归。</strong>匿名、跨成员、异源 WebSocket 和撤销后继续执行均由真实 HTTP/WebSocket 用例覆盖。</li>
+        <li><strong>文件边界。</strong>私人目录和文件强制 <code>0700/0600</code>，不依赖运行系统的默认 <code>umask</code>。</li>
+        <li><strong>验收结果。</strong><code>npm test</code> 111/111，通过 53 个 JS 文件语法检查和零发现密钥扫描。</li>
         <li><strong>发布门禁。</strong><code>npm test</code>、<code>npm run check</code>、<code>npm run security:scan</code> 和 <code>git diff --check</code> 在提交前重新执行。</li>
       </ul>
     </section>
@@ -129,9 +133,9 @@
       <h2><span class="num">04</span>残余边界与下一步</h2>
       <div class="callout warn">
         <div class="callout-label">NOT PRODUCTION READY</div>
-        Stage 1B 只保护新增加的认证和管理员 API。现有知识、方案、Skill、上传和 WebSocket 仍保留 Stage 0 的匿名行为，以避免在独立验收点之前造成半完成切换。
+        Stage 1C 已完成后端业务权限切换，但现有静态前端尚未提供登录和账号管理界面。直接打开页面无法完成受保护业务流程；在 Stage 1D–1E 完成前不能对真实多用户开放。
       </div>
-      <p><strong>Stage 1C</strong> 将统一保护 REST 与 WebSocket，把登录用户写入业务审计，并实现成员之间的默认私有隔离。随后 Stage 1D 接入前端登录与账号管理，Stage 1E 完成 React/Vite 迁移和 Stage 1 总验收。</p>
+      <p><strong>Stage 1D</strong> 将接入前端登录、当前用户、退出和管理员账号管理，并完成桌面/手机真实浏览器验收。随后 Stage 1E 完成 React/Vite 迁移和 Stage 1 总验收。</p>
     </section>
 
     <footer>

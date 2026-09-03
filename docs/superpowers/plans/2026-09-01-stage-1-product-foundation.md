@@ -103,10 +103,10 @@
 - `can(user, action, resource): boolean`
 - Authenticated WebSocket upgrade/connection associates `userId`, `role`, and `sessionId` with server session metadata.
 
-- [ ] Add tests proving anonymous REST/WebSocket denial, admin/member role matrix, member-a/member-b private isolation, and audit attribution for write operations.
-- [ ] Run targeted tests and confirm current anonymous access causes expected RED failures.
-- [ ] Apply auth middleware to business routes, enforce role/ownership at the resource boundary, authenticate WebSocket cookies, and append safe audit metadata.
-- [ ] Re-run all tests and security checks.
+- [x] Add tests proving anonymous REST/WebSocket denial, admin/member role matrix, member-a/member-b private isolation, and audit attribution for write operations.
+- [x] Run targeted tests and confirm current anonymous access causes expected RED failures.
+- [x] Apply auth middleware to business routes, enforce role/ownership at the resource boundary, authenticate WebSocket cookies, and append safe audit metadata.
+- [x] Re-run all tests and security checks.
 - [ ] Record evidence, commit in Chinese, push `main`, and verify remote SHA.
 
 ### Task 1D: Login and account-management user experience

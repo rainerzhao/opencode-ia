@@ -4,6 +4,7 @@
 
 **Stage 1A: PASS**
 **Stage 1B: PASS**
+**Stage 1C: PASS**
 **Whole Stage 1: IN PROGRESS**
 
 ## Scope Checked
@@ -15,24 +16,26 @@
 - Login, logout, current-user, password-change and Session invalidation behavior.
 - Cookie attributes, CSRF triple match, login limiting and generic authentication errors.
 - Administrator account creation, listing, password reset, status control and Session revocation.
+- Business REST authentication, CSRF, admin/member role checks and private ownership filters.
+- WebSocket Cookie authentication, same-origin enforcement, identity binding and revocation revalidation.
+- Private solution/knowledge filesystem modes and actor-attributed, content-safe audit events.
 - Regression coverage for the existing Stage 0 HTTP, WebSocket, OpenCode, file, upload, URL and Demo boundaries.
 
 ## Reviewers Run
 
-- Requirements acceptance: PASS for Stage 1A and Stage 1B.
+- Requirements acceptance: PASS for Stage 1A, Stage 1B and Stage 1C.
 - Test coverage: PASS; all new behavior has observed RED→GREEN evidence.
 - Code quality: PASS; focused modules replace adding database responsibilities to the existing server file.
-- Security: PASS; no default credentials, password arguments, plaintext password/Session/CSRF storage or secret scan findings.
+- Security: PASS; no production default credentials, password arguments, plaintext Session/CSRF storage, cross-origin WebSocket access or secret scan findings.
 - Docs/migration: PASS; database path, operator command, current phase and limitation are documented.
 
 ## Tests Run
 
-- `npm test`: 100 tests passed, 0 failed.
-- `npm run check`: 47 JavaScript files passed.
+- `npm test`: 111 tests passed, 0 failed.
+- `npm run check`: 53 JavaScript files passed.
 - `npm run security:scan`: zero findings.
 - `git diff --check`: passed.
-- Browser report: desktop 1440px and mobile 390px, no horizontal overflow, page errors or console errors.
-- `npm run security:scan`: zero findings.
+- Latest browser report remains the Stage 1B desktop/mobile documentation check; Stage 1C changes only backend contracts, and Stage 1D owns authenticated browser acceptance.
 - Real CLI child-process test and real temporary SQLite file tests passed.
 
 ## Requirement Coverage
@@ -40,13 +43,14 @@
 - Acceptance criterion 1: complete for schema version 1.
 - Acceptance criterion 2: complete for password and hash-only Session/CSRF persistence.
 - Acceptance criteria 3–4: complete at the authentication/admin API boundary.
-- Acceptance criterion 5: account management and its audit events complete; business-operation audit remains in 1C.
-- Acceptance criteria 6–7: remain assigned to 1C–1D.
+- Acceptance criterion 5: complete for account management and current business write audit events.
+- Acceptance criterion 6: complete for current REST/WebSocket and filesystem-backed solution/knowledge boundaries.
+- Acceptance criterion 7: remains assigned to Stage 1D browser login and account-management acceptance.
 - Acceptance criterion 8: Stage 1A verification complete; Git commit/push recorded after release.
 
 ## Findings
 
-No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A or Stage 1B.
+No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A, Stage 1B or Stage 1C.
 
 ## Fixes Applied
 
@@ -57,13 +61,18 @@ No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A or Stag
 - Prohibited password command arguments and excluded password values from output.
 - Prevented a successful login from clearing the source-IP failure history used to resist distributed username attempts.
 - Added `Cache-Control: no-store` across authentication and administrator routes.
+- Required authentication on all business REST/WebSocket entry points and CSRF on all business writes.
+- Added same-origin WebSocket validation and per-message Session revalidation after revocation.
+- Forced private content directories/files to `0700/0600` and removed OpenCode working-directory disclosure.
+- Fixed private/shared knowledge tree merging so private files do not hide unrelated shared documents.
 
 ## Residual Risks
 
-- Authentication protects only the new auth/admin APIs; existing business REST and WebSocket remain anonymous until 1C.
 - Behind a future reverse proxy, source IP extraction requires an explicit trusted-proxy design before Linux production use.
-- React/Vite and browser login arrive in 1D/1E.
+- The static frontend cannot yet establish the new authenticated API/Socket session; browser login and account UI arrive in 1D.
+- The current filesystem ownership layer is a Stage 1 bridge; versioned publication and richer cross-owner administration arrive with Stage 3 metadata.
+- React/Vite migration and Stage 1 release gate remain in 1E.
 
 ## Follow-ups
 
-Start Stage 1C only after Stage 1B passes the final gate, is pushed, and the remote SHA is verified.
+Complete Stage 1C Git delivery, then start Stage 1D frontend login and authenticated browser acceptance.

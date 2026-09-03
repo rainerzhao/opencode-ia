@@ -2,9 +2,9 @@
 
 面向 15–20 人内部团队的中心化 AI 工作台：成员通过浏览器使用 OpenCode、管理知识、沉淀方案，并逐步形成可校验、可发布、可回滚的团队 Skill 资产。
 
-> 当前研发阶段：**Stage 0、Stage 1A 和 Stage 1B 已完成；尚未达到生产上线条件。** 后端登录与账号管理 API 已接通，业务 REST/WebSocket 权限和前端登录仍在开发，不应把当前版本直接开放给真实多用户使用。
+> 当前研发阶段：**Stage 0、Stage 1A、Stage 1B 和 Stage 1C 已完成；尚未达到生产上线条件。** REST/WebSocket 已统一接入账号、权限、默认私有和审计边界；前端登录仍在 Stage 1D 开发，不应把当前版本直接开放给真实多用户使用。
 
-[查看完整路线图](docs/ROADMAP.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
+[查看完整路线图](docs/ROADMAP.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
 
 ![工作台首页](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/artifacts/screenshots/home.png)
 
@@ -19,7 +19,7 @@ npm ci
 npm run demo
 ```
 
-打开终端显示的地址，默认是 `http://127.0.0.1:4317`。
+打开终端显示的地址，默认是 `http://127.0.0.1:4317`。脚本会为本次临时环境生成随机密码的 `demo-admin`，只输出到当前终端；Stage 1D 完成前，静态页面尚未提供登录表单，当前 Demo 主要用于验证受认证保护的真实 REST/WebSocket 链路。
 
 Demo 会：
 
@@ -40,13 +40,13 @@ DEMO_PORT=4321 npm run demo
 
 | 能力 | 当前状态 | 说明 |
 | --- | --- | --- |
-| 工作台前端 | ✅ 可演示 | 首页、AI 对话、知识库、方案、Skill、导航和 FAQ 页面 |
+| 工作台前端 | 🚧 Stage 1D | 页面壳与内容已保留；登录、角色和账号管理界面正在接入 |
 | OpenCode 调用边界 | ✅ 已加固 | 参数化执行、超时、取消、输出限制、错误脱敏 |
 | 多会话控制 | ✅ 基线完成 | 全局会话上限、单会话串行、断线和关服取消 |
 | 知识文件与上传 | ✅ 基线完成 | 路径、符号链接、上传暂存、失败回滚保护 |
 | URL 导入 | ✅ 默认关闭 | 白名单、DNS 地址校验、逐跳重定向、超时和大小限制 |
 | 用户名/密码 | ✅ Stage 1B | 登录、退出、当前用户、改密、Session 撤销和限速 |
-| 角色与账号管理 | 🚧 Stage 1B | 管理员可建号、重置密码、停用账号；业务权限在 1C 接入 |
+| 角色与账号管理 | ✅ Stage 1C | 账号管理、REST/WebSocket 强制认证、成员私有隔离和写操作审计 |
 | SQLite 数据层 | ✅ Stage 1A | WAL、版本化迁移、用户/Session/审计仓储 |
 | 常驻 OpenCode Gateway | ⏳ Stage 2 | 当前仍是每条消息一次有界 `opencode run` |
 | Skill 发布中心 | ⏳ Stage 4 | 校验、版本、安装、启用、回滚和归档 |
@@ -144,16 +144,20 @@ npm run admin:create -- --username admin --display-name 管理员
 
 密码会隐藏输入两次，并使用 `scrypt` 和独立随机盐保存。
 
-### Stage 1B：后端认证接口
+### Stage 1B–1C：后端认证与业务权限
 
-当前已提供以下后端接口，供 Stage 1D 前端登录和账号管理界面使用：
+当前已提供以下后端能力，供 Stage 1D 前端登录和账号管理界面使用：
 
 - `POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`；
 - `POST /api/auth/change-password`；
 - `GET/POST /api/admin/users`；
 - 管理员密码重置、账号启停和 Session 强制撤销接口。
+- 所有业务 REST 和 WebSocket 强制登录，业务写请求强制 CSRF；
+- 方案和知识草稿按登录用户默认私有，成员之间不可互读；
+- WebSocket 绑定 `userId`、角色和登录 Session，执行前重新验证撤销状态；
+- 关键知识、方案和 OpenCode 执行动作写入脱敏审计。
 
-Session 使用高熵不透明 Cookie，数据库只保存 SHA-256 摘要；写操作同时校验 Session Cookie、可读 CSRF Cookie、`X-CSRF-Token` 请求头与数据库摘要。当前静态前端尚未接入这些接口，现有业务 REST/WebSocket 也要到 Stage 1C 才会统一要求登录；`npm run demo` 仍是隔离、无密钥的 Stage 0 演示模式。
+Session 使用高熵不透明 Cookie，数据库只保存 SHA-256 摘要；写操作同时校验 Session Cookie、可读 CSRF Cookie、`X-CSRF-Token` 请求头与数据库摘要。当前静态前端尚未接入登录接口，浏览器完整体验将在 Stage 1D 恢复；`npm run demo` 继续使用隔离临时目录、随机临时账号和本地模拟 OpenCode，不调用真实模型或密钥。
 
 ## 验证与安全
 

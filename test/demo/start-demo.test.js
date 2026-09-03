@@ -92,6 +92,25 @@ function waitForExit(child, timeoutMs = 2000) {
   });
 }
 
+function getSetCookies(response) {
+  return typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie')].filter(Boolean);
+}
+
+async function loginDemo(ready) {
+  const response = await fetch(`${ready.url}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(ready.credentials)
+  });
+  assert.equal(response.status, 200);
+  const cookie = getSetCookies(response)
+    .map((header) => header.split(';', 1)[0])
+    .join('; ');
+  return { cookie };
+}
+
 test('starts an isolated full-stack demo and removes its temporary data on shutdown', async (t) => {
   const child = spawn(process.execPath, [demoScript, '--port=0'], {
     cwd: projectDir,
@@ -107,18 +126,27 @@ test('starts an isolated full-stack demo and removes its temporary data on shutd
   assert.equal(ready.host, '127.0.0.1');
   assert.match(ready.root, new RegExp(`^${os.tmpdir().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.notEqual(path.resolve(ready.root), projectDir);
+  assert.equal(ready.credentials.username, 'demo-admin');
+  assert.match(ready.credentials.password, /^Demo-[A-Za-z0-9_-]{24}!9a$/);
+  const session = await loginDemo(ready);
 
-  const configResponse = await fetch(`${ready.url}/api/config`);
+  const configResponse = await fetch(`${ready.url}/api/config`, {
+    headers: { cookie: session.cookie }
+  });
   assert.equal(configResponse.status, 200);
   assert.equal((await configResponse.json()).model, 'demo/fake-opencode');
 
-  const treeResponse = await fetch(`${ready.url}/api/knowledge/tree`);
+  const treeResponse = await fetch(`${ready.url}/api/knowledge/tree`, {
+    headers: { cookie: session.cookie }
+  });
   assert.equal(treeResponse.status, 200);
   const tree = await treeResponse.json();
   const documentCount = tree.reduce((count, item) => count + (item.children?.length || 0), 0);
   assert.equal(documentCount, 3);
 
-  const ws = new WebSocket(ready.url.replace('http:', 'ws:'));
+  const ws = new WebSocket(ready.url.replace('http:', 'ws:'), {
+    headers: { cookie: session.cookie }
+  });
   await waitForJson(ws, (message) => message.type === 'connected');
   ws.send(JSON.stringify({ type: 'input', data: 'demo round trip' }));
   const response = await waitForJson(ws, (message) => message.type === 'response');

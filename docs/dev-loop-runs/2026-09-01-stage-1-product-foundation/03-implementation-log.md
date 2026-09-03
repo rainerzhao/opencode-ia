@@ -83,3 +83,45 @@ Status: implemented and verified.
 - Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
 - Residual boundary: existing business REST and WebSocket remain anonymous until the independent Stage 1C cutover.
 - Git delivery: code commit `8f6c3a5fa43037c012eba963de013ab4d592037c` was pushed to `main` and matched the remote SHA.
+
+## Stage 1C
+
+Status: implemented and verified locally; Git delivery pending this stage gate.
+
+### Delivered
+
+- 所有业务 REST API 统一要求有效账号 Session，所有业务写请求统一要求 CSRF。
+- `admin/member` 权限策略；运行会话列表只允许管理员访问。
+- 方案记录绑定 `createdBy`，普通成员只能读取自己的私有方案，管理员可管理全部方案。
+- 新建、保存、上传和 URL 导入知识写入 `.private/<userId>/`；共享知识与本人私有知识递归合并，同路径以本人内容优先。
+- 私有目录和文件强制使用 `0700/0600`，不依赖系统 `umask`。
+- 业务身份响应统一 `Cache-Control: no-store`，配置 API 不再返回 OpenCode 工作目录。
+- WebSocket Upgrade 使用 Session Cookie 认证并绑定 `userId/role/loginSessionId`；异源浏览器 Origin 被拒绝。
+- 每次 OpenCode 执行前重新验证持久化 Session，撤销或停用后关闭旧连接且不触发执行。
+- 方案、知识写操作和 OpenCode 执行写入结构化审计，只保留长度、来源 Origin、资源 ID、请求 ID等安全元数据。
+- Demo 使用临时 SQLite 和每次启动随机生成的临时管理员密码，退出后删除全部临时数据。
+
+### TDD Evidence
+
+- REST/权限 RED：匿名业务 API、成员全局会话和跨成员方案仍被放行；GREEN：认证、角色和所有者边界通过。
+- Knowledge RED：成员可读取另一成员写入的同路径文件；GREEN：每用户私有目录隔离并保留共享只读知识。
+- WebSocket RED：匿名/异源连接可建立，运行 Session 无用户身份；GREEN：Upgrade 认证、同源校验和身份绑定通过。
+- Revocation RED：已撤销登录 Session 的既有 Socket 仍可调用 OpenCode；GREEN：消息前重验证并以 1008 关闭。
+- Review RED：私有文件继承 `0644/0755`；GREEN：方案/知识使用 `0600/0700`。
+- Review RED：同名私人分类遮蔽整个共享分类；GREEN：知识树递归合并并按路径去重搜索结果。
+
+### Verification
+
+- `npm test`: 111/111 passed.
+- `npm run check`: 53 JavaScript files passed syntax validation.
+- `npm run security:scan`: zero findings.
+- `git diff --check`: passed.
+- Browser UI acceptance: not applicable to this backend-only cutover; Stage 1D owns login UI and browser flows.
+- HTML summary browser check was attempted twice, but local Chrome exited before exposing `DevToolsActivePort`, including with the tool-recommended `--no-sandbox`; no Stage 1C screenshot claim is made.
+
+### Inline Code Review
+
+- Initial verdict: `REQUEST_CHANGES` for private filesystem modes, WebSocket Origin validation, revoked-Socket revalidation, and recursive private/shared tree merging.
+- Fix verification: targeted authorization, knowledge security, WebSocket and Demo suites passed.
+- Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
+- Residual boundary: the static frontend has not yet integrated login; do not present Stage 1C alone as a usable multi-user browser release.
