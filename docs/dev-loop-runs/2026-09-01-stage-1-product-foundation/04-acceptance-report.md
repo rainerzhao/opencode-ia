@@ -75,4 +75,4 @@ No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A, Stage 
 
 ## Follow-ups
 
-Complete Stage 1C Git delivery, then start Stage 1D frontend login and authenticated browser acceptance.
+Stage 1C code commit `cf30d4434891ee693f0e0a57036ab136963e60d9` has been delivered to GitHub `main`. Start Stage 1D frontend login and authenticated browser acceptance next.

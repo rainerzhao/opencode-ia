@@ -107,7 +107,7 @@
 - [x] Run targeted tests and confirm current anonymous access causes expected RED failures.
 - [x] Apply auth middleware to business routes, enforce role/ownership at the resource boundary, authenticate WebSocket cookies, and append safe audit metadata.
 - [x] Re-run all tests and security checks.
-- [ ] Record evidence, commit in Chinese, push `main`, and verify remote SHA.
+- [x] Record evidence, commit in Chinese, push `main`, and verify remote SHA.
 
 ### Task 1D: Login and account-management user experience
 

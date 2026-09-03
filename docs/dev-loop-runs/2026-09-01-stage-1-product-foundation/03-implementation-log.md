@@ -86,7 +86,7 @@ Status: implemented and verified.
 
 ## Stage 1C
 
-Status: implemented and verified locally; Git delivery pending this stage gate.
+Status: implemented, verified and delivered to GitHub `main`.
 
 ### Delivered
 
@@ -125,3 +125,4 @@ Status: implemented and verified locally; Git delivery pending this stage gate.
 - Fix verification: targeted authorization, knowledge security, WebSocket and Demo suites passed.
 - Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
 - Residual boundary: the static frontend has not yet integrated login; do not present Stage 1C alone as a usable multi-user browser release.
+- Git delivery: code commit `cf30d4434891ee693f0e0a57036ab136963e60d9` was pushed to `main`; push output confirmed `4f3c9f2..cf30d44 main -> main`.
