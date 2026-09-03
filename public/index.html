@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="auth-pending">
   <div class="layout">
     <!-- 左侧导航 -->
     <aside class="sidebar">
@@ -62,6 +62,10 @@
           <span class="nav-icon">📚</span>
           <span class="nav-text">知识库</span>
         </a>
+        <a href="#" class="nav-item" data-page="admin" data-role="admin" hidden>
+          <span class="nav-icon">⚙</span>
+          <span class="nav-text">账号管理</span>
+        </a>
       </nav>
 
 
@@ -76,6 +80,13 @@
           <p class="page-desc" id="pageDesc">全组口袋力量，经验平权，快速导航</p>
         </div>
         <div class="topbar-right">
+          <div class="current-user" id="currentUser" aria-live="polite">
+            <span class="current-user-avatar" id="currentUserAvatar" aria-hidden="true">·</span>
+            <span class="current-user-copy">
+              <strong id="currentUserName">正在验证身份</strong>
+              <span id="currentUserRole"></span>
+            </span>
+          </div>
           <div class="status-badge" id="statusBadge">
             <span class="status-dot"></span>
             未连接
@@ -84,6 +95,7 @@
             <span class="btn-icon">+</span>
             新建会话
           </button>
+          <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
         </div>
       </header>
 
@@ -471,6 +483,59 @@
           </div>
         </div>
 
+        <!-- 管理员账号管理页面 -->
+        <div class="page" id="page-admin" data-role="admin" hidden>
+          <div class="admin-layout">
+            <section class="admin-card admin-create-card">
+              <div class="admin-section-heading">
+                <div>
+                  <p class="admin-eyebrow">仅管理员</p>
+                  <h3>创建团队账号</h3>
+                </div>
+                <span class="privacy-chip">默认私有</span>
+              </div>
+              <form id="createUserForm" class="admin-form">
+                <div class="form-group">
+                  <label for="newUsername">用户名</label>
+                  <input id="newUsername" name="username" autocomplete="off" required placeholder="例如 zhangsan">
+                </div>
+                <div class="form-group">
+                  <label for="newDisplayName">显示名称</label>
+                  <input id="newDisplayName" name="displayName" autocomplete="off" required placeholder="例如 张三">
+                </div>
+                <div class="form-group">
+                  <label for="newPassword">初始密码</label>
+                  <input id="newPassword" name="password" type="password" autocomplete="new-password" minlength="12" required>
+                  <span class="form-help">至少 12 个字符，账号首次使用后应修改。</span>
+                </div>
+                <div class="form-group">
+                  <label for="newRole">角色</label>
+                  <select id="newRole" name="role">
+                    <option value="member">普通成员</option>
+                    <option value="admin">管理员</option>
+                  </select>
+                </div>
+                <p class="form-error" id="createUserError" role="alert"></p>
+                <button class="btn btn-primary" type="submit">创建账号</button>
+              </form>
+            </section>
+
+            <section class="admin-card admin-users-card">
+              <div class="admin-section-heading">
+                <div>
+                  <p class="admin-eyebrow">成员与权限</p>
+                  <h3>团队账号</h3>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="refreshUsersBtn" type="button">刷新</button>
+              </div>
+              <p class="admin-notice" id="adminNotice" role="status" aria-live="polite"></p>
+              <div class="user-list" id="userList">
+                <div class="empty-state compact"><p>正在加载账号…</p></div>
+              </div>
+            </section>
+          </div>
+        </div>
+
         <!-- 知识库页面 -->
         <div class="page" id="page-knowledge">
           <div class="knowledge-layout">
@@ -594,6 +659,29 @@
     </main>
   </div>
 
+  <dialog class="password-dialog" id="resetPasswordDialog" aria-labelledby="resetPasswordTitle">
+    <form id="resetPasswordForm" method="dialog">
+      <div class="admin-section-heading">
+        <div>
+          <p class="admin-eyebrow">安全操作</p>
+          <h3 id="resetPasswordTitle">重置成员密码</h3>
+        </div>
+        <button class="dialog-close" id="cancelResetPassword" type="button" aria-label="关闭">×</button>
+      </div>
+      <p class="dialog-description" id="resetPasswordDescription"></p>
+      <div class="form-group">
+        <label for="resetNewPassword">新密码</label>
+        <input id="resetNewPassword" name="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+        <span class="form-help">至少 12 个字符。提交后，该成员的现有会话会全部失效。</span>
+      </div>
+      <p class="form-error" id="resetPasswordError" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" id="cancelResetPasswordBottom" type="button">取消</button>
+        <button class="btn btn-primary" type="submit">确认重置</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- FAQ 浮动机器人 -->
   <div class="faq-fab" id="faqFab">
     <div class="faq-fab-pulse"></div>
@@ -675,6 +763,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="auth-client.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

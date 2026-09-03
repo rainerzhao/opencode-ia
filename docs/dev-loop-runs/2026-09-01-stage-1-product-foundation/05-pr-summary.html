@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenCode 团队 AI 工作台 · Stage 1A–1C 评审摘要</title>
+  <title>OpenCode 团队 AI 工作台 · Stage 1A–1D 评审摘要</title>
   <style>
     :root {
       --paper: #f7f7f5; --paper-edge: #efefea; --ink: #1a1a1a;
@@ -50,6 +50,10 @@
     .callout { border: 1px solid var(--rule); background: #fff; padding: 16px 18px; margin: 18px 0; }
     .callout.warn { border-color: #e6d4a8; background: var(--warn-soft); }
     .callout-label { color: var(--warn); font-size: 10px; letter-spacing: .12em; margin-bottom: 8px; font-weight: 600; }
+    .evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+    .evidence figure { background: #fff; border: 1px solid var(--rule); padding: 8px; }
+    .evidence img { width: 100%; height: auto; display: block; }
+    .evidence figcaption { color: var(--ink-faint); font-size: 11px; margin-top: 7px; }
     footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--ink-faint); }
     footer h4 { color: var(--ink-soft); font-size: 11px; letter-spacing: .12em; margin-bottom: 10px; }
     footer ul { list-style: none; margin-left: 0; }
@@ -57,6 +61,7 @@
       body { padding: 32px 16px 64px; }
       .doc-title { font-size: 26px; }
       .cards { grid-template-columns: 1fr; }
+      .evidence { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -64,18 +69,18 @@
   <article class="doc">
     <header class="doc-header">
       <div class="doc-eyebrow"><span class="mascot"></span>OPENCODE TEAM WORKBENCH · REVIEW SUMMARY</div>
-      <h1 class="doc-title">Stage 1A–1C 产品底座评审摘要</h1>
-      <p class="doc-subtitle">从持久账号与安全 Session，推进到全业务认证、私有隔离与可追溯执行</p>
+      <h1 class="doc-title">Stage 1A–1D 产品底座评审摘要</h1>
+      <p class="doc-subtitle">从持久账号与安全 Session，推进到可登录、可管理、默认私有的浏览器闭环</p>
       <div class="doc-meta">
-        <span>STATUS · STAGE 1C PASS</span>
-        <span>DATE · 2026-09-02</span>
+        <span>STATUS · STAGE 1D PASS</span>
+        <span>DATE · 2026-09-03</span>
         <span>BRANCH · MAIN</span>
       </div>
     </header>
 
     <div class="tldr">
       <div class="tldr-label">TL;DR</div>
-      Stage 1A 建立 SQLite 与审计数据底座；Stage 1B 接通账号、Cookie/CSRF 和 Session 控制；Stage 1C 将全部业务 REST/WebSocket 切换到真实账号身份，加入默认私有、写操作审计、跨站 Socket 防护和撤销重验证。所有 AI 执行仍只经过 OpenCode，仓库不保存 Provider 密钥。前端登录仍在 Stage 1D，因此当前仍不能作为内网多用户生产系统开放。
+      Stage 1A–1C 已建立 SQLite、账号、权限、默认私有与审计边界；Stage 1D 补齐登录、退出、角色导航、管理员账号管理和服务端私有方案体验。Mac 桌面与手机浏览器闭环已经通过。所有 AI 执行仍只经过 OpenCode，仓库不保存 Provider 密钥；React/Vite、常驻 Gateway 与 Linux 生产验收仍待后续阶段。
     </div>
 
     <section>
@@ -83,18 +88,18 @@
       <div class="cards">
         <div class="card">
           <div class="card-icon">BOUNDARY</div>
-          <div class="card-name">统一认证</div>
-          <div class="card-desc">REST 与 WebSocket 都从服务端 Session 获得身份，匿名访问在业务入口即被拒绝。</div>
+          <div class="card-name">浏览器闭环</div>
+          <div class="card-desc">登录后再加载业务页面和 WebSocket，用户可安全退出，会话凭证不进入浏览器存储。</div>
         </div>
         <div class="card">
           <div class="card-icon">PRIVACY</div>
-          <div class="card-name">默认私有</div>
-          <div class="card-desc">方案和知识草稿绑定创建者，成员互不可见；共享知识与本人内容安全合并。</div>
+          <div class="card-name">角色管理</div>
+          <div class="card-desc">管理员可建号、重置密码、启停和撤销会话；普通成员看不到管理入口。</div>
         </div>
         <div class="card">
           <div class="card-icon">TRACE</div>
-          <div class="card-name">操作追踪</div>
-          <div class="card-desc">关键写入和 OpenCode 执行绑定真实用户，只记录资源与长度等脱敏元数据。</div>
+          <div class="card-name">私有沉淀</div>
+          <div class="card-desc">方案从浏览器本地存储迁移到服务端，继续使用账号归属与默认私有边界。</div>
         </div>
       </div>
     </section>
@@ -110,7 +115,7 @@
           <tr><td><strong>管理</strong></td><td>账号列表、建号、密码重置、启停、Session 强制撤销</td><td class="accent">1B 完成</td></tr>
           <tr><td><strong>业务权限</strong></td><td>REST/WS 强制认证、CSRF、角色矩阵、方案与知识所有者隔离</td><td class="accent">1C 完成</td></tr>
           <tr><td><strong>执行安全</strong></td><td>Socket 同源检查、Session 撤销重验证、用户身份和脱敏审计绑定</td><td class="accent">1C 完成</td></tr>
-          <tr><td><strong>用户界面</strong></td><td>登录页、角色界面、管理员账号管理</td><td>Stage 1D</td></tr>
+          <tr><td><strong>用户界面</strong></td><td>登录/退出、当前角色、管理员账号管理、桌面/手机适配</td><td class="accent">1D 完成</td></tr>
         </tbody>
       </table>
     </section>
@@ -124,18 +129,28 @@
         <li><strong>缓存边界。</strong>认证和管理员响应统一设置 <code>Cache-Control: no-store</code>。</li>
         <li><strong>权限回归。</strong>匿名、跨成员、异源 WebSocket 和撤销后继续执行均由真实 HTTP/WebSocket 用例覆盖。</li>
         <li><strong>文件边界。</strong>私人目录和文件强制 <code>0700/0600</code>，不依赖运行系统的默认 <code>umask</code>。</li>
-        <li><strong>验收结果。</strong><code>npm test</code> 111/111，通过 53 个 JS 文件语法检查和零发现密钥扫描。</li>
+        <li><strong>前端安全。</strong>业务请求统一使用 CSRF 客户端，方案不再保存到 <code>localStorage</code>，动态内容进入 HTML 前完成转义。</li>
+        <li><strong>浏览器验收。</strong>1440×1000 与 390×844 完成管理员/成员登录、退出、建号、角色隐藏、遮蔽密码输入与横向溢出检查。</li>
+        <li><strong>验收结果。</strong><code>npm test</code> 116/116，通过 56 个 JS 文件语法检查和零发现密钥扫描。</li>
         <li><strong>发布门禁。</strong><code>npm test</code>、<code>npm run check</code>、<code>npm run security:scan</code> 和 <code>git diff --check</code> 在提交前重新执行。</li>
       </ul>
     </section>
 
     <section>
-      <h2><span class="num">04</span>残余边界与下一步</h2>
+      <h2><span class="num">04</span>浏览器证据</h2>
+      <div class="evidence">
+        <figure><img src="artifacts/screenshots/stage-1d-login-desktop.png" alt="桌面登录页"><figcaption>桌面登录页 · 不保存前端凭证</figcaption></figure>
+        <figure><img src="artifacts/screenshots/stage-1d-account-admin-desktop.png" alt="管理员账号管理页面"><figcaption>账号管理 · 建号、重置、撤销、启停</figcaption></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2><span class="num">05</span>残余边界与下一步</h2>
       <div class="callout warn">
         <div class="callout-label">NOT PRODUCTION READY</div>
-        Stage 1C 已完成后端业务权限切换，但现有静态前端尚未提供登录和账号管理界面。直接打开页面无法完成受保护业务流程；在 Stage 1D–1E 完成前不能对真实多用户开放。
+        Stage 1D 已完成 Mac 浏览器多用户体验，但前端仍是静态 JavaScript，xterm 仍依赖公共 CDN；常驻 Gateway、Linux HTTPS、备份恢复、监控和容量验收尚未完成，不能宣称生产就绪。
       </div>
-      <p><strong>Stage 1D</strong> 将接入前端登录、当前用户、退出和管理员账号管理，并完成桌面/手机真实浏览器验收。随后 Stage 1E 完成 React/Vite 迁移和 Stage 1 总验收。</p>
+      <p><strong>下一步 Stage 1E：</strong>完成 React/Vite 迁移、前端资源本地打包、Demo 更新与 Stage 1 总验收，同时保证现有认证、CSRF、角色、默认私有和 OpenCode 单一执行边界不回退。</p>
     </section>
 
     <footer>

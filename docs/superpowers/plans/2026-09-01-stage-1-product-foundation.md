@@ -124,10 +124,10 @@
 - Browser calls `/api/auth/me` before opening business views or WebSocket.
 - Login posts credentials, stores no token in JavaScript, and reads a server-issued CSRF value for state-changing requests.
 
-- [ ] Add UI contract tests for accessible login fields, generic errors, logout, current-user role display, admin user management, and no token storage.
-- [ ] Run UI tests and confirm missing login shell failures.
-- [ ] Implement the login shell, authenticated fetch wrapper, role-aware navigation, account management, and logout.
-- [ ] Run tests and perform desktop/mobile browser acceptance with admin and member accounts, including console errors and overflow checks.
+- [x] Add UI contract tests for accessible login fields, generic errors, logout, current-user role display, admin user management, and no token storage.
+- [x] Run UI tests and confirm missing login shell failures.
+- [x] Implement the login shell, authenticated fetch wrapper, role-aware navigation, account management, and logout.
+- [x] Run tests and perform desktop/mobile browser acceptance with admin and member accounts, including console errors and overflow checks.
 - [ ] Save screenshots/evidence, commit in Chinese, push `main`, and verify remote SHA.
 
 ### Task 1E: React/Vite migration and Stage 1 release gate

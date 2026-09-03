@@ -5,6 +5,7 @@
 **Stage 1A: PASS**
 **Stage 1B: PASS**
 **Stage 1C: PASS**
+**Stage 1D: PASS**
 **Whole Stage 1: IN PROGRESS**
 
 ## Scope Checked
@@ -19,23 +20,26 @@
 - Business REST authentication, CSRF, admin/member role checks and private ownership filters.
 - WebSocket Cookie authentication, same-origin enforcement, identity binding and revocation revalidation.
 - Private solution/knowledge filesystem modes and actor-attributed, content-safe audit events.
+- Browser login, logout, authenticated API client, role-aware navigation and administrator account-management experience.
+- Desktop and mobile responsive layout, storage inspection and authenticated browser flows.
 - Regression coverage for the existing Stage 0 HTTP, WebSocket, OpenCode, file, upload, URL and Demo boundaries.
 
 ## Reviewers Run
 
-- Requirements acceptance: PASS for Stage 1A, Stage 1B and Stage 1C.
+- Requirements acceptance: PASS for Stage 1A through Stage 1D.
 - Test coverage: PASS; all new behavior has observed RED→GREEN evidence.
 - Code quality: PASS; focused modules replace adding database responsibilities to the existing server file.
 - Security: PASS; no production default credentials, password arguments, plaintext Session/CSRF storage, cross-origin WebSocket access or secret scan findings.
-- Docs/migration: PASS; database path, operator command, current phase and limitation are documented.
+- Frontend UX: PASS; desktop and mobile login/account flows were exercised in a real browser with saved screenshots.
+- Docs/migration: PASS; database path, operator command, current phase, Demo login and remaining limitations are documented.
 
 ## Tests Run
 
-- `npm test`: 111 tests passed, 0 failed.
-- `npm run check`: 53 JavaScript files passed.
+- `npm test`: 116 tests passed, 0 failed in the final full regression.
+- `npm run check`: 56 JavaScript files passed.
 - `npm run security:scan`: zero findings.
 - `git diff --check`: passed.
-- Latest browser report remains the Stage 1B desktop/mobile documentation check; Stage 1C changes only backend contracts, and Stage 1D owns authenticated browser acceptance.
+- Browser acceptance: 1440×1000 and 390×844 login flows, administrator account creation, logout, member login, role visibility, password-reset masking, zero page-level overflow and empty browser storage passed.
 - Real CLI child-process test and real temporary SQLite file tests passed.
 
 ## Requirement Coverage
@@ -45,12 +49,12 @@
 - Acceptance criteria 3–4: complete at the authentication/admin API boundary.
 - Acceptance criterion 5: complete for account management and current business write audit events.
 - Acceptance criterion 6: complete for current REST/WebSocket and filesystem-backed solution/knowledge boundaries.
-- Acceptance criterion 7: remains assigned to Stage 1D browser login and account-management acceptance.
-- Acceptance criterion 8: Stage 1A verification complete; Git commit/push recorded after release.
+- Acceptance criterion 7: complete for Stage 1D Mac desktop/mobile browser login and account-management acceptance.
+- Acceptance criterion 8: complete through Stage 1C; Stage 1D commit/push is recorded after release.
 
 ## Findings
 
-No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A, Stage 1B or Stage 1C.
+No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A through Stage 1D.
 
 ## Fixes Applied
 
@@ -65,14 +69,19 @@ No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A, Stage 
 - Added same-origin WebSocket validation and per-message Session revalidation after revocation.
 - Forced private content directories/files to `0700/0600` and removed OpenCode working-directory disclosure.
 - Fixed private/shared knowledge tree merging so private files do not hide unrelated shared documents.
+- Added one CSRF-aware browser client and removed direct business `fetch` calls and browser-local solution persistence.
+- Replaced plaintext password-reset prompting with a masked dialog and added confirmation gates for destructive account actions.
+- Rejected cross-origin authentication-client requests before CSRF headers can be constructed or transmitted.
+- Escaped dynamic Skill, solution, knowledge and upload names before HTML rendering.
 
 ## Residual Risks
 
 - Behind a future reverse proxy, source IP extraction requires an explicit trusted-proxy design before Linux production use.
-- The static frontend cannot yet establish the new authenticated API/Socket session; browser login and account UI arrive in 1D.
+- The frontend is still static JavaScript; React/Vite migration and frontend module boundaries arrive in 1E.
+- xterm scripts and styles still load from a public CDN and must be bundled locally before internal Linux deployment.
 - The current filesystem ownership layer is a Stage 1 bridge; versioned publication and richer cross-owner administration arrive with Stage 3 metadata.
 - React/Vite migration and Stage 1 release gate remain in 1E.
 
 ## Follow-ups
 
-Stage 1C code commit `cf30d4434891ee693f0e0a57036ab136963e60d9` has been delivered to GitHub `main`. Start Stage 1D frontend login and authenticated browser acceptance next.
+Stage 1D implementation and Mac browser acceptance are complete. Deliver the verified Stage 1D commit to GitHub `main`, then start Stage 1E React/Vite migration and the full Stage 1 release gate.

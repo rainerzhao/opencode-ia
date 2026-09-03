@@ -126,3 +126,44 @@ Status: implemented, verified and delivered to GitHub `main`.
 - Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
 - Residual boundary: the static frontend has not yet integrated login; do not present Stage 1C alone as a usable multi-user browser release.
 - Git delivery: code commit `cf30d4434891ee693f0e0a57036ab136963e60d9` was pushed to `main`; push output confirmed `4f3c9f2..cf30d44 main -> main`.
+
+## Stage 1D
+
+Status: implemented and verified; Git delivery pending.
+
+### Delivered
+
+- 独立、可访问的登录页；只提交用户名和密码，不在前端保存或返回 Session Token。
+- 统一浏览器认证客户端：所有请求携带同源 Cookie，状态修改请求从唯一、可解析的 CSRF Cookie 自动生成 `X-CSRF-Token`。
+- 工作台启动先调用 `/api/auth/me`，未登录跳转登录页；顶栏显示当前用户和角色并支持安全退出。
+- `admin/member` 角色感知导航；普通成员不渲染账号管理入口，管理员可查看账号列表。
+- 管理员建号、遮蔽输入的密码重置、账号启停和 Session 撤销界面；危险操作要求显式确认。
+- 方案记录从 `localStorage` 迁移到受认证、默认私有的 `/api/solutions`。
+- 现有配置、Skill、知识与上传请求统一使用认证客户端，不再散落直接 `fetch`。
+- WebSocket 仅在认证成功后连接；1008 策略关闭跳回登录页，不进入重连循环。
+- 登录页、工作台和账号管理增加 390px 窄屏布局；动态 Skill、方案、知识和文件名进入 HTML 前转义。
+
+### TDD Evidence
+
+- UI RED：`public/auth-client.js` 不存在，认证壳测试无法加载；GREEN：登录表单、CSRF 请求和账号管理契约通过。
+- Review RED：密码重置使用普通文本提示框，会明文显示密码；GREEN：原生对话框使用 `type=password` 与 `autocomplete=new-password`，新增契约测试通过。
+
+### Verification
+
+- `npm test`: 116/116 passed in the final full regression.
+- `npm run check`: 56 JavaScript files passed syntax validation.
+- `npm run security:scan`: zero findings.
+- `git diff --check`: passed.
+- Browser desktop 1440×1000: login, logout, administrator account creation, member login and administrator page access passed; no page-level horizontal overflow.
+- Browser mobile 390×844: login and member home passed; no page-level horizontal overflow. The top navigation intentionally scrolls horizontally.
+- Browser storage inspection: `localStorage` and `sessionStorage` contained no keys before or after login.
+- Browser console/page errors: none reported in the completed authentication and account-management flows.
+- Screenshots: `stage-1d-login-desktop.png`, `stage-1d-home-admin-desktop.png`, `stage-1d-account-admin-desktop.png`, `stage-1d-login-mobile.png`, `stage-1d-member-mobile.png`, and `stage-1d-password-reset-dialog.png`.
+
+### Inline Code Review
+
+- Initial verdict: `REQUEST_CHANGES` for plaintext password-reset input and unconfirmed destructive account actions.
+- Second security finding: the generic client would attach CSRF to an accidentally supplied cross-origin absolute URL.
+- Fix verification: masked reset dialog and UI contract tests passed; revoke/disable now require confirmation; cross-origin requests are rejected before `fetch`.
+- Final verdict: `APPROVE`; no unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings.
+- Residual boundary: xterm remains CDN-hosted and must be locally bundled before internal Linux deployment; React/Vite migration remains Stage 1E.

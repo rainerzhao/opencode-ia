@@ -2,11 +2,11 @@
 
 面向 15–20 人内部团队的中心化 AI 工作台：成员通过浏览器使用 OpenCode、管理知识、沉淀方案，并逐步形成可校验、可发布、可回滚的团队 Skill 资产。
 
-> 当前研发阶段：**Stage 0、Stage 1A、Stage 1B 和 Stage 1C 已完成；尚未达到生产上线条件。** REST/WebSocket 已统一接入账号、权限、默认私有和审计边界；前端登录仍在 Stage 1D 开发，不应把当前版本直接开放给真实多用户使用。
+> 当前研发阶段：**Stage 0、Stage 1A–1D 已完成；Stage 1E 待开发，尚未达到生产上线条件。** Mac 上已经跑通登录、角色界面、管理员建号和成员访问闭环；React/Vite 迁移、常驻 OpenCode Gateway、Linux 部署与生产验收仍未完成。
 
 [查看完整路线图](docs/ROADMAP.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
 
-![工作台首页](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/artifacts/screenshots/home.png)
+![Stage 1D 登录页](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/artifacts/screenshots/stage-1d-login-desktop.png)
 
 ## 三分钟体验
 
@@ -19,11 +19,12 @@ npm ci
 npm run demo
 ```
 
-打开终端显示的地址，默认是 `http://127.0.0.1:4317`。脚本会为本次临时环境生成随机密码的 `demo-admin`，只输出到当前终端；Stage 1D 完成前，静态页面尚未提供登录表单，当前 Demo 主要用于验证受认证保护的真实 REST/WebSocket 链路。
+打开终端显示的地址，默认是 `http://127.0.0.1:4317`。脚本会为本次临时环境生成随机密码的 `demo-admin`，账号和密码只输出到当前终端。用该账号登录后，可以体验完整工作台、账号管理和受认证保护的 REST/WebSocket 链路。
 
 Demo 会：
 
 - 启动真实 Express、REST API 和 WebSocket 前后端链路；
+- 提供登录、退出、当前角色和管理员账号管理界面；
 - 只监听本机回环地址 `127.0.0.1`，不会对局域网开放无认证服务；
 - 展示三篇示例知识文档；
 - 使用明确标注的“Demo 模拟回复”，不调用真实模型；
@@ -40,13 +41,13 @@ DEMO_PORT=4321 npm run demo
 
 | 能力 | 当前状态 | 说明 |
 | --- | --- | --- |
-| 工作台前端 | 🚧 Stage 1D | 页面壳与内容已保留；登录、角色和账号管理界面正在接入 |
+| 工作台前端 | ✅ Stage 1D | 登录、退出、当前用户、角色导航、账号管理和响应式界面已跑通 |
 | OpenCode 调用边界 | ✅ 已加固 | 参数化执行、超时、取消、输出限制、错误脱敏 |
 | 多会话控制 | ✅ 基线完成 | 全局会话上限、单会话串行、断线和关服取消 |
 | 知识文件与上传 | ✅ 基线完成 | 路径、符号链接、上传暂存、失败回滚保护 |
 | URL 导入 | ✅ 默认关闭 | 白名单、DNS 地址校验、逐跳重定向、超时和大小限制 |
 | 用户名/密码 | ✅ Stage 1B | 登录、退出、当前用户、改密、Session 撤销和限速 |
-| 角色与账号管理 | ✅ Stage 1C | 账号管理、REST/WebSocket 强制认证、成员私有隔离和写操作审计 |
+| 角色与账号管理 | ✅ Stage 1D | 管理员建号、密码重置、启停、会话撤销；成员界面不展示管理入口 |
 | SQLite 数据层 | ✅ Stage 1A | WAL、版本化迁移、用户/Session/审计仓储 |
 | 常驻 OpenCode Gateway | ⏳ Stage 2 | 当前仍是每条消息一次有界 `opencode run` |
 | Skill 发布中心 | ⏳ Stage 4 | 校验、版本、安装、启用、回滚和归档 |
@@ -75,7 +76,7 @@ flowchart LR
     O --> K[团队 Skills]
 ```
 
-当前 Stage 0 使用静态前端 + 模块化 Express 后端。Stage 1 迁移 React/Vite 并加入账号和 SQLite；Stage 2 再把每消息进程模式替换为常驻 OpenCode Gateway。
+当前使用静态前端 + 模块化 Express 后端，账号和 SQLite 底座已经接通。Stage 1E 将在保持现有安全契约的前提下迁移 React/Vite；Stage 2 再把每消息进程模式替换为常驻 OpenCode Gateway。
 
 ## 真实模式：Mac 开发启动
 
@@ -144,9 +145,9 @@ npm run admin:create -- --username admin --display-name 管理员
 
 密码会隐藏输入两次，并使用 `scrypt` 和独立随机盐保存。
 
-### Stage 1B–1C：后端认证与业务权限
+### Stage 1B–1D：认证、业务权限与浏览器体验
 
-当前已提供以下后端能力，供 Stage 1D 前端登录和账号管理界面使用：
+当前已提供并接入前端的能力：
 
 - `POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`；
 - `POST /api/auth/change-password`；
@@ -156,8 +157,12 @@ npm run admin:create -- --username admin --display-name 管理员
 - 方案和知识草稿按登录用户默认私有，成员之间不可互读；
 - WebSocket 绑定 `userId`、角色和登录 Session，执行前重新验证撤销状态；
 - 关键知识、方案和 OpenCode 执行动作写入脱敏审计。
+- 浏览器启动先调用 `/api/auth/me`，未登录跳转到独立登录页；不在 `localStorage`、`sessionStorage` 或 JavaScript 中保存 Session Token；
+- 所有业务请求统一经过认证客户端，写请求自动携带服务端签发的 CSRF 值；
+- 管理员页面支持建号、遮蔽输入的密码重置、账号启停和 Session 撤销；普通成员看不到管理入口；
+- 需求方案从浏览器本地存储迁移到服务端私有方案目录。
 
-Session 使用高熵不透明 Cookie，数据库只保存 SHA-256 摘要；写操作同时校验 Session Cookie、可读 CSRF Cookie、`X-CSRF-Token` 请求头与数据库摘要。当前静态前端尚未接入登录接口，浏览器完整体验将在 Stage 1D 恢复；`npm run demo` 继续使用隔离临时目录、随机临时账号和本地模拟 OpenCode，不调用真实模型或密钥。
+Session 使用高熵不透明 Cookie，数据库只保存 SHA-256 摘要；写操作同时校验 Session Cookie、可读 CSRF Cookie、`X-CSRF-Token` 请求头与数据库摘要。`npm run demo` 使用隔离临时目录、随机临时账号和本地模拟 OpenCode，不调用真实模型或密钥。
 
 ## 验证与安全
 
@@ -167,12 +172,22 @@ npm run check
 npm run security:scan
 ```
 
-- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、路径、上传和 URL 安全边界。
+- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、路径、上传、URL 安全边界及前端认证契约；Stage 1D 当前为 116/116。
 - 语法检查只检查仓库自有 JavaScript 文件。
 - 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
 - `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
 
-![知识库页面](docs/dev-loop-runs/2026-09-01-stage-0-security-baseline/artifacts/screenshots/knowledge.png)
+![Stage 1D 管理员账号管理](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/artifacts/screenshots/stage-1d-account-admin-desktop.png)
+
+## 已知限制与下一阶段
+
+- 当前前端仍是静态 JavaScript；Stage 1E 将迁移到 React/Vite，并补齐构建与路由级测试。
+- 当前每条消息调用一次有界 `opencode run`；并发会话、排队、恢复和模型目录留到 Stage 2 常驻 Gateway。
+- 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
+- 页面仍从公共 CDN 加载 xterm 资源；迁移到内网 Linux 前必须改为本地打包，避免依赖外网。
+- 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
+
+下一次提交目标是 **Stage 1E：React/Vite 迁移与 Stage 1 总验收**。迁移必须保持现有登录、CSRF、角色、默认私有、OpenCode 单一执行边界和 Demo 隔离机制不回退。
 
 ## 项目目录
 

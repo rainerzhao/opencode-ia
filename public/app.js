@@ -1,3 +1,5 @@
+const authClient = WorkbenchAuth.createAuthClient();
+
 // 应用状态
 const state = {
   ws: null,
@@ -9,7 +11,10 @@ const state = {
   chatHistory: [],
   skills: [],
   faqConnected: false,
-  faqWs: null
+  faqWs: null,
+  currentUser: null,
+  authenticated: false,
+  shuttingDown: false
 };
 
 // DOM 元素
@@ -20,6 +25,10 @@ const els = {
   pages: document.querySelectorAll('.page'),
   pageTitle: document.getElementById('pageTitle'),
   pageDesc: document.getElementById('pageDesc'),
+  currentUserName: document.getElementById('currentUserName'),
+  currentUserRole: document.getElementById('currentUserRole'),
+  currentUserAvatar: document.getElementById('currentUserAvatar'),
+  logoutBtn: document.getElementById('logoutBtn'),
 
   // AI 平台
   chatMessages: document.getElementById('chatMessages'),
@@ -55,7 +64,21 @@ const els = {
   recordTitle: document.getElementById('recordTitle'),
   recordDesc: document.getElementById('recordDesc'),
   recordSolution: document.getElementById('recordSolution'),
-  recordSkills: document.getElementById('recordSkills')
+  recordSkills: document.getElementById('recordSkills'),
+
+  // 管理员账号
+  createUserForm: document.getElementById('createUserForm'),
+  createUserError: document.getElementById('createUserError'),
+  userList: document.getElementById('userList'),
+  refreshUsersBtn: document.getElementById('refreshUsersBtn'),
+  adminNotice: document.getElementById('adminNotice'),
+  resetPasswordDialog: document.getElementById('resetPasswordDialog'),
+  resetPasswordForm: document.getElementById('resetPasswordForm'),
+  resetPasswordDescription: document.getElementById('resetPasswordDescription'),
+  resetNewPassword: document.getElementById('resetNewPassword'),
+  resetPasswordError: document.getElementById('resetPasswordError'),
+  cancelResetPassword: document.getElementById('cancelResetPassword'),
+  cancelResetPasswordBottom: document.getElementById('cancelResetPasswordBottom')
 };
 
 // 页面描述
@@ -66,25 +89,80 @@ const pageDescs = {
   faq: '常见问题与智能路由',
   solutions: '沉淀需求方案，知识复用',
   skills: '团队 AI 能力资产库',
-  knowledge: '在线编辑和管理知识库文档'
+  knowledge: '在线编辑和管理知识库文档',
+  admin: '创建团队账号并管理访问权限与登录会话'
 };
 
 // 初始化
-function init() {
+async function init() {
+  try {
+    const { user } = await authClient.me();
+    state.currentUser = user;
+    state.authenticated = true;
+    renderCurrentUser();
+    document.body.classList.remove('auth-pending');
+  } catch (error) {
+    if (error.status === 401) {
+      location.replace('/login.html');
+      return;
+    }
+    document.body.classList.remove('auth-pending');
+    alert('工作台暂时无法连接，请刷新页面重试。');
+    return;
+  }
+
   initNavigation();
   initChat();
   initFAQ();
   initModal();
   initKnowledge();
+  initAccountManagement();
+  els.logoutBtn.addEventListener('click', logout);
   loadSkills();
   loadConfig(); // 加载配置（模型名等）
+  renderSolutions();
   connect(); // 页面加载时自动连接
+}
+
+function renderCurrentUser() {
+  const user = state.currentUser;
+  els.currentUserName.textContent = user.displayName || user.username;
+  els.currentUserRole.textContent = user.role === 'admin' ? '管理员' : '普通成员';
+  els.currentUserAvatar.textContent = (user.displayName || user.username).trim().slice(0, 1).toUpperCase();
+  document.querySelectorAll('[data-role="admin"]').forEach((element) => {
+    element.hidden = user.role !== 'admin';
+  });
+}
+
+async function logout() {
+  els.logoutBtn.disabled = true;
+  try {
+    await authClient.logout();
+  } catch (error) {
+    if (error.status !== 401) {
+      alert(error.message || '退出失败，请重试。');
+      els.logoutBtn.disabled = false;
+      return;
+    }
+  }
+  state.shuttingDown = true;
+  state.authenticated = false;
+  if (state.ws) state.ws.close();
+  location.replace('/login.html');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 async function loadConfig() {
   try {
-    const res = await fetch('/api/config');
-    const config = await res.json();
+    const config = await authClient.request('/api/config');
     if (config.model && els.modelBadge) {
       // 简化显示，去掉 provider 前缀
       els.modelBadge.textContent = config.model.split('/').pop();
@@ -113,6 +191,7 @@ function initNavigation() {
 }
 
 function switchPage(page) {
+  if (page === 'admin' && state.currentUser?.role !== 'admin') return;
   state.currentPage = page;
 
   // 更新导航
@@ -141,7 +220,8 @@ function getPageTitle(page) {
     faq: 'FAQ & 路由',
     solutions: '需求方案库',
     skills: 'Skill 资产',
-    knowledge: '知识库'
+    knowledge: '知识库',
+    admin: '账号管理'
   };
   return titles[page] || '工作台';
 }
@@ -304,6 +384,7 @@ function initTerminalInstance() {
 
 // WebSocket 连接
 function connect() {
+  if (!state.authenticated || state.shuttingDown) return;
   if (state.ws && state.ws.readyState === WebSocket.OPEN) return;
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -327,10 +408,16 @@ function connect() {
     }
   };
 
-  state.ws.onclose = () => {
+  state.ws.onclose = (event) => {
     console.log('WebSocket 已断开');
     updateStatus(false);
-    setTimeout(connect, 3000);
+    state.ws = null;
+    if (event.code === 1008) {
+      state.authenticated = false;
+      location.replace('/login.html');
+      return;
+    }
+    if (!state.shuttingDown && state.authenticated) setTimeout(connect, 3000);
   };
 
   state.ws.onerror = (err) => {
@@ -471,8 +558,7 @@ function addFaqMessage(role, content) {
 // Skills 加载
 async function loadSkills() {
   try {
-    const res = await fetch('/api/skills');
-    state.skills = await res.json();
+    state.skills = await authClient.request('/api/skills');
 
     if (state.skills.length === 0) {
       els.skillsList.innerHTML = '<div class="skill-tag">暂无 Skills</div>';
@@ -481,7 +567,7 @@ async function loadSkills() {
     }
 
     els.skillsList.innerHTML = state.skills.map(s =>
-      `<div class="skill-tag" title="${s.description}">${s.name}</div>`
+      `<div class="skill-tag" title="${escapeHtml(s.description)}">${escapeHtml(s.name)}</div>`
     ).join('');
     els.skillCount.textContent = state.skills.length;
   } catch (err) {
@@ -517,7 +603,7 @@ function openRecordModal() {
 
   // 显示使用的 Skills
   els.recordSkills.innerHTML = state.skills.slice(0, 3).map(s =>
-    `<span class="tag">${s.name}</span>`
+    `<span class="tag">${escapeHtml(s.name)}</span>`
   ).join('');
 
   els.recordModal.classList.add('active');
@@ -527,33 +613,45 @@ function closeRecordModal() {
   els.recordModal.classList.remove('active');
 }
 
-function saveRecord() {
+async function saveRecord() {
   const record = {
-    id: Date.now(),
     title: els.recordTitle.value,
     description: els.recordDesc.value,
     solution: els.recordSolution.value,
-    date: new Date().toISOString(),
+    platforms: Array.from(document.querySelectorAll('#recordPlatforms .tag')).map((tag) => tag.textContent.trim()),
+    skills: state.skills.slice(0, 3).map((skill) => skill.name),
     chatHistory: state.chatHistory
   };
+  if (!record.title.trim()) {
+    alert('请输入需求标题');
+    return;
+  }
 
-  // 保存到 localStorage
-  const records = JSON.parse(localStorage.getItem('solutions') || '[]');
-  records.unshift(record);
-  localStorage.setItem('solutions', JSON.stringify(records));
-
-  // 更新列表
-  renderSolutions();
-
-  // 关闭弹窗
-  closeRecordModal();
-
-  // 提示
-  alert('需求已记录到需求方案库');
+  els.confirmRecord.disabled = true;
+  try {
+    await authClient.request('/api/solutions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(record)
+    });
+    await renderSolutions();
+    closeRecordModal();
+    alert('需求已记录到你的私有方案库');
+  } catch (error) {
+    alert(`保存失败：${error.message}`);
+  } finally {
+    els.confirmRecord.disabled = false;
+  }
 }
 
-function renderSolutions() {
-  const records = JSON.parse(localStorage.getItem('solutions') || '[]');
+async function renderSolutions() {
+  let records;
+  try {
+    records = await authClient.request('/api/solutions');
+  } catch (error) {
+    els.solutionsList.innerHTML = '<div class="empty-state"><p>方案加载失败</p><p class="empty-hint">请稍后刷新重试</p></div>';
+    return;
+  }
 
   if (records.length === 0) {
     els.solutionsList.innerHTML = `
@@ -572,12 +670,186 @@ function renderSolutions() {
   }
 
   els.solutionsList.innerHTML = records.map(r => `
-    <div class="solution-item" style="padding: 16px; border-bottom: 1px solid var(--border); transition: background 0.2s;" onmouseover="this.style.background='var(--bg-card-hover)'" onmouseout="this.style.background='transparent'">
-      <div style="font-weight: 500; margin-bottom: 8px; color: var(--text-primary);">${r.title}</div>
-      <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">${r.description.substring(0, 100)}...</div>
-      <div style="font-size: 12px; color: var(--text-muted);">${new Date(r.date).toLocaleString()}</div>
+    <div class="solution-item">
+      <div class="solution-title">${escapeHtml(r.title)}</div>
+      <div class="solution-preview">${escapeHtml(String(r.description || '').substring(0, 100))}</div>
+      <div class="solution-meta">私有 · ${new Date(r.createdAt).toLocaleString()}</div>
     </div>
   `).join('');
+}
+
+function initAccountManagement() {
+  if (state.currentUser.role !== 'admin') return;
+  els.createUserForm.addEventListener('submit', createUser);
+  els.refreshUsersBtn.addEventListener('click', loadUsers);
+  els.resetPasswordForm.addEventListener('submit', submitResetPassword);
+  els.cancelResetPassword.addEventListener('click', closeResetPasswordDialog);
+  els.cancelResetPasswordBottom.addEventListener('click', closeResetPasswordDialog);
+  loadUsers();
+}
+
+async function createUser(event) {
+  event.preventDefault();
+  const submit = els.createUserForm.querySelector('[type="submit"]');
+  const form = new FormData(els.createUserForm);
+  els.createUserError.textContent = '';
+  submit.disabled = true;
+  try {
+    await authClient.request('/api/admin/users', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        username: form.get('username'),
+        displayName: form.get('displayName'),
+        password: form.get('password'),
+        role: form.get('role')
+      })
+    });
+    els.createUserForm.reset();
+    showAdminNotice('账号已创建。初始密码只应通过安全渠道交给本人。');
+    await loadUsers();
+  } catch (error) {
+    const messages = {
+      USERNAME_TAKEN: '用户名已存在。',
+      INVALID_PASSWORD: '密码必须为 12–128 个字符。',
+      INVALID_USERNAME: '用户名需以字母开头，使用 3–32 位字母、数字、点、短横线或下划线。'
+    };
+    els.createUserError.textContent = messages[error.code] || error.message;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function loadUsers() {
+  try {
+    const { users } = await authClient.request('/api/admin/users');
+    renderUsers(users);
+  } catch (error) {
+    els.userList.innerHTML = `<div class="empty-state compact"><p>账号加载失败</p><p class="empty-hint">${escapeHtml(error.message)}</p></div>`;
+  }
+}
+
+function renderUsers(users) {
+  els.userList.innerHTML = '';
+  users.forEach((user) => {
+    const row = document.createElement('article');
+    row.className = 'user-row';
+
+    const identity = document.createElement('div');
+    identity.className = 'user-identity';
+    const avatar = document.createElement('span');
+    avatar.className = 'user-avatar';
+    avatar.textContent = (user.displayName || user.username).trim().slice(0, 1).toUpperCase();
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = user.displayName;
+    const detail = document.createElement('span');
+    detail.textContent = `${user.username} · ${user.role === 'admin' ? '管理员' : '普通成员'}`;
+    copy.append(title, detail);
+    identity.append(avatar, copy);
+
+    const status = document.createElement('span');
+    status.className = `user-status ${user.status}`;
+    status.textContent = user.status === 'active' ? '已启用' : '已停用';
+
+    const actions = document.createElement('div');
+    actions.className = 'user-actions';
+    actions.append(
+      actionButton('重置密码', () => resetUserPassword(user)),
+      actionButton('撤销会话', () => revokeUserSessions(user)),
+      actionButton(user.status === 'active' ? '停用' : '启用', () => toggleUserStatus(user), user.status === 'active')
+    );
+    row.append(identity, status, actions);
+    els.userList.appendChild(row);
+  });
+}
+
+function actionButton(label, handler, danger = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `btn btn-sm ${danger ? 'btn-danger-ghost' : 'btn-ghost'}`;
+  button.textContent = label;
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await handler();
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+async function resetUserPassword(user) {
+  state.resetPasswordUser = user;
+  els.resetPasswordDescription.textContent = `正在为 ${user.displayName}（${user.username}）设置新密码。`;
+  els.resetPasswordError.textContent = '';
+  els.resetNewPassword.value = '';
+  els.resetPasswordDialog.showModal();
+  els.resetNewPassword.focus();
+}
+
+function closeResetPasswordDialog() {
+  state.resetPasswordUser = null;
+  els.resetPasswordDialog.close();
+}
+
+async function submitResetPassword(event) {
+  event.preventDefault();
+  const user = state.resetPasswordUser;
+  if (!user) return;
+  const submit = els.resetPasswordForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  try {
+    await authClient.request(`/api/admin/users/${encodeURIComponent(user.id)}/password`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ newPassword: els.resetNewPassword.value })
+    });
+    closeResetPasswordDialog();
+    showAdminNotice(`已重置 ${user.displayName} 的密码，并撤销其全部登录会话。`);
+  } catch (error) {
+    els.resetPasswordError.textContent = error.code === 'PASSWORD_POLICY'
+      ? '密码必须为 12–128 个字符。'
+      : error.message;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function revokeUserSessions(user) {
+  if (!confirm(`确认撤销 ${user.displayName} 的全部登录会话？`)) return;
+  try {
+    await authClient.request(`/api/admin/users/${encodeURIComponent(user.id)}/sessions/revoke`, { method: 'POST' });
+    showAdminNotice(`已撤销 ${user.displayName} 的全部登录会话。`);
+  } catch (error) {
+    showAdminNotice(error.message, true);
+  }
+}
+
+async function toggleUserStatus(user) {
+  const nextStatus = user.status === 'active' ? 'disabled' : 'active';
+  if (user.id === state.currentUser.id && nextStatus === 'disabled') {
+    showAdminNotice('不能在当前页面停用自己的账号。', true);
+    return;
+  }
+  if (nextStatus === 'disabled' && !confirm(`确认停用 ${user.displayName}？其现有会话将立即失效。`)) return;
+  try {
+    await authClient.request(`/api/admin/users/${encodeURIComponent(user.id)}/status`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus })
+    });
+    showAdminNotice(`已${nextStatus === 'active' ? '启用' : '停用'} ${user.displayName}。`);
+    await loadUsers();
+  } catch (error) {
+    showAdminNotice(error.message, true);
+  }
+}
+
+function showAdminNotice(message, isError = false) {
+  els.adminNotice.textContent = message;
+  els.adminNotice.classList.toggle('error', isError);
 }
 
 // 知识库功能
@@ -628,7 +900,7 @@ function initKnowledge() {
       }
 
       try {
-        await fetch('/api/knowledge/article/new', {
+        await authClient.request('/api/knowledge/article/new', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title, content, category: '' })
@@ -689,7 +961,7 @@ function initKnowledge() {
   function renderUploadList() {
     uploadList.innerHTML = selectedFiles.map((file, i) => `
       <div class="upload-item">
-        <span class="upload-item-name">${file.name}</span>
+        <span class="upload-item-name">${escapeHtml(file.name)}</span>
         <span class="upload-item-size">${formatFileSize(file.size)}</span>
         <span class="upload-item-remove" data-index="${i}">×</span>
       </div>
@@ -725,7 +997,7 @@ function initKnowledge() {
         confirmUploadBtn.disabled = true;
         confirmUploadBtn.textContent = '上传中...';
 
-        await fetch('/api/knowledge/upload', {
+        await authClient.request('/api/knowledge/upload', {
           method: 'POST',
           body: formData
         });
@@ -773,8 +1045,7 @@ function formatFileSize(bytes) {
 
 async function loadKnowledgeTree() {
   try {
-    const res = await fetch('/api/knowledge/tree');
-    const tree = await res.json();
+    const tree = await authClient.request('/api/knowledge/tree');
     renderKnowledgeTree(tree);
     renderKnowledgeListFromTree(tree);
   } catch (err) {
@@ -800,7 +1071,7 @@ function renderKnowledgeTree(tree) {
       dirEl.dataset.id = item.path;
       dirEl.innerHTML = `
         <span class="tree-icon">📂</span>
-        <span class="tree-name">${item.name}</span>
+        <span class="tree-name">${escapeHtml(item.name)}</span>
       `;
       dirEl.addEventListener('click', () => {
         document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
@@ -854,10 +1125,10 @@ function renderKnowledgeListFromTree(tree, filterPath = '') {
   }
 
   knowledgeList.innerHTML = articles.map(a => `
-    <div class="kb-article" data-path="${a.path}">
-      <div class="kb-article-title">${a.name}</div>
+    <div class="kb-article" data-path="${escapeHtml(a.path)}">
+      <div class="kb-article-title">${escapeHtml(a.name)}</div>
       <div class="kb-article-meta">更新于 ${formatTime(a.updatedAt)}</div>
-      <div class="kb-article-preview">${(a.preview || '').substring(0, 100)}</div>
+      <div class="kb-article-preview">${escapeHtml((a.preview || '').substring(0, 100))}</div>
     </div>
   `).join('');
 
@@ -866,8 +1137,7 @@ function renderKnowledgeListFromTree(tree, filterPath = '') {
     el.addEventListener('click', async () => {
       const filePath = el.dataset.path;
       try {
-        const res = await fetch(`/api/knowledge/article?path=${encodeURIComponent(filePath)}`);
-        const data = await res.json();
+        const data = await authClient.request(`/api/knowledge/article?path=${encodeURIComponent(filePath)}`);
         document.getElementById('knowledgeList').style.display = 'none';
         const editor = document.getElementById('knowledgeEditor');
         editor.style.display = 'flex';
@@ -887,8 +1157,7 @@ async function searchKnowledge(query) {
   }
 
   try {
-    const res = await fetch(`/api/knowledge/search?q=${encodeURIComponent(query)}`);
-    const results = await res.json();
+    const results = await authClient.request(`/api/knowledge/search?q=${encodeURIComponent(query)}`);
     renderSearchResults(results);
   } catch (err) {
     console.error('搜索失败:', err);
@@ -910,9 +1179,9 @@ function renderSearchResults(results) {
   }
 
   knowledgeList.innerHTML = results.map(r => `
-    <div class="kb-article" data-path="${r.path}">
-      <div class="kb-article-title">${r.title}</div>
-      <div class="kb-article-preview">${r.preview}</div>
+    <div class="kb-article" data-path="${escapeHtml(r.path)}">
+      <div class="kb-article-title">${escapeHtml(r.title)}</div>
+      <div class="kb-article-preview">${escapeHtml(r.preview)}</div>
     </div>
   `).join('');
 
@@ -920,8 +1189,7 @@ function renderSearchResults(results) {
     el.addEventListener('click', async () => {
       const filePath = el.dataset.path;
       try {
-        const res = await fetch(`/api/knowledge/article?path=${encodeURIComponent(filePath)}`);
-        const data = await res.json();
+        const data = await authClient.request(`/api/knowledge/article?path=${encodeURIComponent(filePath)}`);
         document.getElementById('knowledgeList').style.display = 'none';
         const editor = document.getElementById('knowledgeEditor');
         editor.style.display = 'flex';
