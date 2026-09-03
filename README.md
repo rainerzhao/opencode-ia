@@ -4,7 +4,7 @@
 
 > 当前研发阶段：**Stage 0、Stage 1A–1E 已完成；Stage 2 已完成架构设计、尚未开发，项目尚未达到生产上线条件。** Mac 上已经跑通 React 前后端、用户名密码、角色权限、知识/方案私有闭环和无密钥 Demo；常驻 OpenCode Gateway、Linux 部署与生产验收仍未完成。
 
-最新已验证交付：Stage 1D 主提交 [`8b7b4d1`](https://github.com/rainerzhao/opencode-ia/commit/8b7b4d183fee18222162898dc9619bc6554c1c19)，已于 2026-09-03 推送到公开仓库 `main`。
+最新已验证交付：Stage 1E 主提交 [`9a205f5`](https://github.com/rainerzhao/opencode-ia/commit/9a205f5)，已于 2026-09-03 推送到公开仓库 `main`。该版本完成 React/Vite 迁移与 Stage 1 总验收；Stage 2 Gateway 仍是已确认设计，不应误读为已经实现。
 
 [查看完整路线图](docs/ROADMAP.md) · [查看 Stage 2 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看验收报告](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/04-acceptance-report.md) · [查看架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)
 

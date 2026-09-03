@@ -149,7 +149,7 @@
 - [x] Update Demo to create isolated demo users and a temporary SQLite database without a real Provider key.
 - [x] Run full test, build, syntax, secret, responsive browser, shutdown cleanup, and public README verification.
 - [x] Complete the acceptance report and self-contained HTML PR summary.
-- [ ] Commit in Chinese, push `main`, verify public remote SHA, and mark Stage 1 complete only if all exit criteria pass.
+- [x] Commit in Chinese, push `main`, verify public remote SHA, and mark Stage 1 complete only if all exit criteria pass.
 
 ## Self-review
 

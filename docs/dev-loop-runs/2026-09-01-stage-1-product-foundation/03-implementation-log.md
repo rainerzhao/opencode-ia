@@ -171,7 +171,7 @@ Status: implemented, verified and delivered to GitHub `main`.
 
 ## Stage 1E
 
-Status: implemented and in final release verification.
+Status: implemented, verified and delivered to GitHub `main`.
 
 ### Delivered
 
@@ -197,3 +197,13 @@ Status: implemented and in final release verification.
 - 私有边界：成员搜索不到管理员创建的私人知识。
 - `localStorage` 与 `sessionStorage` 均为空；前端无外部 script/link；最终浏览器 errors 为空。
 - 截图：`stage-1e-react-admin-desktop.png`、`stage-1e-react-member-mobile.png`。
+
+### Verification and Delivery
+
+- `npm test`: 118/118 passed in the final release-candidate regression.
+- `npm run build`: passed; 37 modules transformed, output contains only local JS/CSS assets.
+- `npm run check`: 58 JavaScript files passed.
+- `npm run security:scan`: zero findings.
+- `git diff --check`: passed.
+- Main delivery commit: `9a205f5` (`feat: 完成 React 工作台与 Stage 1 总验收`).
+- Push result: `a8ec28c..9a205f5 main -> main`.

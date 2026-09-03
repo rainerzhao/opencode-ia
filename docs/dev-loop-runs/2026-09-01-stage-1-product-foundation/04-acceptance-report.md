@@ -89,4 +89,4 @@ No unresolved `BLOCKER`, `IMPORTANT` or `QUESTION` findings for Stage 1A through
 
 ## Follow-ups
 
-Stage 1 product foundation and Mac browser acceptance are complete. Stage 2 will implement the approved persistent Gateway, Worker pool, logical Session mapping, fair queue and recovery model before Linux productionization.
+Stage 1 product foundation and Mac browser acceptance are complete. Main delivery commit `9a205f5` was pushed to GitHub. Stage 2 will implement the approved persistent Gateway, Worker pool, logical Session mapping, fair queue and recovery model before Linux productionization.
