@@ -42,6 +42,21 @@ function booleanValue(value, defaultValue, name) {
 
 function loadConfig({ env = process.env, projectDir }) {
   const root = path.resolve(env.WORKBENCH_ROOT || projectDir);
+  const opencodeWorkerBasePort = boundedPositiveInteger(
+    env.OPENCODE_WORKER_BASE_PORT,
+    4319,
+    'OPENCODE_WORKER_BASE_PORT',
+    65535
+  );
+  const opencodeWorkerCount = boundedPositiveInteger(
+    env.OPENCODE_WORKER_COUNT,
+    2,
+    'OPENCODE_WORKER_COUNT',
+    16
+  );
+  if (opencodeWorkerBasePort + opencodeWorkerCount - 1 > 65535) {
+    throw new Error('OPENCODE_WORKER_BASE_PORT does not leave enough ports for OPENCODE_WORKER_COUNT');
+  }
 
   return Object.freeze({
     projectDir: root,
@@ -52,11 +67,17 @@ function loadConfig({ env = process.env, projectDir }) {
     opencodeMaxOutputBytes: positiveInteger(env.OPENCODE_MAX_OUTPUT_BYTES, 10 * 1024 * 1024, 'OPENCODE_MAX_OUTPUT_BYTES'),
     opencodeCmd: env.OPENCODE_CMD || path.join(env.HOME || '', '.opencode/bin/opencode'),
     opencodeCwd: path.resolve(env.OPENCODE_CWD || root),
-    opencodeWorkerBasePort: boundedPositiveInteger(
-      env.OPENCODE_WORKER_BASE_PORT,
-      4319,
-      'OPENCODE_WORKER_BASE_PORT',
-      65535
+    opencodeWorkerBasePort,
+    opencodeWorkerCount,
+    opencodeWorkerHeartbeatMs: positiveInteger(
+      env.OPENCODE_WORKER_HEARTBEAT_MS,
+      5000,
+      'OPENCODE_WORKER_HEARTBEAT_MS'
+    ),
+    opencodeWorkerHeartbeatTimeoutMs: positiveInteger(
+      env.OPENCODE_WORKER_HEARTBEAT_TIMEOUT_MS,
+      2000,
+      'OPENCODE_WORKER_HEARTBEAT_TIMEOUT_MS'
     ),
     opencodeWorkerStartupTimeoutMs: positiveInteger(
       env.OPENCODE_WORKER_STARTUP_TIMEOUT_MS,
@@ -87,6 +108,27 @@ function loadConfig({ env = process.env, projectDir }) {
       env.OPENCODE_VERIFIED_VERSION,
       '1.18.25',
       'OPENCODE_VERIFIED_VERSION'
+    ),
+    gatewayGlobalRunning: boundedPositiveInteger(
+      env.GATEWAY_GLOBAL_RUNNING,
+      2,
+      'GATEWAY_GLOBAL_RUNNING',
+      16
+    ),
+    gatewayUserRunning: boundedPositiveInteger(
+      env.GATEWAY_USER_RUNNING,
+      1,
+      'GATEWAY_USER_RUNNING',
+      16
+    ),
+    gatewayUserQueued: boundedPositiveInteger(
+      env.GATEWAY_USER_QUEUED,
+      3,
+      'GATEWAY_USER_QUEUED',
+      100
+    ),
+    gatewayWorkspaceRoot: path.resolve(
+      env.GATEWAY_WORKSPACE_ROOT || path.join(root, 'data/workspaces')
     ),
     knowledgeDir: path.resolve(env.KNOWLEDGE_DIR || path.join(root, 'knowledge')),
     solutionsDir: path.resolve(env.SOLUTIONS_DIR || path.join(root, 'solutions')),

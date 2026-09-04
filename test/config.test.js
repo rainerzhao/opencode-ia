@@ -16,6 +16,13 @@ test('derives data paths from the injected project directory', () => {
   assert.equal(config.loginWindowSeconds, 15 * 60);
   assert.equal(config.loginLockSeconds, 15 * 60);
   assert.equal(config.opencodeWorkerBasePort, 4319);
+  assert.equal(config.opencodeWorkerCount, 2);
+  assert.equal(config.opencodeWorkerHeartbeatMs, 5000);
+  assert.equal(config.opencodeWorkerHeartbeatTimeoutMs, 2000);
+  assert.equal(config.gatewayGlobalRunning, 2);
+  assert.equal(config.gatewayUserRunning, 1);
+  assert.equal(config.gatewayUserQueued, 3);
+  assert.equal(config.gatewayWorkspaceRoot, path.resolve('/srv/workbench/data/workspaces'));
   assert.equal(config.opencodeWorkerStartupTimeoutMs, 10000);
   assert.equal(config.opencodeWorkerReadinessIntervalMs, 100);
   assert.equal(config.opencodeWorkerStopGraceMs, 2000);
@@ -50,6 +57,13 @@ test('loads bounded persistent OpenCode worker settings without a stored passwor
   const config = loadConfig({
     env: {
       OPENCODE_WORKER_BASE_PORT: '4400',
+      OPENCODE_WORKER_COUNT: '3',
+      OPENCODE_WORKER_HEARTBEAT_MS: '6000',
+      OPENCODE_WORKER_HEARTBEAT_TIMEOUT_MS: '2500',
+      GATEWAY_GLOBAL_RUNNING: '3',
+      GATEWAY_USER_RUNNING: '1',
+      GATEWAY_USER_QUEUED: '4',
+      GATEWAY_WORKSPACE_ROOT: '/var/lib/opencode-workbench/workspaces',
       OPENCODE_WORKER_STARTUP_TIMEOUT_MS: '15000',
       OPENCODE_WORKER_READINESS_INTERVAL_MS: '250',
       OPENCODE_WORKER_STOP_GRACE_MS: '3000',
@@ -61,6 +75,13 @@ test('loads bounded persistent OpenCode worker settings without a stored passwor
   });
 
   assert.equal(config.opencodeWorkerBasePort, 4400);
+  assert.equal(config.opencodeWorkerCount, 3);
+  assert.equal(config.opencodeWorkerHeartbeatMs, 6000);
+  assert.equal(config.opencodeWorkerHeartbeatTimeoutMs, 2500);
+  assert.equal(config.gatewayGlobalRunning, 3);
+  assert.equal(config.gatewayUserRunning, 1);
+  assert.equal(config.gatewayUserQueued, 4);
+  assert.equal(config.gatewayWorkspaceRoot, '/var/lib/opencode-workbench/workspaces');
   assert.equal(config.opencodeWorkerStartupTimeoutMs, 15000);
   assert.equal(config.opencodeWorkerReadinessIntervalMs, 250);
   assert.equal(config.opencodeWorkerStopGraceMs, 3000);
@@ -78,6 +99,13 @@ test('rejects an invalid worker port and unsafe worker identity text', () => {
   assert.throws(
     () => loadConfig({ env: { OPENCODE_WORKER_USERNAME: 'bad\nname' }, projectDir: '/srv/workbench' }),
     /OPENCODE_WORKER_USERNAME/
+  );
+  assert.throws(
+    () => loadConfig({
+      env: { OPENCODE_WORKER_BASE_PORT: '65535', OPENCODE_WORKER_COUNT: '2' },
+      projectDir: '/srv/workbench'
+    }),
+    /OPENCODE_WORKER_BASE_PORT/
   );
 });
 

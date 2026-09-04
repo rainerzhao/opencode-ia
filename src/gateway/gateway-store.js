@@ -241,6 +241,10 @@ function createGatewayStore(db, {
     return toConversation(conversationByOwner.get(id, ownerUserId));
   }
 
+  function getOpenCodeSession({ conversationId }) {
+    return toOpenCodeSession(sessionByConversation.get(conversationId));
+  }
+
   function createJob({ conversationId, userId, idempotencyKey, inputText }) {
     const conversation = requiredString(
       conversationId,
@@ -291,6 +295,27 @@ function createGatewayStore(db, {
     const row = jobById.get(id);
     if (!row || (userId && row.user_id !== userId)) return null;
     return toJob(row);
+  }
+
+  function getJobByIdempotency({ userId, idempotencyKey }) {
+    return toJob(jobByIdempotency.get(userId, idempotencyKey));
+  }
+
+  function attachJobBinding({ jobId, workerId, bindingId }) {
+    const job = jobById.get(jobId);
+    const binding = db.prepare('SELECT * FROM opencode_sessions WHERE id = ?').get(bindingId);
+    if (!job) throw storeError('JOB_NOT_FOUND', 'job was not found');
+    if (job.status !== 'running') throw storeError('INVALID_JOB_STATUS', 'job is not running');
+    if (!binding || binding.conversation_id !== job.conversation_id || binding.worker_id !== workerId) {
+      throw storeError('INVALID_SESSION_BINDING', 'session binding does not match the job');
+    }
+    const result = db.prepare(`
+      UPDATE gateway_jobs
+      SET worker_id = ?, opencode_session_binding_id = ?, updated_at = ?
+      WHERE id = ? AND status = 'running'
+    `).run(workerId, bindingId, clock(), jobId);
+    if (Number(result.changes) !== 1) throw storeError('INVALID_JOB_STATUS', 'job is not running');
+    return toJob(jobById.get(jobId));
   }
 
   function transitionJob({ jobId, userId, event, errorCode = null, workerId, bindingId }) {
@@ -517,10 +542,13 @@ function createGatewayStore(db, {
 
   return {
     appendEvent,
+    attachJobBinding,
     bindOpenCodeSession,
     createConversation,
     createJob,
     getJob,
+    getJobByIdempotency,
+    getOpenCodeSession,
     getOwnedConversation,
     listConversations,
     listEventsAfter,

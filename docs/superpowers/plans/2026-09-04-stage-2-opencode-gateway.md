@@ -97,13 +97,13 @@
 - `createWorkerPool({ workerCount, workerFactory, heartbeatMs, heartbeatTimeoutMs }): { start, stop, acquire, release, markUnhealthy, snapshot }`
 - `createGatewayService({ store, pool, queue, workspaceRoot, limits }): { start, stop, submit, cancel, subscribe, recover, snapshot }`
 
-- [ ] Write fair-queue tests with users A/B/C proving round-robin selection, per-user FIFO, queue-limit rejection, cancellation, and no starvation; verify RED before implementation.
-- [ ] Implement the deterministic queue with explicit user rings and re-run to GREEN.
-- [ ] Write Worker-pool tests for two parallel slots, sticky Session reuse, unhealthy Worker exclusion, heartbeat recovery, and clean shutdown; verify RED.
-- [ ] Implement the pool using injected Worker factories and persist only non-secret operational metadata.
-- [ ] Write Gateway-service tests proving same-Conversation serialization, different-Conversation parallelism, global limit 2, user running limit 1, idempotent submit, event sequencing, cancellation, timeout, and affected-only interruption on Worker exit; verify RED.
-- [ ] Implement scheduling and transactional job/event changes; derive workspace paths under `data/workspaces/<user-id>/<conversation-id>` using existing safe-path primitives.
-- [ ] Run a deterministic 20-user simulated load test and the full verification gate.
+- [x] Write fair-queue tests with users A/B/C proving round-robin selection, per-user FIFO, queue-limit rejection, cancellation, and no starvation; verify RED before implementation.
+- [x] Implement the deterministic queue with explicit user rings and re-run to GREEN.
+- [x] Write Worker-pool tests for two parallel slots, sticky Session reuse, unhealthy Worker exclusion, heartbeat recovery, and clean shutdown; verify RED.
+- [x] Implement the pool using injected Worker factories and persist only non-secret operational metadata.
+- [x] Write Gateway-service tests proving same-Conversation serialization, different-Conversation parallelism, global limit 2, user running limit 1, idempotent submit, event sequencing, cancellation, timeout, and affected-only interruption on Worker exit; verify RED.
+- [x] Implement scheduling and transactional job/event changes; derive workspace paths under `data/workspaces/<user-id>/<conversation-id>` using existing safe-path primitives.
+- [x] Run a deterministic 20-user simulated load test and the full verification gate.
 - [ ] Update README with actual queue/Worker status, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
 
 ### Task 2D: Conversation product API, reconnectable WebSocket, and UI

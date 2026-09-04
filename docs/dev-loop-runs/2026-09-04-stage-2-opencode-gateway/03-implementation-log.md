@@ -73,3 +73,37 @@
 - `git diff --check`：通过。
 - 真实 OpenCode Worker 停止后，`127.0.0.1:4319` 无监听进程。
 - GitHub：Stage 2B 提交 `44826f6` 已推送到公开仓库 `main`，远端 SHA 与本地一致。
+
+## Stage 2C：双 Worker、粘性 Session 与公平队列
+
+### Delivered
+
+- 按用户轮转的公平队列：同用户 FIFO、用户间 round-robin、单用户排队上限、取消与暂不可运行跳过。
+- 默认 2 Worker 的常驻池：Conversation 粘性、容量租约、健康 Worker 选择、心跳摘除与重启、干净停止。
+- Gateway Service：持久 Job 入队、受控工作目录、OpenCode Session 创建/复用、消息执行、有序事件、取消与超时。
+- 默认全局并发 2、单用户并发 1、单 Conversation 并发 1；同一用户不能占满两个槽位。
+- Worker 异常只中断该 Worker 上的 Job，另一个 Worker 继续完成；Worker 密码不进入池快照、数据库或日志。
+- 20 用户确定性模拟全部完成，无用户饥饿，全局与用户并发峰值均未越界。
+
+### TDD Evidence
+
+1. `fair-queue`、`worker-pool`、`gateway-service` 首次运行均因模块不存在进入 RED，随后逐模块实现转绿。
+2. 集成测试发现 Worker 元数据未先持久化会造成 Session 外键失败；增加状态订阅后修复。
+3. 队列溢出回归先复现孤儿幂等 Job，改为容量预检后允许释放容量再用同一幂等键正常提交。
+4. Session 创建失败回归先复现 Job 停在 `queued`，改为 Worker 获租即进入 `running` 后正确转为 `failed`。
+5. 停止状态、启动时限与组合端口边界测试均先失败，修复后通过。
+
+### Review Notes
+
+- 产品聊天尚未接入本 Gateway；Stage 2C 验收范围是服务端调度与执行底座，用户可见多 Conversation 在 Stage 2D 完成。
+- 工作目录只能由服务端以用户和 Conversation 标识派生，并再次经过现有根目录与符号链接安全策略。
+- 心跳失败清空的仅是受影响 Worker 租约，其他 Worker 的任务和会话不被取消。
+
+### Verification
+
+- `npm test`：166/166 通过。
+- `npm run build`：Vite production build 通过，37 modules transformed。
+- `npm run check`：78 个仓库 JavaScript 文件语法检查通过。
+- `npm run security:scan`：通过，无发现。
+- `git diff --check`：通过。
+- GitHub 远端提交证据在 Stage 2C 推送后补录。
