@@ -106,4 +106,4 @@
 - `npm run check`：78 个仓库 JavaScript 文件语法检查通过。
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
-- GitHub 远端提交证据在 Stage 2C 推送后补录。
+- GitHub：Stage 2C 主提交 `5664786` 已推送到公开仓库 `main`，远端 SHA 与本地一致。

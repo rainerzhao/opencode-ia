@@ -104,7 +104,7 @@
 - [x] Write Gateway-service tests proving same-Conversation serialization, different-Conversation parallelism, global limit 2, user running limit 1, idempotent submit, event sequencing, cancellation, timeout, and affected-only interruption on Worker exit; verify RED.
 - [x] Implement scheduling and transactional job/event changes; derive workspace paths under `data/workspaces/<user-id>/<conversation-id>` using existing safe-path primitives.
 - [x] Run a deterministic 20-user simulated load test and the full verification gate.
-- [ ] Update README with actual queue/Worker status, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
+- [x] Update README with actual queue/Worker status, record evidence, commit in Chinese, push `main`, and verify the remote SHA. Remote commit: `5664786`.
 
 ### Task 2D: Conversation product API, reconnectable WebSocket, and UI
 
