@@ -1,6 +1,6 @@
 # Stage 2：常驻 OpenCode Gateway 与多 Worker 会话架构
 
-**状态：** 设计确认；Stage 2A–2C 已完成，Stage 2D–2E 待开发
+**状态：** 设计确认；Stage 2A–2C 已完成，Stage 2D 开发中，Stage 2E 待开发
 **目标环境：** Mac 开发验收，随后迁移公司内网单台 Linux  
 **目标规模：** 15–20 名成员
 

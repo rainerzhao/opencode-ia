@@ -229,3 +229,19 @@ test('marks only unknown running work interrupted during startup recovery', (t) 
   });
   assert.equal(events.at(-1).type, GATEWAY_EVENT_TYPES.JOB_INTERRUPTED);
 });
+
+test('does not accept new jobs after a conversation is archived', (t) => {
+  const { store } = createFixture(t);
+  const conversation = store.createConversation({ ownerUserId: 'user-a', title: 'Archive me' });
+  store.archiveConversation({ id: conversation.id, ownerUserId: 'user-a' });
+
+  assert.throws(
+    () => store.createJob({
+      conversationId: conversation.id,
+      userId: 'user-a',
+      idempotencyKey: 'after-archive',
+      inputText: 'must not run'
+    }),
+    (error) => error.code === 'CONVERSATION_ARCHIVED'
+  );
+});

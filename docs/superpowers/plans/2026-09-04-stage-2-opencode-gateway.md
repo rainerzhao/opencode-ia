@@ -126,8 +126,8 @@
 - WebSocket client messages: `subscribe { conversationId, afterSequence }`, `prompt { conversationId, text, idempotencyKey }`, `cancel { conversationId, jobId }`
 - WebSocket server messages: the Stage 2A event envelope `{ type, conversationId, jobId, sequence, occurredAt, data }`
 
-- [ ] Write API tests proving create/list/rename/archive, owner isolation, CSRF enforcement, admin metadata-only access, invalid identifiers, and audit attribution; verify RED.
-- [ ] Implement focused route modules backed by `gateway-store`, keeping private bodies out of admin responses.
+- [x] Write API tests proving create/list/rename/archive, owner isolation, CSRF enforcement, admin metadata-only access, invalid identifiers, and audit attribution; verify RED.
+- [x] Implement focused route modules backed by `gateway-store`, keeping private bodies out of admin responses.
 - [ ] Write WebSocket tests for subscribe snapshot, prompt acceptance, queued/started/delta/completed order, reconnect from `afterSequence`, stale-sequence snapshot fallback, duplicate idempotency key, cancel ownership, and revoked login Session; verify RED.
 - [ ] Replace the transient per-socket `sessions` execution path with Gateway subscriptions while retaining the existing authentication and Origin checks; keep the old message protocol only in Demo compatibility mode until UI cutover passes.
 - [ ] Add UI contract tests for Conversation navigation, queue/run/interrupt status, stop action, reconnect notice, recovery boundary, and no private state in browser storage; verify RED.

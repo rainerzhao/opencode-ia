@@ -107,3 +107,31 @@
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
 - GitHub：Stage 2C 主提交 `5664786` 已推送到公开仓库 `main`，远端 SHA 与本地一致。
+
+## Stage 2D.1：私人 Conversation 产品 API
+
+### Delivered
+
+- 成员可创建、列出、读取、重命名和逻辑归档自己的 Conversation。
+- 所有写请求继续使用现有登录与 CSRF 门禁；成员无法读取、修改或归档其他成员 Conversation。
+- 管理员只能读取 Conversation 的运行元数据，不返回私人标题或正文。
+- 创建、重命名和归档动作写入账号归属审计，审计元数据不保存私人标题。
+- 已归档 Conversation 不再接受新 Gateway Job，避免后台继续执行不可见会话。
+
+### TDD Evidence
+
+1. `test/api/conversations.test.js` 首次 4/4 失败并落到未实现路由；实现 Store 与路由后 4/4 通过。
+2. 代码复核增加“归档后不能创建 Job”用例，首次复现可继续入队，收紧 Store 后转绿。
+
+### Boundary
+
+- 本子阶段只完成 REST 产品对象；WebSocket 事件续传与前端 Conversation 界面仍属于 Stage 2D 后续工作。
+
+### Verification
+
+- Conversation/API 定向验收：20/20 通过。
+- `npm test`：171/171 通过。
+- `npm run build`：通过，37 modules transformed。
+- `npm run check`：80 个仓库 JavaScript 文件语法检查通过。
+- `npm run security:scan`：通过，无发现。
+- `git diff --check`：通过。

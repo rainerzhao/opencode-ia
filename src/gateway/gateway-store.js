@@ -144,6 +144,9 @@ function createGatewayStore(db, {
     SELECT * FROM opencode_sessions WHERE conversation_id = ?
   `);
   const workerById = db.prepare('SELECT * FROM gateway_workers WHERE id = ?');
+  const activeConversationByOwner = db.prepare(`
+    SELECT * FROM conversations WHERE id = ? AND owner_user_id = ? AND status = 'active'
+  `);
 
   function transaction(action) {
     db.exec('BEGIN IMMEDIATE;');
@@ -241,6 +244,53 @@ function createGatewayStore(db, {
     return toConversation(conversationByOwner.get(id, ownerUserId));
   }
 
+  function updateConversation({ id, ownerUserId, title }) {
+    const conversation = conversationByOwner.get(id, ownerUserId);
+    if (!conversation) throw storeError('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (!activeConversationByOwner.get(id, ownerUserId)) {
+      throw storeError('CONVERSATION_ARCHIVED', 'archived conversation cannot be changed');
+    }
+    const normalizedTitle = requiredString(
+      title,
+      'INVALID_CONVERSATION_TITLE',
+      'conversation title is invalid',
+      { max: 200 }
+    );
+    db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?')
+      .run(normalizedTitle, clock(), id);
+    return toConversation(conversationById.get(id));
+  }
+
+  function archiveConversation({ id, ownerUserId }) {
+    const conversation = conversationByOwner.get(id, ownerUserId);
+    if (!conversation) throw storeError('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (conversation.status === 'archived') return toConversation(conversation);
+    db.prepare(`UPDATE conversations SET status = 'archived', updated_at = ? WHERE id = ?`)
+      .run(clock(), id);
+    return toConversation(conversationById.get(id));
+  }
+
+  function listConversationMetadata({ limit = 200, offset = 0 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw storeError('INVALID_LIMIT', 'conversation limit is invalid');
+    }
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw storeError('INVALID_OFFSET', 'conversation offset is invalid');
+    }
+    return db.prepare(`
+      SELECT id, owner_user_id, status, created_at, updated_at
+      FROM conversations
+      ORDER BY updated_at DESC, id DESC
+      LIMIT ? OFFSET ?
+    `).all(limit, offset).map((row) => ({
+      id: row.id,
+      ownerUserId: row.owner_user_id,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+  }
+
   function getOpenCodeSession({ conversationId }) {
     return toOpenCodeSession(sessionByConversation.get(conversationId));
   }
@@ -262,7 +312,10 @@ function createGatewayStore(db, {
       max: 100000,
       allowLineBreaks: true
     });
-    ensureOwnedConversation(conversation, user);
+    const ownedConversation = ensureOwnedConversation(conversation, user);
+    if (ownedConversation.status !== 'active') {
+      throw storeError('CONVERSATION_ARCHIVED', 'archived conversation cannot accept jobs');
+    }
     const existing = jobByIdempotency.get(user, key);
     if (existing) {
       if (existing.conversation_id !== conversation || existing.input_text !== input) {
@@ -543,6 +596,7 @@ function createGatewayStore(db, {
   return {
     appendEvent,
     attachJobBinding,
+    archiveConversation,
     bindOpenCodeSession,
     createConversation,
     createJob,
@@ -551,9 +605,11 @@ function createGatewayStore(db, {
     getOpenCodeSession,
     getOwnedConversation,
     listConversations,
+    listConversationMetadata,
     listEventsAfter,
     recoverOnStartup,
     transitionJob,
+    updateConversation,
     upsertWorker
   };
 }

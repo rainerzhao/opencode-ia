@@ -17,6 +17,11 @@ const { createRequestAuditor } = require('./audit/request-audit');
 const { SESSION_COOKIE, readCookie } = require('./http/cookies');
 const { createAuthRouter } = require('./modules/auth/routes');
 const { createUserAdminRouter } = require('./modules/users/routes');
+const {
+  createConversationAdminRouter,
+  createConversationRouter
+} = require('./modules/conversations/routes');
+const { createGatewayStore } = require('./gateway/gateway-store');
 
 function createWorkbenchServer({
   config,
@@ -59,6 +64,7 @@ const authService = createAuthService({
 });
 const authMiddleware = createAuthMiddleware({ authService });
 const requestAuditor = createRequestAuditor({ db });
+const gatewayStore = createGatewayStore(db);
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -114,6 +120,11 @@ app.use('/api', (req, res, next) => {
   }
   authMiddleware.requireCsrf(req, res, next);
 });
+app.use('/api/conversations', createConversationRouter({ store: gatewayStore, requestAuditor }));
+app.use('/api/admin/conversations', createConversationAdminRouter({
+  store: gatewayStore,
+  requireAdmin: authMiddleware.requireRole('admin')
+}));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);

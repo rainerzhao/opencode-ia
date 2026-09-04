@@ -2,7 +2,7 @@
 
 ## Overall Verdict
 
-**IN PROGRESS** — Stage 2A–2C 通过验收；Stage 2D–2E 尚未开发，不能把常驻 Gateway 标记为整体完成。
+**IN PROGRESS** — Stage 2A–2C 通过验收；Stage 2D 的私人 Conversation API 已通过，实时协议与 UI 尚未完成；Stage 2E 尚未开发。
 
 ## Stage 2A Verdict
 
