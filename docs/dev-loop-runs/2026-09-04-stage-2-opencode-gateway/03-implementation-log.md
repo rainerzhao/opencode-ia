@@ -32,6 +32,7 @@
 - `npm run check`：64 个仓库 JavaScript 文件语法检查通过。
 - `npm run security:scan`：无发现。
 - `git diff --check`：首次发现架构文档一处行尾空格；修正后重新执行并通过。
+- GitHub：Stage 2A 提交 `50ed662` 已推送到公开仓库 `main`。
 
 ## Stage 2B：单个常驻 Worker 与 OpenCode HTTP/SSE 客户端
 
@@ -71,3 +72,4 @@
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
 - 真实 OpenCode Worker 停止后，`127.0.0.1:4319` 无监听进程。
+- GitHub：Stage 2B 提交 `44826f6` 已推送到公开仓库 `main`，远端 SHA 与本地一致。

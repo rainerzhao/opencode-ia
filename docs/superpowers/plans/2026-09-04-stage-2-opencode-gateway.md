@@ -48,7 +48,7 @@
 - [x] Run the state test and confirm failure because `job-state.js` does not exist.
 - [x] Implement the immutable transition table and public error codes; then implement store ownership checks, transactional state/event writes, idempotent creation, bounded event reads, and startup recovery from `running` to `interrupted`.
 - [x] Run Stage 2A tests plus `npm test`, `npm run build`, `npm run check`, `npm run security:scan`, and `git diff --check`.
-- [ ] Update README to split “多人基础对话” from “常驻 Gateway”, correct the completed Stage 1 status in the roadmap, record evidence, commit in Chinese, push `main`, and verify the remote SHA. Local commit: `50ed662`; GitHub upload is pending network recovery.
+- [x] Update README to split “多人基础对话” from “常驻 Gateway”, correct the completed Stage 1 status in the roadmap, record evidence, commit in Chinese, push `main`, and verify the remote SHA. Remote commit: `50ed662`.
 
 ### Task 2B: One supervised OpenCode Worker and direct API client
 
@@ -77,7 +77,7 @@
 - [x] Write worker-process tests for loopback binding, random secret injection, readiness deadline, unexpected exit, graceful SIGTERM/SIGKILL fallback, and secret redaction; verify RED.
 - [x] Implement `opencode serve --hostname 127.0.0.1 --port <port>` supervision with `OPENCODE_SERVER_PASSWORD` and health-based readiness; never use `shell: true`.
 - [x] Run Stage 2B targeted tests and the full verification gate.
-- [ ] Update README/config docs with the real Worker boundary, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
+- [x] Update README/config docs with the real Worker boundary, record evidence, commit in Chinese, push `main`, and verify the remote SHA. Remote commit: `44826f6`.
 
 ### Task 2C: Worker pool, sticky sessions, and fair persistent queue
 
