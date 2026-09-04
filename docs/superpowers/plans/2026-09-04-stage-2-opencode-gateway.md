@@ -48,7 +48,7 @@
 - [x] Run the state test and confirm failure because `job-state.js` does not exist.
 - [x] Implement the immutable transition table and public error codes; then implement store ownership checks, transactional state/event writes, idempotent creation, bounded event reads, and startup recovery from `running` to `interrupted`.
 - [x] Run Stage 2A tests plus `npm test`, `npm run build`, `npm run check`, `npm run security:scan`, and `git diff --check`.
-- [x] Update README to split “多人基础对话” from “常驻 Gateway”, correct the completed Stage 1 status in the roadmap, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
+- [ ] Update README to split “多人基础对话” from “常驻 Gateway”, correct the completed Stage 1 status in the roadmap, record evidence, commit in Chinese, push `main`, and verify the remote SHA. Local commit: `50ed662`; GitHub upload is pending network recovery.
 
 ### Task 2B: One supervised OpenCode Worker and direct API client
 
@@ -69,14 +69,14 @@
 - `createOpenCodeClient({ endpoint, username, password, fetchImpl }): { health, createSession, prompt, subscribeEvents, abortSession, getSession }`
 - `parseSseStream(readable, onEvent, signal): Promise<void>`
 
-- [ ] Write SSE parser tests for chunk boundaries, multi-line data, comments, malformed JSON isolation, abort, and output-size limits; run them and confirm the missing-module failure.
-- [ ] Implement a bounded UTF-8 SSE parser and re-run the tests to green.
-- [ ] Build a fake loopback OpenCode server implementing `/global/health`, `/event`, `/session`, `/session/:id/message`, and `/session/:id/abort` with controllable delays and failures.
-- [ ] Write client contract tests for Basic Auth, directory scoping, Session creation, prompt events, abort, non-2xx mapping, timeout, and version mismatch; verify RED.
-- [ ] Implement the direct HTTP/SSE client against the verified 1.18.25 request bodies and stable internal error codes; verify GREEN.
-- [ ] Write worker-process tests for loopback binding, random secret injection, readiness deadline, unexpected exit, graceful SIGTERM/SIGKILL fallback, and secret redaction; verify RED.
-- [ ] Implement `opencode serve --hostname 127.0.0.1 --port <port>` supervision with `OPENCODE_SERVER_PASSWORD` and health-based readiness; never use `shell: true`.
-- [ ] Run Stage 2B targeted tests and the full verification gate.
+- [x] Write SSE parser tests for chunk boundaries, multi-line data, comments, malformed JSON isolation, abort, and output-size limits; run them and confirm the missing-module failure.
+- [x] Implement a bounded UTF-8 SSE parser and re-run the tests to green.
+- [x] Build a fake loopback OpenCode server implementing `/global/health`, `/event`, `/session`, `/session/:id/message`, and `/session/:id/abort` with controllable delays and failures.
+- [x] Write client contract tests for Basic Auth, directory scoping, Session creation, prompt events, abort, non-2xx mapping, timeout, and version mismatch; verify RED.
+- [x] Implement the direct HTTP/SSE client against the verified 1.18.25 request bodies and stable internal error codes; verify GREEN.
+- [x] Write worker-process tests for loopback binding, random secret injection, readiness deadline, unexpected exit, graceful SIGTERM/SIGKILL fallback, and secret redaction; verify RED.
+- [x] Implement `opencode serve --hostname 127.0.0.1 --port <port>` supervision with `OPENCODE_SERVER_PASSWORD` and health-based readiness; never use `shell: true`.
+- [x] Run Stage 2B targeted tests and the full verification gate.
 - [ ] Update README/config docs with the real Worker boundary, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
 
 ### Task 2C: Worker pool, sticky sessions, and fair persistent queue

@@ -36,7 +36,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。Stage 2A 已完成常驻 Gateway 的数据与协议底座；OpenCode Worker、完整团队 Skill 发布和 Linux 部署仍会在后续版本逐步完成。
+> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。Stage 2B 已完成单个常驻 OpenCode Worker 与 HTTP/SSE 客户端；Worker 池、完整团队 Skill 发布和 Linux 部署仍会在后续版本逐步完成。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -80,7 +80,7 @@ DEMO_PORT=4321 npm run demo
 | 账号与角色 | ✅ 可体验 | 管理员管理账号，普通成员只使用业务功能 |
 | 数据与操作边界 | ✅ 已具备 | 个人内容默认私有，关键操作保留账号归属 |
 | 多用户实时对话 | ✅ 基础版可体验 | 支持身份隔离和同时在线，断线后不保留运行会话 |
-| 常驻多会话 Gateway | 🚧 2A 已完成 | 已具备持久状态与事件协议；Worker、排队和恢复链路继续开发 |
+| 常驻多会话 Gateway | 🚧 2B 已完成 | 已具备持久状态与单 Worker；Worker 池、排队和恢复链路继续开发 |
 | Skill 资产浏览 | ✅ 基础版可体验 | 展示服务器中已经安装的 Skill |
 | 团队 Skill 中心 | 📝 待开发 | 成员创建、校验、发布、安装、启用、版本和回滚 Skill |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
@@ -108,7 +108,7 @@ flowchart LR
     O --> K[团队 Skills]
 ```
 
-当前使用 React/Vite 前端 + 模块化 Express 后端，账号、SQLite、私有知识和方案底座已经接通。Stage 2A 已增加 Conversation、Job、Worker、OpenCode Session 映射和可续传事件的数据底座；后续阶段将把每消息进程模式替换为“一个常驻 Gateway + 多个常驻 OpenCode Worker + 多个逻辑 Session”。Mac 从 2 个 Worker 起步，Linux 根据压测在 2–4 个间调整。
+当前使用 React/Vite 前端 + 模块化 Express 后端，账号、SQLite、私有知识和方案底座已经接通。Stage 2A 已增加 Conversation、Job、Worker、OpenCode Session 映射和可续传事件的数据底座；Stage 2B 已用本机 OpenCode 1.18.25 验证受保护 Worker 的启动、健康检查和停止，并完成 Session、消息、事件订阅及取消的 HTTP/SSE 客户端契约。Mac 后续从 2 个 Worker 起步，Linux 根据压测在 2–4 个间调整。
 
 ## 真实模式：Mac 开发启动
 
@@ -153,6 +153,13 @@ npm start
 | `OPENCODE_CWD` | 工作台根目录 | OpenCode 运行目录 |
 | `OPENCODE_TIMEOUT_MS` | `120000` | 单次消息超时，单位毫秒 |
 | `OPENCODE_MAX_OUTPUT_BYTES` | `10485760` | stdout 与 stderr 总字节上限 |
+| `OPENCODE_WORKER_BASE_PORT` | `4319` | 常驻 Worker 起始回环端口 |
+| `OPENCODE_WORKER_STARTUP_TIMEOUT_MS` | `10000` | Worker 启动健康等待上限 |
+| `OPENCODE_WORKER_READINESS_INTERVAL_MS` | `100` | Worker 启动阶段健康检查间隔 |
+| `OPENCODE_WORKER_STOP_GRACE_MS` | `2000` | Worker 优雅停止等待时间 |
+| `OPENCODE_WORKER_KILL_GRACE_MS` | `1000` | 强制停止后的最终等待时间 |
+| `OPENCODE_WORKER_USERNAME` | `opencode` | 仅供回环 Worker 使用的 Basic Auth 用户名 |
+| `OPENCODE_VERIFIED_VERSION` | `1.18.25` | 当前完成协议验证的 OpenCode 版本 |
 | `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
 | `SOLUTIONS_DIR` | `<root>/solutions` | 方案目录 |
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
@@ -206,7 +213,7 @@ npm run check
 npm run security:scan
 ```
 
-- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、Gateway 持久状态、路径、上传、URL 安全边界及 React 前端契约；Stage 2A 当前共 129 项（提交前以最新全量输出为准）。
+- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、Gateway 持久状态、常驻 Worker、HTTP/SSE、路径、上传、URL 安全边界及 React 前端契约；Stage 2B 当前共 147 项（提交前以最新全量输出为准）。
 - 语法检查只检查仓库自有 JavaScript 文件。
 - 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
 - `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
@@ -216,12 +223,12 @@ npm run security:scan
 ## 已知限制与下一阶段
 
 - Stage 1E 已完成 React/Vite 迁移；当前没有完整客户端路由和设计系统，后续按功能增长再引入，避免为首版过度设计。
-- 当前每条消息仍调用一次有界 `opencode run`；Stage 2A 只完成 Gateway 持久状态、任务状态机和事件契约，常驻 Worker、公平排队及前端恢复尚未接入。
+- 当前产品聊天仍调用一次有界 `opencode run`；Stage 2B 已验证常驻 Worker 模块和 OpenCode HTTP/SSE 客户端，但要到 Stage 2C–2D 才会通过 Worker 池与 Gateway WebSocket 替换旧聊天链路。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **Stage 2B：单个受保护的常驻 OpenCode Worker**。整体设计采用单机 SQLite、常驻 Gateway、2 个起步的 Worker 池和多逻辑 Session，不按用户固定进程，也不提前引入 Redis/Kubernetes。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
+下一交付点是 **Stage 2C：2 Worker 池、粘性 Session 和公平队列**。整体设计采用单机 SQLite、常驻 Gateway、2 个起步的 Worker 池和多逻辑 Session，不按用户固定进程，也不提前引入 Redis/Kubernetes。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
 
 ## 项目目录
 

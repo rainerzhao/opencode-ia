@@ -32,3 +32,42 @@
 - `npm run check`：64 个仓库 JavaScript 文件语法检查通过。
 - `npm run security:scan`：无发现。
 - `git diff --check`：首次发现架构文档一处行尾空格；修正后重新执行并通过。
+
+## Stage 2B：单个常驻 Worker 与 OpenCode HTTP/SSE 客户端
+
+### Delivered
+
+- 有界 SSE 解析器：支持任意分片、UTF-8 边界、多行 `data`、注释帧、畸形 JSON 隔离、取消和单事件大小上限。
+- 仅允许回环 HTTP Origin 的 OpenCode Client：覆盖健康、Session 创建/读取、Prompt、SSE 事件订阅和 Session Abort。
+- HTTP 客户端对连接和完整 JSON 响应体统一实施超时，并将取消、超时、网络、非 2xx、协议错误和版本漂移映射为稳定安全错误。
+- Worker Process Supervisor：参数数组启动 `opencode serve`，运行时随机 Basic Auth 密码，健康就绪门禁、版本门禁、异常退出状态和 SIGTERM/SIGKILL 清理。
+- 新增常驻 Worker 配置边界；配置中不提供、不保存 Worker 密码。
+
+### TDD Evidence
+
+1. `test/gateway/sse-parser.test.js` 首次运行因模块不存在而失败；实现后覆盖 5 项行为。复核发现消费者抛出的 `SyntaxError` 会被误吞，新增先失败用例后修复。
+2. `test/gateway/opencode-client.test.js` 首次运行因模块不存在而失败；实现后覆盖 4 组契约。复核增加“响应头已到达、正文超时”用例，先复现漏控再修复为完整请求期限。
+3. `test/gateway/worker-process.test.js` 首次运行因模块不存在而失败；实现后覆盖 7 项行为。复核增加不存在可执行文件用例，先复现 `stopping` 残留再改用 `close` 事件收敛为 `stopped`。
+4. `test/config.test.js` 新增 Worker 默认值、显式配置、端口上界、身份字符和无密码字段用例，首次 3 项失败后实现转绿。
+
+### Real OpenCode Smoke
+
+- 本机命令：`/Users/yenini/.opencode/bin/opencode`。
+- 已验证版本：`1.18.25`。
+- Worker：成功启动于 `http://127.0.0.1:4319`，`/global/health` 返回健康，随后正常停止，端口释放。
+- 本次冒烟未发送 Prompt，不调用真实模型，不输出运行密码。
+
+### Review Notes
+
+- Worker 标准输出和错误输出默认不转发，避免第三方运行时把凭证或私人正文带入工作台日志。
+- 所有子进程参数通过数组传入且 `shell: false`；浏览器不会获得 Worker Origin 或 Basic Auth 密码。
+- Stage 2B 交付的是可复用 Worker 与 Client 边界，尚未替换现有产品聊天链路。
+
+### Verification
+
+- `npm test`：147/147 通过。
+- `npm run build`：通过，37 modules transformed。
+- `npm run check`：通过，72 files。
+- `npm run security:scan`：通过，无发现。
+- `git diff --check`：通过。
+- 真实 OpenCode Worker 停止后，`127.0.0.1:4319` 无监听进程。

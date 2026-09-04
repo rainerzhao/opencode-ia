@@ -2,9 +2,13 @@
 
 ## Overall Verdict
 
-**IN PROGRESS** — Stage 2A 通过验收；Stage 2B–2E 尚未开发，不能把常驻 Gateway 标记为整体完成。
+**IN PROGRESS** — Stage 2A–2B 通过验收；Stage 2C–2E 尚未开发，不能把常驻 Gateway 标记为整体完成。
 
 ## Stage 2A Verdict
+
+**PASS**
+
+## Stage 2B Verdict
 
 **PASS**
 
@@ -16,6 +20,8 @@
 - Conversation 所有权、Job 幂等提交、Worker 元数据和 OpenCode Session 粘性绑定。
 - 有序事件追加、所有者事件读取和启动恢复。
 - Stage 1 认证、权限、文件安全、Demo、React 构建和 WebSocket 回归。
+- SSE 流边界、OpenCode HTTP 契约、Worker 安全启动、健康、版本、异常退出和停止清理。
+- 本机真实 OpenCode 1.18.25 的无模型启动、健康和停止冒烟。
 
 ## Reviewers Run
 
@@ -30,16 +36,19 @@
 - `node --test --test-concurrency=1 test/db/gateway-database.test.js`：3/3。
 - `node --test --test-concurrency=1 test/gateway/job-state.test.js`：3/3。
 - `node --test --test-concurrency=1 test/gateway/gateway-store.test.js`：5/5。
-- `npm test`：129/129。
+- `node --test --test-concurrency=1 test/gateway/sse-parser.test.js`：5/5。
+- `node --test --test-concurrency=1 test/gateway/opencode-client.test.js`：4/4。
+- `node --test --test-concurrency=1 test/gateway/worker-process.test.js`：7/7。
+- `npm test`：147/147。
 - `npm run build`：通过，37 modules transformed。
-- `npm run check`：通过，64 files。
+- `npm run check`：通过，72 files。
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
 
 ## Requirement Coverage
 
 - Stage 2A：通过。
-- Stage 2B 单 Worker：未开始。
+- Stage 2B 单 Worker：通过。
 - Stage 2C Worker 池与队列：未开始。
 - Stage 2D 多会话产品链路：未开始。
 - Stage 2E 恢复与总验收：未开始。
@@ -53,6 +62,5 @@
 ## Residual Risks
 
 - Stage 2A 尚未进入 Express 运行链路，现有聊天仍使用每消息一次 `opencode run`。
-- OpenCode HTTP/SSE 协议、Worker 随机密码和进程清理由 Stage 2B 验证。
 - 公平排队、并发与故障隔离由 Stage 2C 验证。
 - 浏览器多会话、断线续传和用户可见恢复边界由 Stage 2D 验证。

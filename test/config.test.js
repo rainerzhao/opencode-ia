@@ -15,6 +15,13 @@ test('derives data paths from the injected project directory', () => {
   assert.equal(config.loginMaxFailures, 5);
   assert.equal(config.loginWindowSeconds, 15 * 60);
   assert.equal(config.loginLockSeconds, 15 * 60);
+  assert.equal(config.opencodeWorkerBasePort, 4319);
+  assert.equal(config.opencodeWorkerStartupTimeoutMs, 10000);
+  assert.equal(config.opencodeWorkerReadinessIntervalMs, 100);
+  assert.equal(config.opencodeWorkerStopGraceMs, 2000);
+  assert.equal(config.opencodeWorkerKillGraceMs, 1000);
+  assert.equal(config.opencodeWorkerUsername, 'opencode');
+  assert.equal(config.opencodeVerifiedVersion, '1.18.25');
 });
 
 test('accepts an explicit database path without placing it in source directories', () => {
@@ -36,6 +43,41 @@ test('rejects non-integer environment overrides', () => {
   assert.throws(
     () => loadConfig({ env: { PORT: '3000.5' }, projectDir: '/srv/workbench' }),
     /PORT/
+  );
+});
+
+test('loads bounded persistent OpenCode worker settings without a stored password', () => {
+  const config = loadConfig({
+    env: {
+      OPENCODE_WORKER_BASE_PORT: '4400',
+      OPENCODE_WORKER_STARTUP_TIMEOUT_MS: '15000',
+      OPENCODE_WORKER_READINESS_INTERVAL_MS: '250',
+      OPENCODE_WORKER_STOP_GRACE_MS: '3000',
+      OPENCODE_WORKER_KILL_GRACE_MS: '1500',
+      OPENCODE_WORKER_USERNAME: 'internal-worker',
+      OPENCODE_VERIFIED_VERSION: '1.18.25'
+    },
+    projectDir: '/srv/workbench'
+  });
+
+  assert.equal(config.opencodeWorkerBasePort, 4400);
+  assert.equal(config.opencodeWorkerStartupTimeoutMs, 15000);
+  assert.equal(config.opencodeWorkerReadinessIntervalMs, 250);
+  assert.equal(config.opencodeWorkerStopGraceMs, 3000);
+  assert.equal(config.opencodeWorkerKillGraceMs, 1500);
+  assert.equal(config.opencodeWorkerUsername, 'internal-worker');
+  assert.equal(config.opencodeVerifiedVersion, '1.18.25');
+  assert.equal(Object.hasOwn(config, 'opencodeWorkerPassword'), false);
+});
+
+test('rejects an invalid worker port and unsafe worker identity text', () => {
+  assert.throws(
+    () => loadConfig({ env: { OPENCODE_WORKER_BASE_PORT: '70000' }, projectDir: '/srv/workbench' }),
+    /OPENCODE_WORKER_BASE_PORT/
+  );
+  assert.throws(
+    () => loadConfig({ env: { OPENCODE_WORKER_USERNAME: 'bad\nname' }, projectDir: '/srv/workbench' }),
+    /OPENCODE_WORKER_USERNAME/
   );
 });
 
