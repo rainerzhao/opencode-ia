@@ -4,7 +4,20 @@
 
 OpenCode 团队 AI 工作台是一套面向内部团队的 AI 协作平台。成员无需各自配置模型、密钥和运行环境，通过浏览器登录后，就能使用统一的 AI 能力处理工作、管理个人知识、沉淀解决方案，并逐步共建团队 Skill 资产。
 
-OpenCode 是整个平台的 AI 执行中枢，统一负责模型、Agent、Skill 和工具调用；工作台负责账号、权限、知识、方案和操作记录。这样既保留 OpenCode 的能力，也让多人使用时有清晰的身份和数据边界。
+## 它在 Agent 世界中的位置
+
+理解这个项目，可以先用一句话建立共同认知：**Agent = Model + Harness**。模型提供理解和生成能力，Harness 负责把模型接入上下文、工具、Skill 和持续运行的 Agent Loop，让 AI 能够真正执行任务。
+
+在这个体系中，**OpenCode 是 Agent 执行引擎**：它连接公司内部模型，负责 Agent、Loop、Skill 和工具的实际运行；**本项目是建立在 OpenCode 之上的团队工作台**：它提供团队统一入口，并补齐多人使用所需的账号、权限、会话、知识、审计和资产治理能力。
+
+```mermaid
+flowchart TB
+    M[公司内部模型 Provider] --> O[OpenCode Agent Harness<br/>Model / Loop / Skill / Tool / Context]
+    O --> W[OpenCode 团队 AI 工作台<br/>账号 / 权限 / 会话 / 知识 / Skill / 审计]
+    W --> U[团队成员]
+```
+
+因此，工作台不是另一个 Agent，也不替代 OpenCode。它解决的是如何把面向个人的 Agent 执行能力，建设成一个可供团队长期、集中、安全使用的内部 AI 工作平台。
 
 ## 它解决什么问题
 
