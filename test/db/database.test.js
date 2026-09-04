@@ -14,7 +14,7 @@ function useTempDir(t) {
   return dir;
 }
 
-test('opens a WAL database, applies migration 1 once, and persists data across reopen', (t) => {
+test('opens a WAL database, applies every known migration once, and persists data across reopen', (t) => {
   const root = useTempDir(t);
   const filename = path.join(root, 'nested', 'workbench.db');
   let db = openDatabase({ filename });
@@ -23,7 +23,7 @@ test('opens a WAL database, applies migration 1 once, and persists data across r
   });
 
   const first = migrateDatabase(db);
-  assert.deepEqual(first, { appliedVersions: [1] });
+  assert.deepEqual(first, { appliedVersions: [1, 2] });
   assert.equal(fs.statSync(filename).mode & 0o077, 0);
   assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');

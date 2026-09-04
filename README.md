@@ -36,7 +36,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。常驻 OpenCode 服务、团队 Skill 发布和 Linux 部署会在后续版本逐步完成。
+> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。Stage 2A 已完成常驻 Gateway 的数据与协议底座；OpenCode Worker、完整团队 Skill 发布和 Linux 部署仍会在后续版本逐步完成。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -79,8 +79,10 @@ DEMO_PORT=4321 npm run demo
 | 个人方案 | ✅ 可体验 | 将人工确认过的对话沉淀为私有方案 |
 | 账号与角色 | ✅ 可体验 | 管理员管理账号，普通成员只使用业务功能 |
 | 数据与操作边界 | ✅ 已具备 | 个人内容默认私有，关键操作保留账号归属 |
-| 多人常驻对话 | 📝 规划中 | 支持多会话持续运行、排队、恢复和故障隔离 |
-| 团队 Skill 中心 | 📝 规划中 | 成员创建、校验、发布、安装和回滚 Skill |
+| 多用户实时对话 | ✅ 基础版可体验 | 支持身份隔离和同时在线，断线后不保留运行会话 |
+| 常驻多会话 Gateway | 🚧 2A 已完成 | 已具备持久状态与事件协议；Worker、排队和恢复链路继续开发 |
+| Skill 资产浏览 | ✅ 基础版可体验 | 展示服务器中已经安装的 Skill |
+| 团队 Skill 中心 | 📝 待开发 | 成员创建、校验、发布、安装、启用、版本和回滚 Skill |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
 
 ## 产品原则
@@ -106,7 +108,7 @@ flowchart LR
     O --> K[团队 Skills]
 ```
 
-当前使用 React/Vite 前端 + 模块化 Express 后端，账号、SQLite、私有知识和方案底座已经接通。Stage 2 将把每消息进程模式替换为“一个常驻 Gateway + 多个常驻 OpenCode Worker + 多个逻辑 Session”；Mac 从 2 个 Worker 起步，Linux 根据压测在 2–4 个间调整。
+当前使用 React/Vite 前端 + 模块化 Express 后端，账号、SQLite、私有知识和方案底座已经接通。Stage 2A 已增加 Conversation、Job、Worker、OpenCode Session 映射和可续传事件的数据底座；后续阶段将把每消息进程模式替换为“一个常驻 Gateway + 多个常驻 OpenCode Worker + 多个逻辑 Session”。Mac 从 2 个 Worker 起步，Linux 根据压测在 2–4 个间调整。
 
 ## 真实模式：Mac 开发启动
 
@@ -204,7 +206,7 @@ npm run check
 npm run security:scan
 ```
 
-- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、路径、上传、URL 安全边界及 React 前端契约；Stage 1E 当前共 118 项（提交前以最新全量输出为准）。
+- 自动测试覆盖真实 HTTP/WebSocket、OpenCode 子进程、Gateway 持久状态、路径、上传、URL 安全边界及 React 前端契约；Stage 2A 当前共 129 项（提交前以最新全量输出为准）。
 - 语法检查只检查仓库自有 JavaScript 文件。
 - 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
 - `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
@@ -214,12 +216,12 @@ npm run security:scan
 ## 已知限制与下一阶段
 
 - Stage 1E 已完成 React/Vite 迁移；当前没有完整客户端路由和设计系统，后续按功能增长再引入，避免为首版过度设计。
-- 当前每条消息调用一次有界 `opencode run`；多 Worker、持久会话、公平排队、恢复和模型目录留到 Stage 2 常驻 Gateway。
+- 当前每条消息仍调用一次有界 `opencode run`；Stage 2A 只完成 Gateway 持久状态、任务状态机和事件契约，常驻 Worker、公平排队及前端恢复尚未接入。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一阶段目标是 **Stage 2：常驻 OpenCode Gateway**。设计采用单机 SQLite、常驻 Gateway、2 个起步的 Worker 池和多逻辑 Session，不按用户固定进程，也不提前引入 Redis/Kubernetes。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
+下一交付点是 **Stage 2B：单个受保护的常驻 OpenCode Worker**。整体设计采用单机 SQLite、常驻 Gateway、2 个起步的 Worker 池和多逻辑 Session，不按用户固定进程，也不提前引入 Redis/Kubernetes。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
 
 ## 项目目录
 

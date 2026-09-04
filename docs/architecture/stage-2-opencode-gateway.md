@@ -1,6 +1,6 @@
 # Stage 2：常驻 OpenCode Gateway 与多 Worker 会话架构
 
-**状态：** 设计确认，尚未开发  
+**状态：** 设计确认；Stage 2A 已完成，Stage 2B–2E 待开发
 **目标环境：** Mac 开发验收，随后迁移公司内网单台 Linux  
 **目标规模：** 15–20 名成员
 
@@ -102,7 +102,7 @@ workbench conversation_id -> opencode_session_id -> worker_id
 
 ## Stage 2 实施顺序
 
-1. 定义 Gateway 接口、事件协议、状态机和 SQLite 迁移。
+1. ✅ 定义 Gateway 接口、事件协议、状态机和 SQLite 迁移。
 2. 接入单个常驻 OpenCode Worker，完成真实 Session 创建、发送、停止和恢复。
 3. 增加 Worker 池、粘性映射和健康检查。
 4. 增加公平队列、全局/单用户限流和幂等提交。
