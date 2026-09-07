@@ -36,7 +36,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。Stage 2C 已完成双 Worker 调度底座，Stage 2D 已完成私人 Conversation API；可续传实时连接、多会话界面、团队 Skill 中心和 Linux 部署仍会继续完成。
+> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。Stage 2C 已完成双 Worker 调度底座，Stage 2D 已完成私人 Conversation API 和服务端可续传 WebSocket 协议；生产聊天切换、前端多会话界面、团队 Skill 中心和 Linux 部署仍会继续完成。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -80,7 +80,7 @@ DEMO_PORT=4321 npm run demo
 | 账号与角色 | ✅ 可体验 | 管理员管理账号，普通成员只使用业务功能 |
 | 数据与操作边界 | ✅ 已具备 | 个人内容默认私有，关键操作保留账号归属 |
 | 多人在线使用 | ✅ 基础版可体验 | 多名成员可同时登录并保持身份隔离；持久多会话体验仍在接入 |
-| 常驻多会话 Gateway | 🚧 2D 接入中 | 双 Worker 与私人 Conversation API 已完成；实时连接和多会话界面继续开发 |
+| 常驻多会话 Gateway | 🚧 2D 接入中 | 双 Worker、私人 Conversation API 和可续传实时协议已完成；产品聊天切换与多会话界面继续开发 |
 | Skill 资产浏览 | ✅ 基础版可体验 | 展示服务器中已经安装的 Skill |
 | 团队 Skill 中心 | 📝 待开发 | 成员创建、校验、发布、安装、启用、版本和回滚 Skill |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
@@ -102,7 +102,7 @@ flowchart LR
     W --> S[WebSocket 会话层]
     A --> F[Markdown / 文件资产]
     A --> D[(SQLite WAL<br/>Stage 1)]
-    S --> G[Gateway 控制面<br/>Stage 2C]
+    S --> G[Gateway 控制面<br/>Stage 2D 服务端协议已验证]
     G --> Q[公平队列与会话映射]
     Q --> W1[OpenCode Worker 1]
     Q --> W2[OpenCode Worker 2]
@@ -112,7 +112,7 @@ flowchart LR
     O --> K[团队 Skills]
 ```
 
-当前使用 React/Vite 前端 + 模块化 Express 后端，账号、SQLite、私有知识和方案底座已经接通。Stage 2A 建立持久状态，Stage 2B 验证受保护的常驻 OpenCode 进程与 HTTP/SSE 协议，Stage 2C 完成默认双 Worker 调度，Stage 2D 正在把它接入产品：私人 Conversation 的创建、列表、重命名和归档 API 已完成，实时连接与界面仍在开发。
+当前使用 React/Vite 前端 + 模块化 Express 后端，账号、SQLite、私有知识和方案底座已经接通。Stage 2A 建立持久状态，Stage 2B 验证受保护的常驻 OpenCode 进程与 HTTP/SSE 协议，Stage 2C 完成默认双 Worker 调度，Stage 2D 正在把它接入产品：私人 Conversation API 与服务端 WebSocket 的订阅、提交、取消、断线补发和恢复边界已经完成，React 多会话界面和生产入口切换仍在开发。
 
 ## 真实模式：Mac 开发启动
 
@@ -224,7 +224,7 @@ npm run check
 npm run security:scan
 ```
 
-- 自动测试覆盖真实 HTTP/WebSocket、私人 Conversation API、OpenCode 子进程、Gateway 持久状态、双 Worker 调度、公平队列、20 用户模拟、路径、上传、URL 安全边界及 React 前端契约；当前共 171 项（提交前以最新全量输出为准）。
+- 自动测试覆盖真实 HTTP/WebSocket、私人 Conversation API、Gateway 续传与取消、OpenCode 子进程、Gateway 持久状态、双 Worker 调度、公平队列、20 用户模拟、路径、上传、URL 安全边界及 React 前端契约；当前共 178 项（提交前以最新全量输出为准）。
 - 语法检查只检查仓库自有 JavaScript 文件。
 - 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
 - `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
@@ -234,12 +234,12 @@ npm run security:scan
 ## 已知限制与下一阶段
 
 - Stage 1E 已完成 React/Vite 迁移；当前没有完整客户端路由和设计系统，后续按功能增长再引入，避免为首版过度设计。
-- 当前产品聊天仍调用一次有界 `opencode run`；Stage 2C 的双 Worker Gateway 调度底座已经完成，但要到 Stage 2D 才会通过 Conversation API、可续传 WebSocket 和新前端体验替换旧聊天链路。
+- 当前产品聊天仍调用一次有界 `opencode run`；Stage 2C 的双 Worker Gateway 调度底座以及 Stage 2D 的 Conversation API、可续传 WebSocket 服务端协议已经完成，但生产入口和 React 聊天尚未切换，因此用户界面仍未进入持久多会话链路。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **Stage 2D 实时链路：可续传 WebSocket 和前端多会话体验**。Conversation API 已先行完成；后续会把双 Worker 调度真正接入成员可见的聊天，同时保留账号、默认私有和审计边界。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
+下一交付点是 **Stage 2D 产品切换：React 多会话体验与生产 Gateway 组合**。后续会把已经验证的 Conversation API、可续传 WebSocket 和双 Worker 调度接入成员可见的聊天，同时保留账号、默认私有和审计边界。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
 
 ## 项目目录
 

@@ -71,6 +71,7 @@
 - `npm run check`：通过，72 files。
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
+
 - 真实 OpenCode Worker 停止后，`127.0.0.1:4319` 无监听进程。
 - GitHub：Stage 2B 提交 `44826f6` 已推送到公开仓库 `main`，远端 SHA 与本地一致。
 
@@ -106,6 +107,7 @@
 - `npm run check`：78 个仓库 JavaScript 文件语法检查通过。
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
+
 - GitHub：Stage 2C 主提交 `5664786` 已推送到公开仓库 `main`，远端 SHA 与本地一致。
 
 ## Stage 2D.1：私人 Conversation 产品 API
@@ -135,3 +137,35 @@
 - `npm run check`：80 个仓库 JavaScript 文件语法检查通过。
 - `npm run security:scan`：通过，无发现。
 - `git diff --check`：通过。
+
+## Stage 2D.2：可续传 Gateway WebSocket
+
+### Delivered
+
+- 新增 Gateway WebSocket 协议模块，支持 `subscribe`、`prompt` 和 `cancel`，并沿用 Stage 2A 的持久事件 envelope。
+- 断线重连可按 `afterSequence` 补发缺失事件；超前游标或超过 1000 条的回放缺口返回带 `recoveryBoundary` 的一致快照，避免无界回放。
+- Prompt 使用用户范围幂等键；重复请求返回同一 Job 且不重复产生排队事件。
+- WebSocket 每条消息重新校验登录 Session，取消操作同时校验用户与 Conversation；断开连接只移除订阅，不取消持久 Job。
+- WebSocket 单帧限制为 512KB，超限连接以 `1009` 关闭，避免业务校验前解析超大 JSON。
+- 新增带 CSRF 的 REST 取消入口；成员不能探测或取消其他成员 Job，也不能借用错误 Conversation 路径取消自己的 Job。
+- 保留旧 Demo/产品聊天协议；只有组合了 Gateway Service 的服务器实例才启用新协议，React 与生产入口切换留在 Stage 2D 后续子阶段。
+
+### TDD Evidence
+
+1. 新 WebSocket 契约首次运行 0/2，失败原因为服务器未注入 Gateway 且只接受旧 `input` 协议；加入 REST 与登录撤销场景后 0/4。
+2. 实现协议模块、服务器注入和取消接口后转为 4/4；旧 WebSocket 与 Gateway 定向回归同步通过。
+3. 内联代码复核发现 1000 条事件上限会误判最新序号；新增超大缺口用例首次 9/10，增加持久事件高水位与恢复边界后 10/10。
+4. 安全复核新增超大 WebSocket 帧用例，首次因连接未关闭进入 RED；配置 512KB 上限并安全处理连接错误后转绿。
+
+### Verification Snapshot
+
+- Gateway/WebSocket 定向回归：30/30 通过。
+- `npm test`：178/178 通过。
+- `npm run build`：通过，37 modules transformed。
+- `npm run check`：82 个仓库 JavaScript 文件语法检查通过。
+- `npm run security:scan`：通过，无发现。
+- `git diff --check`：通过。
+
+### Boundary
+
+- 本子阶段完成服务端实时协议，不代表成员界面已经使用常驻 Gateway；生产 Gateway 组合、React 多 Conversation 状态管理与浏览器验收仍未完成。

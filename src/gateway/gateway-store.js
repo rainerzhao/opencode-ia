@@ -441,6 +441,16 @@ function createGatewayStore(db, {
     `).all(conversationId, afterSequence, limit).map(toGatewayEvent);
   }
 
+  function getLatestEventSequence({ conversationId, ownerUserId }) {
+    if (!conversationByOwner.get(conversationId, ownerUserId)) return null;
+    const row = db.prepare(`
+      SELECT MAX(sequence) AS latest_sequence
+      FROM gateway_events
+      WHERE conversation_id = ?
+    `).get(conversationId);
+    return Number(row.latest_sequence || 0);
+  }
+
   function upsertWorker({
     id,
     instanceId,
@@ -602,6 +612,7 @@ function createGatewayStore(db, {
     createJob,
     getJob,
     getJobByIdempotency,
+    getLatestEventSequence,
     getOpenCodeSession,
     getOwnedConversation,
     listConversations,

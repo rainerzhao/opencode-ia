@@ -63,6 +63,7 @@ function createGatewayService({
   const active = new Map();
   const runningByUser = new Map();
   const runningConversations = new Set();
+  const subscriptions = new Map();
   let state = 'stopped';
   let scheduling = null;
   let unsubscribeExits = null;
@@ -91,12 +92,38 @@ function createGatewayService({
   function transitionIfRunning(context, event, errorCode) {
     const job = store.getJob({ id: context.item.id });
     if (job?.status !== 'running') return job;
-    return store.transitionJob({
+    const transitioned = store.transitionJob({
       jobId: context.item.id,
       userId: context.item.userId,
       event,
       ...(errorCode ? { errorCode } : {})
     });
+    publishConversation(context.item.conversationId, context.item.userId);
+    return transitioned;
+  }
+
+  function deliver(subscription, event) {
+    if (event.sequence <= subscription.cursor) return;
+    try {
+      subscription.onEvent(event);
+      subscription.cursor = event.sequence;
+    } catch {
+      logger.error('Gateway event subscriber failed');
+    }
+  }
+
+  function publishConversation(conversationId, userId) {
+    const listeners = subscriptions.get(conversationId);
+    if (!listeners?.size) return;
+    const minimum = Math.min(...[...listeners].map((listener) => listener.cursor));
+    const events = store.listEventsAfter({
+      conversationId,
+      ownerUserId: userId,
+      afterSequence: minimum
+    }) || [];
+    for (const event of events) {
+      for (const subscription of listeners) deliver(subscription, event);
+    }
   }
 
   async function execute(context) {
@@ -115,6 +142,7 @@ function createGatewayService({
         event: 'start',
         workerId: lease.workerId
       });
+      publishConversation(item.conversationId, item.userId);
       let binding = store.getOpenCodeSession({ conversationId: item.conversationId });
       if (!binding) {
         const conversation = store.getOwnedConversation({
@@ -161,6 +189,7 @@ function createGatewayService({
           type: GATEWAY_EVENT_TYPES.MESSAGE_DELTA,
           payload: { text }
         });
+        publishConversation(item.conversationId, item.userId);
       }
       transitionIfRunning(context, 'complete');
     } catch (error) {
@@ -278,16 +307,21 @@ function createGatewayService({
     }
     const job = store.createJob({ conversationId, userId, idempotencyKey, inputText });
     queue.enqueue(job);
+    publishConversation(conversationId, userId);
     schedule();
     return job;
   }
 
-  async function cancel({ jobId, userId }) {
+  async function cancel({ conversationId, jobId, userId }) {
     const job = store.getJob({ id: jobId, userId });
-    if (!job) throw serviceError('JOB_NOT_FOUND', 'job was not found');
+    if (!job || (conversationId && job.conversationId !== conversationId)) {
+      throw serviceError('JOB_NOT_FOUND', 'job was not found');
+    }
     if (job.status === 'queued') {
       queue.remove(job.id);
-      return store.transitionJob({ jobId, userId, event: 'cancel' });
+      const cancelled = store.transitionJob({ jobId, userId, event: 'cancel' });
+      publishConversation(job.conversationId, userId);
+      return cancelled;
     }
     if (job.status !== 'running') return job;
     const context = active.get(job.id);
@@ -336,14 +370,52 @@ function createGatewayService({
 
   function subscribe({ conversationId, userId, afterSequence = 0, onEvent }) {
     if (typeof onEvent !== 'function') throw new TypeError('gateway event listener is required');
-    const events = store.listEventsAfter({
+    const conversation = store.getOwnedConversation({ id: conversationId, ownerUserId: userId });
+    if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+      throw serviceError('INVALID_EVENT_SEQUENCE', 'event sequence is invalid');
+    }
+    const latestSequence = store.getLatestEventSequence({
+      conversationId,
+      ownerUserId: userId
+    });
+    const replayEvents = store.listEventsAfter({
       conversationId,
       ownerUserId: userId,
-      afterSequence
-    });
-    if (events === null) throw serviceError('CONVERSATION_NOT_FOUND', 'conversation was not found');
-    for (const event of events) onEvent(event);
-    return () => {};
+      afterSequence,
+      limit: 1000
+    }) || [];
+    const subscription = { cursor: afterSequence, onEvent, userId };
+    const replayTruncated = replayEvents.length === 1000 && replayEvents.at(-1).sequence < latestSequence;
+    if (afterSequence === 0 || afterSequence > latestSequence || replayTruncated) {
+      const recoveryBoundary = afterSequence > latestSequence || replayTruncated;
+      const snapshotSequence = recoveryBoundary ? latestSequence : 0;
+      onEvent({
+        type: GATEWAY_EVENT_TYPES.CONVERSATION_SNAPSHOT,
+        conversationId,
+        jobId: null,
+        sequence: snapshotSequence,
+        occurredAt: new Date().toISOString(),
+        data: {
+          conversation,
+          recoveryBoundary
+        }
+      });
+      subscription.cursor = snapshotSequence;
+    }
+    if (!replayTruncated && afterSequence <= latestSequence) {
+      for (const event of replayEvents) deliver(subscription, event);
+    }
+    let listeners = subscriptions.get(conversationId);
+    if (!listeners) {
+      listeners = new Set();
+      subscriptions.set(conversationId, listeners);
+    }
+    listeners.add(subscription);
+    return () => {
+      listeners.delete(subscription);
+      if (listeners.size === 0) subscriptions.delete(conversationId);
+    };
   }
 
   function snapshot() {

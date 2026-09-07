@@ -21,6 +21,7 @@ const {
   createConversationAdminRouter,
   createConversationRouter
 } = require('./modules/conversations/routes');
+const { attachGatewaySocket, createGatewayRouter } = require('./modules/gateway/routes');
 const { createGatewayStore } = require('./gateway/gateway-store');
 
 function createWorkbenchServer({
@@ -29,7 +30,9 @@ function createWorkbenchServer({
   promptRunner,
   logger = console,
   urlFetchOptions = {},
-  fetchAllowedTextImpl = fetchAllowedText
+  fetchAllowedTextImpl = fetchAllowedText,
+  gatewayService,
+  gatewayServiceFactory
 }) {
 
 let db = database;
@@ -65,10 +68,11 @@ const authService = createAuthService({
 const authMiddleware = createAuthMiddleware({ authService });
 const requestAuditor = createRequestAuditor({ db });
 const gatewayStore = createGatewayStore(db);
+const activeGatewayService = gatewayService || gatewayServiceFactory?.({ store: gatewayStore });
 
 const app = express();
 const httpServer = http.createServer(app);
-const wss = new WebSocket.Server({ noServer: true });
+const wss = new WebSocket.Server({ noServer: true, maxPayload: 512 * 1024 });
 let lifecycle = 'idle';
 let starting = null;
 let rejectStarting = null;
@@ -121,6 +125,12 @@ app.use('/api', (req, res, next) => {
   authMiddleware.requireCsrf(req, res, next);
 });
 app.use('/api/conversations', createConversationRouter({ store: gatewayStore, requestAuditor }));
+if (activeGatewayService) {
+  app.use('/api/conversations', createGatewayRouter({
+    gatewayService: activeGatewayService,
+    requestAuditor
+  }));
+}
 app.use('/api/admin/conversations', createConversationAdminRouter({
   store: gatewayStore,
   requireAdmin: authMiddleware.requireRole('admin')
@@ -801,6 +811,9 @@ httpServer.on('upgrade', (req, socket, head) => {
 
 // WebSocket: 终端连接
 wss.on('connection', (ws, req) => {
+  ws.on('error', (error) => {
+    logger.error(`[WebSocket] connection error: ${error?.code || 'WS_ERROR'}`);
+  });
   if (sessions.size >= config.maxSessions) {
     ws.close(1013, 'MAX_SESSIONS_REACHED');
     return;
@@ -811,6 +824,7 @@ wss.on('connection', (ws, req) => {
   logger.log(`[Session] 新建会话: ${sessionId}`);
 
   const session = {
+    id: sessionId,
     pid: process.pid,
     userId: req.auth.user.id,
     username: req.auth.user.username,
@@ -822,6 +836,23 @@ wss.on('connection', (ws, req) => {
   sessions.set(sessionId, session);
 
   ws.send(JSON.stringify({ type: 'connected', sessionId, pid: process.pid }));
+
+  if (activeGatewayService) {
+    attachGatewaySocket({
+      ws,
+      req,
+      authService,
+      gatewayService: activeGatewayService,
+      requestAuditor,
+      logger,
+      session,
+      onClose() {
+        logger.log(`[Session] 会话关闭: ${sessionId}`);
+        sessions.delete(sessionId);
+      }
+    });
+    return;
+  }
 
   function sendSafeError(code, message) {
     if (ws.readyState !== WebSocket.OPEN) return;
@@ -1030,7 +1061,7 @@ function stop() {
   return stopping;
 }
 
-return { app, httpServer, start, stop, sessions, authService };
+return { app, httpServer, start, stop, sessions, authService, gatewayService: activeGatewayService };
 }
 
 module.exports = { createWorkbenchServer };

@@ -1,12 +1,12 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-04
+更新时间：2026-09-07
 
 ## 当前结论
 
 项目当前处于 **Stage 0、Stage 1、Stage 2A–2C 完成，Stage 2D 开发中** 的状态。
 
-Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界和无密钥 Demo。Stage 2C 已验证双 Worker 调度，Stage 2D 已完成私人 Conversation API；实时连接和多会话界面仍在开发，因此仍不代表公司内网生产可用。
+Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界和无密钥 Demo。Stage 2C 已验证双 Worker 调度，Stage 2D 已完成私人 Conversation API 与服务端可续传 WebSocket；生产聊天切换和多会话界面仍在开发，因此仍不代表公司内网生产可用。
 
 ## 阶段总览
 
@@ -72,7 +72,7 @@ Stage 1 已在 Mac 上跑通管理员与成员浏览器闭环、React/Vite 迁�
 - ✅ Stage 2A：Gateway SQLite Schema、任务状态机、私有 Conversation/Job Store、幂等提交、事件序号和启动恢复语义。
 - ✅ Stage 2B：单个受保护的常驻 OpenCode Worker、HTTP/SSE 客户端、进程生命周期和本机真实 OpenCode 健康冒烟。
 - ✅ Stage 2C：2 Worker 池、粘性 Session、健康检查、按用户公平队列、并发限制和故障隔离。
-- 🚧 Stage 2D：私人 Conversation API 已完成；WebSocket 断线续传和前端多会话体验继续开发。
+- 🚧 Stage 2D：私人 Conversation API、WebSocket 订阅/提交/取消、断线补发和恢复边界已完成；生产入口与前端多会话体验继续开发。
 - ⏳ Stage 2E：重启恢复、管理后台、20 用户压测和真实 OpenCode 冒烟验收。
 
 出口标准：真实 OpenCode 与内部兼容 OpenAI 协议模型完成联调，Mac 上完成并发和恢复验证。

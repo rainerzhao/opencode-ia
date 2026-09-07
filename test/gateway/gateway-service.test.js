@@ -222,6 +222,66 @@ test('deduplicates submit and emits queued, started, delta, completed in order',
   assert.equal(fixture.records.reduce((sum, record) => sum + record.sessions, 0), 1);
 });
 
+test('replays persisted events and streams later events without cross-conversation leakage', async (t) => {
+  const fixture = createFixture(t, { automatic: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1);
+  const sibling = fixture.conversation(2);
+  const received = [];
+  const unsubscribe = fixture.service.subscribe({
+    conversationId: conversation.id,
+    userId: 'user-1',
+    afterSequence: 0,
+    onEvent: (event) => received.push(event)
+  });
+
+  fixture.submit(sibling, 2, 'sibling');
+  fixture.submit(conversation, 1, 'live');
+  await fixture.service.waitForIdle();
+  unsubscribe();
+
+  assert.equal(received[0].type, 'conversation.snapshot');
+  assert.deepEqual(received.slice(1).map((event) => event.type), [
+    'job.queued', 'job.started', 'message.delta', 'job.completed'
+  ]);
+  assert.equal(received.every((event) => event.conversationId === conversation.id), true);
+  const reconnected = [];
+  fixture.service.subscribe({
+    conversationId: conversation.id,
+    userId: 'user-1',
+    afterSequence: received.at(-2).sequence,
+    onEvent: (event) => reconnected.push(event)
+  })();
+  assert.deepEqual(reconnected.map((event) => event.type), ['job.completed']);
+});
+
+test('returns a recovery boundary instead of truncating an oversized event backlog', async (t) => {
+  const fixture = createFixture(t, { automatic: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1);
+  let latest;
+  for (let index = 0; index < 1001; index += 1) {
+    latest = fixture.store.appendEvent({
+      conversationId: conversation.id,
+      type: 'message.delta',
+      payload: { text: `chunk-${index}` }
+    });
+  }
+  const received = [];
+
+  fixture.service.subscribe({
+    conversationId: conversation.id,
+    userId: 'user-1',
+    afterSequence: 0,
+    onEvent: (event) => received.push(event)
+  });
+
+  assert.equal(received.length, 1);
+  assert.equal(received[0].type, 'conversation.snapshot');
+  assert.equal(received[0].sequence, latest.sequence);
+  assert.equal(received[0].data.recoveryBoundary, true);
+});
+
 test('rejects queue overflow without leaving an orphaned idempotent job', async (t) => {
   const fixture = createFixture(t);
   await fixture.service.start();
