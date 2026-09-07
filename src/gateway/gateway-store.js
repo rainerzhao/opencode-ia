@@ -303,6 +303,15 @@ function createGatewayStore(db, {
     `).all().map(toJob);
   }
 
+  function listJobMetadata() {
+    return db.prepare(`
+      SELECT id, conversation_id AS conversationId, user_id AS userId,
+        worker_id AS workerId, status, created_at AS createdAt,
+        started_at AS startedAt, finished_at AS finishedAt
+      FROM gateway_jobs ORDER BY created_at DESC, id DESC LIMIT 200
+    `).all();
+  }
+
   function listRecoveringSessions() {
     return db.prepare(`
       SELECT * FROM opencode_sessions
@@ -657,6 +666,7 @@ function createGatewayStore(db, {
     listConversationMetadata,
     listEventsAfter,
     listQueuedJobs,
+    listJobMetadata,
     listRecoveringSessions,
     recoverOnStartup,
     setSessionRecoveryStatus,

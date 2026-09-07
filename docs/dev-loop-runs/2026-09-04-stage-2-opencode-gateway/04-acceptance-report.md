@@ -2,6 +2,16 @@
 
 ## Overall Verdict
 
+### Stage 2E.2a 运维 API
+
+API 定向验收 4/4 通过；内联复核覆盖权限、隐私、审计、取消语义、查询边界及失败响应。发现的快照不一致和上游错误泄漏均已修复。管理员只获得运行元数据，不能读取私人内容。无前端行为变更，本次不声明可视化运维后台完成。完整 Stage 2E、真实模型和 Linux 验收仍待完成。
+
+- `npm test`：190/190，通过，无跳过。
+- `npm run build`：通过，39 modules。
+- `npm run check`：通过，87 files。
+- `npm run security:scan`：通过，无发现。
+- `git diff --check`：通过。
+
 **PASS WITH NOTES** — Stage 2A–2D 已在 Mac 通过验收，常驻双 Worker Gateway 已接入 React 多 Conversation 产品链路；Stage 2E 和 Linux 生产验收尚未完成。
 
 ## Stage 2A Verdict

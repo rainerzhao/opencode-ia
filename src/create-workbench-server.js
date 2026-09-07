@@ -23,6 +23,7 @@ const {
 } = require('./modules/conversations/routes');
 const { attachGatewaySocket, createGatewayRouter } = require('./modules/gateway/routes');
 const { createGatewayStore } = require('./gateway/gateway-store');
+const { createGatewayAdminRouter } = require('./modules/admin/gateway-routes');
 
 function createWorkbenchServer({
   config,
@@ -126,6 +127,10 @@ app.use('/api', (req, res, next) => {
 });
 app.use('/api/conversations', createConversationRouter({ store: gatewayStore, requestAuditor }));
 if (activeGatewayService) {
+  app.use('/api/admin/gateway', createGatewayAdminRouter({
+    store: gatewayStore, gatewayService: activeGatewayService,
+    requireAdmin: authMiddleware.requireRole('admin'), requestAuditor
+  }));
   app.use('/api/conversations', createGatewayRouter({
     gatewayService: activeGatewayService,
     requestAuditor

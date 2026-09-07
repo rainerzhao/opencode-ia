@@ -14,6 +14,10 @@
 
 ## Architecture Summary
 
+### Stage 2E 运维拆分
+
+先交付 2E.2a 管理员 API（健康、Worker、最近 200 条任务元数据、取消与审计），再交付可视化页面。通过现有认证、管理员角色和写请求 CSRF 中间件；禁止返回私人标题、正文、幂等键和连接凭据。定向验证未登录/成员拒绝、健康降级、取消幂等、所有者归属、失败脱敏和审计；随后运行全量测试、构建、语法检查、密钥扫描。该 API 子阶段不代表 2E 完成，不改变已确认架构。
+
 Express 业务服务持有一个 Gateway 控制面，Gateway 通过 SQLite 保存 Conversation、Job、Worker、OpenCode Session 和有界事件记录。Worker Manager 启动两个带随机 Basic Auth 密码、只监听回环地址的 `opencode serve` 进程；OpenCode Client 直接使用其 HTTP/SSE API。公平队列只分配健康且有容量的 Worker，并保持 `Conversation → OpenCode Session → Worker` 粘性映射。
 
 ## Review Mode
