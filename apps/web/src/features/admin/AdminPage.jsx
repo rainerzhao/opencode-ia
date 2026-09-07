@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { request } from '../../api/client';
+import { GatewayPanel } from './GatewayPanel';
 
 function messageFor(error) {
   if (error.code === 'PASSWORD_POLICY') return '密码必须为 12–128 个字符。';
@@ -101,6 +102,7 @@ export function AdminPage({ user, initialUsers = [] }) {
   }
 
   return <>
+    <GatewayPanel />
     <div className="admin-grid">
       <section className="panel">
         <h3>创建团队账号</h3>

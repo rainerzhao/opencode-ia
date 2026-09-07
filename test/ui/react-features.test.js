@@ -8,6 +8,23 @@ const { renderToStaticMarkup } = require('react-dom/server');
 
 const root = path.resolve(__dirname, '../..');
 
+test('gateway operations shows safe metadata and only active jobs offer cancellation', async () => {
+  await withViteModule('features/admin/GatewayPanel.jsx', ({ GatewayPanel }) => {
+    const html = renderToStaticMarkup(React.createElement(GatewayPanel, {
+      initialData: {
+        health: { status: 'healthy', running: 1, queued: 0, healthyWorkers: 2 },
+        workers: [{ id: 'worker-1', status: 'healthy', capacity: 1, running: 1, password: 'PRIVATE' }],
+        jobs: [{ id: 'job-1', userId: 'member-1', status: 'running', inputText: 'PRIVATE' }, { id: 'job-2', status: 'completed' }]
+      }
+    }));
+    assert.match(html, /运行管理/);
+    assert.match(html, /服务正常/);
+    assert.match(html, /member-1/);
+    assert.equal((html.match(/>取消任务</g) || []).length, 1);
+    assert.doesNotMatch(html, /PRIVATE/);
+  });
+});
+
 async function withViteModule(relativePath, callback) {
   const { createServer } = await import('vite');
   const server = await createServer({
