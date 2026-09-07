@@ -129,11 +129,11 @@
 - [x] Write API tests proving create/list/rename/archive, owner isolation, CSRF enforcement, admin metadata-only access, invalid identifiers, and audit attribution; verify RED.
 - [x] Implement focused route modules backed by `gateway-store`, keeping private bodies out of admin responses.
 - [x] Write WebSocket tests for subscribe snapshot, prompt acceptance, queued/started/delta/completed order, reconnect from `afterSequence`, stale-sequence snapshot fallback, duplicate idempotency key, cancel ownership, and revoked login Session; verify RED.
-- [ ] Replace the transient per-socket `sessions` execution path with Gateway subscriptions while retaining the existing authentication and Origin checks; keep the old message protocol only in Demo compatibility mode until UI cutover passes.
-- [ ] Add UI contract tests for Conversation navigation, queue/run/interrupt status, stop action, reconnect notice, recovery boundary, and no private state in browser storage; verify RED.
-- [ ] Implement the React multi-Conversation experience and accessible status feedback, then run build and targeted UI tests.
-- [ ] Run authenticated desktop and narrow-screen browser acceptance with two users; check console errors, overflow, reconnect, cancellation, and private isolation.
-- [ ] Run the full verification gate, update README screenshots/status, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
+- [x] Replace the transient per-socket `sessions` execution path with Gateway subscriptions while retaining the existing authentication and Origin checks; keep the old message protocol only when no Gateway is composed.
+- [x] Add UI contract tests for Conversation navigation, queue/run/interrupt status, stop action, reconnect notice, recovery boundary, and no private state in browser storage; verify RED.
+- [x] Implement the React multi-Conversation experience and accessible status feedback, then run build and targeted UI tests.
+- [x] Run authenticated desktop and narrow-screen browser acceptance with two users; check console errors, overflow, reconnect, cancellation, and private isolation.
+- [x] Run the final verification gate, update README screenshots/status, record evidence, commit in Chinese, push `main`, and verify the remote SHA.
 
 ### Task 2E: Restart recovery, operations view, and Stage 2 release gate
 

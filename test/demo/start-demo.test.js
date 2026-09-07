@@ -105,10 +105,12 @@ async function loginDemo(ready) {
     body: JSON.stringify(ready.credentials)
   });
   assert.equal(response.status, 200);
-  const cookie = getSetCookies(response)
+  const setCookies = getSetCookies(response);
+  const cookie = setCookies
     .map((header) => header.split(';', 1)[0])
     .join('; ');
-  return { cookie };
+  const csrf = setCookies.map((header) => header.split(';', 1)[0]).find((item) => item.startsWith('workbench_csrf='));
+  return { cookie, csrfToken: decodeURIComponent(csrf.slice('workbench_csrf='.length)) };
 }
 
 test('starts an isolated full-stack demo and removes its temporary data on shutdown', async (t) => {
@@ -147,10 +149,20 @@ test('starts an isolated full-stack demo and removes its temporary data on shutd
   const ws = new WebSocket(ready.url.replace('http:', 'ws:'), {
     headers: { cookie: session.cookie }
   });
-  await waitForJson(ws, (message) => message.type === 'connected');
-  ws.send(JSON.stringify({ type: 'input', data: 'demo round trip' }));
-  const response = await waitForJson(ws, (message) => message.type === 'response');
-  assert.equal(response.data, '【Demo 模拟回复】demo round trip');
+  const connected = await waitForJson(ws, (message) => message.type === 'connected');
+  assert.equal(connected.protocol, 'gateway.v1');
+  const created = await fetch(`${ready.url}/api/conversations`, {
+    method: 'POST',
+    headers: { cookie: session.cookie, 'x-csrf-token': session.csrfToken, 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Demo Gateway conversation' })
+  });
+  assert.equal(created.status, 201);
+  const conversation = (await created.json()).conversation;
+  ws.send(JSON.stringify({ type: 'subscribe', conversationId: conversation.id, afterSequence: 0 }));
+  await waitForJson(ws, (message) => message.type === 'conversation.snapshot');
+  ws.send(JSON.stringify({ type: 'prompt', conversationId: conversation.id, text: 'demo round trip', idempotencyKey: 'demo-1' }));
+  const response = await waitForJson(ws, (message) => message.type === 'message.delta');
+  assert.equal(response.data.text, '【Demo 模拟回复】demo round trip');
   ws.close();
 
   child.kill('SIGTERM');
@@ -174,5 +186,28 @@ test('removes temporary data when the launching terminal hangs up', async (t) =>
   child.kill('SIGHUP');
 
   assert.equal(await waitForExit(child), 0);
+  assert.equal(fs.existsSync(ready.root), false);
+});
+
+test('removes temporary data when npm run demo receives terminal interrupt', async (t) => {
+  if (process.platform === 'win32') return t.skip('process-group signals are POSIX-specific');
+  const child = spawn('npm', ['run', 'demo', '--', '--port=0'], {
+    cwd: projectDir,
+    env: { ...process.env },
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let ready;
+  t.after(() => {
+    if (child.exitCode === null) {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch {}
+    }
+    if (ready?.root) fs.rmSync(ready.root, { recursive: true, force: true });
+  });
+
+  ready = await waitForReady(child, 8000);
+  process.kill(-child.pid, 'SIGINT');
+  await waitForExit(child, 3000);
+
   assert.equal(fs.existsSync(ready.root), false);
 });

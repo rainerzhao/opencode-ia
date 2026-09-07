@@ -126,10 +126,10 @@ test('subscribes, streams ordered job events, deduplicates, and resumes after a 
     text: 'hello',
     idempotencyKey: 'request-1'
   }));
-  await eventually(() => first.messages.filter((item) => item.jobId).length >= 5);
+  await eventually(() => first.messages.filter((item) => item.jobId).length >= 6);
   assert.deepEqual(
     first.messages.filter((item) => item.sequence > 0).map((item) => item.type),
-    ['job.queued', 'job.started', 'message.delta', 'job.completed']
+    ['message.created', 'job.queued', 'job.started', 'message.delta', 'job.completed']
   );
   const accepted = first.messages.find((item) => item.type === 'job.accepted');
   first.ws.send(JSON.stringify({

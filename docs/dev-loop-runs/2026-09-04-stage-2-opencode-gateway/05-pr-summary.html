@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenCode 团队 AI 工作台 · Stage 2D 评审摘要</title>
+  <style>
+    :root{--paper:#f4f6f5;--ink:#17242d;--soft:#52616b;--faint:#78868e;--rule:#d7dfdc;--card:#fff;--accent:#0b766e;--accent-soft:#dcefeb;--warn:#9a6720;--warn-soft:#fff3da;--code:#e8edeb}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.65 ui-serif,Charter,Georgia,"Songti SC",serif;padding:56px 24px 88px}.doc{max-width:900px;margin:auto}.eyebrow,.meta,.label,th,code{font-family:ui-monospace,"SF Mono",Menlo,"PingFang SC",monospace}.head{padding-bottom:28px;border-bottom:1px solid var(--rule);margin-bottom:42px}.eyebrow{font-size:11px;letter-spacing:.13em;color:var(--accent)}h1{font-size:36px;line-height:1.15;margin:12px 0 8px}h2{font-size:22px;margin:48px 0 18px;padding-bottom:9px;border-bottom:1px solid var(--rule)}p{margin:0 0 14px}.meta{display:flex;flex-wrap:wrap;gap:24px;color:var(--faint);font-size:11px}.lead{background:var(--accent-soft);border-left:3px solid var(--accent);padding:20px 24px;margin:0 0 44px}.label{font-size:10px;letter-spacing:.12em;color:var(--accent);font-weight:700;margin-bottom:6px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{background:var(--card);border:1px solid var(--rule);padding:18px}.card strong{display:block;font-size:17px;margin-bottom:6px}.card span{color:var(--soft);font-size:13px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--rule);vertical-align:top}th{font-size:10px;letter-spacing:.08em;color:var(--faint)}.pass{color:var(--accent);font-weight:700}.evidence{display:grid;grid-template-columns:2fr 1fr;gap:14px}.evidence figure{margin:0;background:#fff;border:1px solid var(--rule);padding:8px}.evidence img{display:block;width:100%;height:auto}.evidence figcaption{font-size:11px;color:var(--faint);padding-top:7px}.warn{background:var(--warn-soft);border:1px solid #ead3aa;padding:18px 20px;color:#6f4a18}code{font-size:12px;background:var(--code);padding:2px 5px;border-radius:3px}ul{padding-left:22px}li{margin-bottom:7px}footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--rule);font-size:12px;color:var(--faint)}@media(max-width:720px){body{padding:30px 15px 60px}h1{font-size:28px}.cards,.evidence{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <article class="doc">
+    <header class="head">
+      <div class="eyebrow">OPENCODE TEAM WORKBENCH · STAGE 2D</div>
+      <h1>常驻 Gateway 多会话产品链路</h1>
+      <p>把已验证的双 Worker 调度与可续传协议，接入成员真正使用的 React Conversation 界面。</p>
+      <div class="meta"><span>VERDICT · PASS</span><span>DATE · 2026-09-07</span><span>BRANCH · MAIN</span></div>
+    </header>
+
+    <div class="lead">
+      <div class="label">TL;DR</div>
+      Stage 2D 已在 Mac 完成：正式入口常驻双 Worker Gateway，成员可创建和切换私人 Conversation，看到排队、运行、停止、完成与恢复状态；无密钥 Demo 也走同一条产品协议。Stage 2E、内部模型和 Linux 生产验收仍未完成。
+    </div>
+
+    <section>
+      <h2>本次产品变化</h2>
+      <div class="cards">
+        <div class="card"><strong>对话真正持久</strong><span>问题、回答和任务状态由服务端事件重建，刷新和断线不依赖浏览器私有存储。</span></div>
+        <div class="card"><strong>执行统一受控</strong><span>生产入口默认启动两个常驻 Worker，按用户公平排队，同一 Conversation 串行执行。</span></div>
+        <div class="card"><strong>边界保持不变</strong><span>所有执行仍经过 OpenCode；管理员只看运行元数据，成员正文默认私有。</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>交付与状态</h2>
+      <table>
+        <thead><tr><th>交付面</th><th>结果</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td>生产组合</td><td>Gateway、公平队列、双 Worker 池与服务器生命周期统一启停</td><td class="pass">完成</td></tr>
+          <tr><td>实时协议</td><td>订阅、提交、取消、幂等、序号续传、恢复边界、登录撤销</td><td class="pass">完成</td></tr>
+          <tr><td>成员界面</td><td>私人 Conversation、新建切换、历史恢复、执行状态、停止任务</td><td class="pass">完成</td></tr>
+          <tr><td>无密钥 Demo</td><td>使用 <code>gateway.v1</code> 和本地模拟 Worker，不调用 Provider</td><td class="pass">完成</td></tr>
+          <tr><td>Stage 2E</td><td>重启恢复、运维后台、真实内部模型和生产验收</td><td>待开发</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>验收证据</h2>
+      <ul>
+        <li><code>npm test</code>：182/182 通过；Vite 构建 39 modules transformed。</li>
+        <li>真实 HTTP/WebSocket 覆盖权限、CSRF、取消、断线补发、恢复边界与 512KB 帧上限。</li>
+        <li>20 用户确定性模拟未突破全局并发 2、单用户并发 1，且无饥饿。</li>
+        <li>双账号浏览器验证私人 Conversation 隔离；普通成员没有账号管理入口。</li>
+        <li>1440×900 与 390×844 无横向溢出，Console Error 为空，浏览器存储条目为 0。</li>
+      </ul>
+      <div class="evidence">
+        <figure><img src="artifacts/screenshots/stage-2d3-conversations-desktop.png" alt="桌面多 Conversation 界面"><figcaption>桌面 · Conversation、状态、消息与方案沉淀</figcaption></figure>
+        <figure><img src="artifacts/screenshots/stage-2d3-conversations-mobile.png" alt="390 像素窄屏多 Conversation 界面"><figcaption>390px · 无横向溢出</figcaption></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>上线边界</h2>
+      <div class="warn"><div class="label">NOT LINUX PRODUCTION READY</div>当前结论只覆盖 Mac 开发环境和本地模拟回复。Gateway 重启后的队列重建、管理员运维视图、真实内部模型、多轮故障演练、Nginx HTTPS、备份恢复与 Linux 容量验收仍是上线前门禁。</div>
+    </section>
+
+    <footer>依据：<code>04-acceptance-report.md</code> · <code>docs/ROADMAP.md</code> · <code>docs/architecture/stage-2-opencode-gateway.md</code></footer>
+  </article>
+</body>
+</html>

@@ -169,3 +169,42 @@
 ### Boundary
 
 - 本子阶段完成服务端实时协议，不代表成员界面已经使用常驻 Gateway；生产 Gateway 组合、React 多 Conversation 状态管理与浏览器验收仍未完成。
+
+## Stage 2D.3：生产 Gateway 组合与 React 多会话体验
+
+### Delivered
+
+- 正式启动入口组合公平队列、默认双 Worker 池与 Gateway Service；启动时先拉起 Gateway，停止时先中断 Gateway 任务并停止 Worker，再关闭 WebSocket、HTTP 与数据库。
+- React AI 平台支持私人 Conversation 列表、新建、切换、历史重建，以及排队、运行、完成、停止、中断、失败和重连状态。
+- 浏览器按持久事件序号去重和续传；刷新后从服务端恢复问题、回答与任务状态，不使用 `localStorage` 或 `sessionStorage` 保存私人对话。
+- 用户输入作为 `message.created` 与 Job 在同一事务持久化，确保完整历史可由 Gateway 事件重建。
+- 无密钥 Demo 改走与生产一致的 `gateway.v1`、Conversation REST 和双 Worker 组合，只在 Worker 执行边界注入明确标注的本地模拟回复。
+- 桌面和窄屏重新布局 Conversation、消息区和方案沉淀区，修复旧聊天 Grid 规则造成的状态栏错位、输入区异常拉伸和按钮换行。
+
+### TDD and Debugging Evidence
+
+1. 生产组合测试先因未启动 Gateway Worker 进入 RED；组合 Worker Pool、Gateway Service 与服务器生命周期后转绿，并确认默认两个 Worker 都完成启动和停止。
+2. Demo 契约从旧 `input/response` 改为 `gateway.v1`、Conversation、`subscribe/prompt` 和 `message.delta`，先失败后实现转绿。
+3. UI 契约增加私人 Conversation 导航、运行控制与持久事件 reducer；定向回归 28/28 通过。
+4. 浏览器截图发现 `.chat` 继承旧 `grid-template-rows: 1fr auto`，固定四行修正又会被可选恢复提示改变子节点顺序，导致输入区占满剩余高度；以一次性浏览器断言复现 `composerHeight=532` 后改为纵向 Flex，复验为 `composerHeight=81`、消息区填充剩余空间。
+5. 第二轮视觉复核发现“发送”被压成两行；浏览器文本 Range 先复现 `lineRects=2`，增加最小宽度和不换行约束后桌面、窄屏均为 `lineRects=1`。
+6. 真实 `npm run demo` 的 Ctrl-C 验收发现端口虽释放但临时目录残留；新增 POSIX 进程组回归先失败。进程树确认 npm 与 Demo 同属前台组，终端与 npm 会重复转发信号；改为持续安装幂等清理处理器后 3/3 Demo 生命周期用例通过。
+
+### Review Notes
+
+- WebSocket 重连闭包只保留一个指数退避计时器；同 Conversation 重复订阅会先取消旧订阅，切换后的其他 Conversation 订阅只更新各自隔离状态。
+- Gateway 事件读取和取消均带所有者校验；管理员 Conversation 接口只返回运行元数据，不返回标题、消息或 Job 输入。
+- Worker 仍只监听回环地址，随机 Basic Auth 密码不进入前端、数据库、日志或 Demo 文档。
+- Stage 2E 的 Gateway 重启队列重建、运维后台和真实内部模型多轮联调仍未完成，本阶段不宣称 Linux 生产可用。
+
+### Browser Acceptance
+
+- 无密钥 Demo：`gateway.v1` 创建 Conversation、提交 Prompt、收到 `message.delta`，刷新后重新进入 AI 平台可恢复完整问答与“已完成”状态。
+- 双账号：管理员的私人 Conversation 不出现在普通成员账号；普通成员没有账号管理入口。
+- 1440×900 与 390×844 均无横向溢出，浏览器 Console Error 为空；`localStorage` 与 `sessionStorage` 条目均为 0。
+- 截图：`artifacts/screenshots/stage-2d3-conversations-desktop.png`、`artifacts/screenshots/stage-2d3-conversations-mobile.png`。
+
+### Verification Snapshot
+
+- `npm test`：182/182 通过。
+- `npm run build`：通过，39 modules transformed。

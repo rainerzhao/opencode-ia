@@ -336,6 +336,13 @@ function createGatewayStore(db, {
       insertEvent({
         conversationId: conversation,
         jobId: id,
+        type: GATEWAY_EVENT_TYPES.MESSAGE_CREATED,
+        payload: { role: 'user', text: input },
+        now
+      });
+      insertEvent({
+        conversationId: conversation,
+        jobId: id,
         type: GATEWAY_EVENT_TYPES.JOB_QUEUED,
         payload: { status: 'queued' },
         now

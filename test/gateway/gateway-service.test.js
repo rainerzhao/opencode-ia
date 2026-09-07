@@ -213,12 +213,12 @@ test('deduplicates submit and emits queued, started, delta, completed in order',
     ownerUserId: 'user-1'
   });
   assert.deepEqual(events.map((event) => event.type), [
-    'job.queued',
+    'message.created', 'job.queued',
     'job.started',
     'message.delta',
     'job.completed'
   ]);
-  assert.equal(events[2].data.text, 'answer:user-1:same');
+  assert.equal(events[3].data.text, 'answer:user-1:same');
   assert.equal(fixture.records.reduce((sum, record) => sum + record.sessions, 0), 1);
 });
 
@@ -242,7 +242,7 @@ test('replays persisted events and streams later events without cross-conversati
 
   assert.equal(received[0].type, 'conversation.snapshot');
   assert.deepEqual(received.slice(1).map((event) => event.type), [
-    'job.queued', 'job.started', 'message.delta', 'job.completed'
+    'message.created', 'job.queued', 'job.started', 'message.delta', 'job.completed'
   ]);
   assert.equal(received.every((event) => event.conversationId === conversation.id), true);
   const reconnected = [];

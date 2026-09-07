@@ -835,7 +835,10 @@ wss.on('connection', (ws, req) => {
   };
   sessions.set(sessionId, session);
 
-  ws.send(JSON.stringify({ type: 'connected', sessionId, pid: process.pid }));
+  ws.send(JSON.stringify({
+    type: 'connected', sessionId, pid: process.pid,
+    protocol: activeGatewayService ? 'gateway.v1' : 'legacy.v1'
+  }));
 
   if (activeGatewayService) {
     attachGatewaySocket({

@@ -4,6 +4,7 @@ const GATEWAY_EVENT_TYPES = Object.freeze({
   JOB_ACCEPTED: 'job.accepted',
   JOB_QUEUED: 'job.queued',
   JOB_STARTED: 'job.started',
+  MESSAGE_CREATED: 'message.created',
   MESSAGE_DELTA: 'message.delta',
   JOB_COMPLETED: 'job.completed',
   JOB_FAILED: 'job.failed',

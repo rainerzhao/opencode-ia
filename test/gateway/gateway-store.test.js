@@ -73,11 +73,13 @@ test('deduplicates identical submissions and rejects idempotency-key reuse with 
   assert.equal(created.status, 'queued');
   assert.equal(duplicate.id, created.id);
   assert.equal(duplicate.deduplicated, true);
-  assert.equal(store.listEventsAfter({
+  const events = store.listEventsAfter({
     conversationId: conversation.id,
     ownerUserId: 'user-a',
     afterSequence: 0
-  }).length, 1);
+  });
+  assert.deepEqual(events.map((event) => event.type), ['message.created', 'job.queued']);
+  assert.deepEqual(events[0].data, { role: 'user', text: '第一条问题' });
   assert.throws(
     () => store.createJob({
       conversationId: conversation.id,
@@ -124,14 +126,14 @@ test('transitions a job and persists an ordered replayable event stream atomical
   const events = store.listEventsAfter({
     conversationId: conversation.id,
     ownerUserId: 'user-a',
-    afterSequence: 1
+    afterSequence: 2
   });
   assert.deepEqual(events.map((event) => event.type), [
     'job.started',
     'message.delta',
     'job.completed'
   ]);
-  assert.deepEqual(events.map((event) => event.sequence), [2, 3, 4]);
+  assert.deepEqual(events.map((event) => event.sequence), [3, 4, 5]);
   assert.deepEqual(events[1].data, { text: '答' });
   assert.equal(store.listEventsAfter({
     conversationId: conversation.id,

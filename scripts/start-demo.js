@@ -7,8 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { loadConfig } = require('../src/config');
-const { createPromptRunner } = require('../src/opencode/run-prompt');
-const { createWorkbenchServer } = require('../src/create-workbench-server');
+const { createProductionWorkbench } = require('../apps/server');
 const { openDatabase } = require('../src/db/open-database');
 const { migrateDatabase } = require('../src/db/migrate');
 const { bootstrapAdmin } = require('../src/bootstrap/bootstrap-admin');
@@ -52,6 +51,10 @@ const config = loadConfig({ env, projectDir: demoRoot });
 let workbench;
 let shuttingDown = false;
 
+function removeDemoRoot() {
+  fs.rmSync(demoRoot, { recursive: true, force: true });
+}
+
 async function shutdown(exitCode) {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -61,14 +64,23 @@ async function shutdown(exitCode) {
     process.stderr.write(`Demo shutdown warning: ${error.code || 'UNKNOWN'}\n`);
     exitCode = 1;
   } finally {
-    fs.rmSync(demoRoot, { recursive: true, force: true });
+    removeDemoRoot();
     process.exitCode = exitCode;
   }
 }
 
-process.once('SIGINT', () => void shutdown(0));
-process.once('SIGTERM', () => void shutdown(0));
-process.once('SIGHUP', () => void shutdown(0));
+function shutdownAfterSignal() {
+  // npm may tear down the child process group before asynchronous shutdown settles.
+  // Remove the isolated data synchronously first, then close live resources cleanly.
+  try { removeDemoRoot(); } catch {}
+  void shutdown(0);
+}
+
+// Keep handlers installed: a terminal and npm can both forward the same signal.
+// A second delivery must not restore Node's default immediate termination.
+process.on('SIGINT', shutdownAfterSignal);
+process.on('SIGTERM', shutdownAfterSignal);
+process.on('SIGHUP', shutdownAfterSignal);
 
 async function main() {
   const username = 'demo-admin';
@@ -86,15 +98,28 @@ async function main() {
     bootstrapDb.close();
   }
 
-  const promptRunner = createPromptRunner({
-    command: env.OPENCODE_CMD,
-    baseArgs: [],
-    cwd: config.opencodeCwd,
+  workbench = createProductionWorkbench({
     env,
-    timeoutMs: config.opencodeTimeoutMs,
-    maxOutputBytes: config.opencodeMaxOutputBytes
+    projectDir: demoRoot,
+    logger: console,
+    workerFactory({ id }) {
+      return {
+        client: {
+          async createSession() { return { id: `demo-${id}-${crypto.randomUUID()}` }; },
+          async prompt({ text }) {
+            return { parts: [{ type: 'text', text: `【Demo 模拟回复】${text.trim()}` }] };
+          },
+          async abortSession() { return {}; }
+        },
+        async start() { return { status: 'healthy' }; },
+        async stop() { return { status: 'stopped' }; },
+        async health() { return { healthy: true }; },
+        snapshot() {
+          return { status: 'healthy', endpoint: `http://127.0.0.1/${id}`, version: 'demo' };
+        }
+      };
+    }
   });
-  workbench = createWorkbenchServer({ config, promptRunner, logger: console });
   const address = await workbench.start(port, '127.0.0.1');
   const url = `http://127.0.0.1:${address.port}`;
   console.log('演示模式：AI 内容为本地模拟回复，不调用真实模型或 API Key。');

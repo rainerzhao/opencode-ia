@@ -74,3 +74,54 @@ test('a conversation can be explicitly saved as a private solution', async () =>
     assert.match(html, /默认仅本人可见/);
   });
 });
+
+test('chat page exposes private conversation navigation and running controls', async () => {
+  await withViteModule('features/chat/ChatPage.jsx', ({ ChatPage }) => {
+    const html = renderToStaticMarkup(React.createElement(ChatPage, {
+      initialConversations: [
+        { id: 'conversation-1', title: '季度预算分析', status: 'active' },
+        { id: 'conversation-2', title: '客户方案复盘', status: 'active' }
+      ],
+      initialActiveConversationId: 'conversation-1',
+      initialExecutionStatus: 'running',
+      initialActiveJobId: 'job-1',
+      initialConnection: 'connected'
+    }));
+
+    assert.match(html, />新建对话</);
+    assert.match(html, />季度预算分析</);
+    assert.match(html, />客户方案复盘</);
+    assert.match(html, />正在运行</);
+    assert.match(html, />停止任务</);
+  });
+});
+
+test('chat event reducer rebuilds private message history and execution state', async () => {
+  await withViteModule('features/chat/ChatPage.jsx', ({ applyGatewayEvent }) => {
+    let state = { messages: [], status: 'idle', cursor: 0, activeJobId: null, recoveryBoundary: false };
+    state = applyGatewayEvent(state, {
+      type: 'message.created', jobId: 'job-1', sequence: 1,
+      data: { role: 'user', text: '请分析预算' }
+    });
+    state = applyGatewayEvent(state, {
+      type: 'job.started', jobId: 'job-1', sequence: 3, data: { status: 'running' }
+    });
+    state = applyGatewayEvent(state, {
+      type: 'message.delta', jobId: 'job-1', sequence: 4, data: { text: '结论一' }
+    });
+    state = applyGatewayEvent(state, {
+      type: 'message.delta', jobId: 'job-1', sequence: 5, data: { text: '；结论二' }
+    });
+    state = applyGatewayEvent(state, {
+      type: 'job.completed', jobId: 'job-1', sequence: 6, data: { status: 'completed' }
+    });
+
+    assert.deepEqual(state.messages, [
+      { id: 'job-1:user', role: 'user', text: '请分析预算' },
+      { id: 'job-1:assistant', role: 'assistant', text: '结论一；结论二' }
+    ]);
+    assert.equal(state.status, 'completed');
+    assert.equal(state.cursor, 6);
+    assert.equal(state.activeJobId, null);
+  });
+});
