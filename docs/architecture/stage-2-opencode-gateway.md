@@ -1,10 +1,18 @@
 # Stage 2：常驻 OpenCode Gateway 与多 Worker 会话架构
 
-**状态：** Stage 2A–2D 已完成；Stage 2E.1 启动恢复已接入，运维与真实模型验收待完成
+**状态：** Stage 2A–2D 已完成；启动恢复与运维页面已接入；Runtime 内多 Session 并发架构修正、故障恢复演练和真实模型验收待完成
 **目标环境：** Mac 开发验收，随后迁移公司内网单台 Linux  
 **目标规模：** 15–20 名成员
 
 ## 结论
+
+### 2026-09-07 产品要求修正（优先于下方首版容量参数）
+
+账号、持久 Conversation 和 Runtime 是独立维度。少量常驻 OpenCode Runtime 应能承载多个用户的多个 Session；不把一个 Session 等同于一个进程，也不把每个 Runtime 只能执行一个任务作为最终架构。需要先验证 OpenCode 1.18.25 同 Runtime 多 Session 并发，再配置每 Runtime 执行槽、全局配额与每用户配额。一个 Conversation 内保持串行，不同 Conversation 可并发。会话映射独立不代表工具沙箱：必须另行验证文件、权限和产物隔离，未验证前不宣称完整安全隔离。
+
+新增产品验收：5 个真实登录账号，每人 3 个私人 Conversation，至少 3 轮方案讨论；检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型，`WORKBENCH_REAL_ACCEPTANCE=1` 显式调用当前 OpenCode 模型，使用合成输入且禁止工具。首次模拟模式 45/45 通过；当前实现仍是 2 个单槽 Worker，不能以此作为最终并发验收。首次真实模式在 Worker 启动阶段失败，尚未取得真实模型结果。
+
+后续顺序：诊断真实启动失败 → 验证单 Runtime 多 Session → 按证据修改容量与恢复 → 复跑 5×3×3 真实验收 → Stage 4。对 Codex、WorkBuddy 仅参考用户体验与可靠性要求，不假定其未公开内部实现。
 
 Stage 2 采用“一个常驻 Gateway 控制面 + 多个常驻 OpenCode Worker 执行面 + 多个逻辑会话”的单机架构。
 
