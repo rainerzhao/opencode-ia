@@ -1,5 +1,14 @@
 # Stage 2 Implementation Log
 
+## Stage 2E.1：启动恢复
+
+- 正式启动先对持久任务进行核对，再启动 Worker 并验证旧 Session，最后开放调度。
+- 排队任务按创建顺序重新入队；未知结果的 running 任务标为 interrupted，终态保留，恢复过程不调用 Prompt 重放。
+- 旧 Session 恢复失败时保留历史并追加恢复边界，新任务可创建新 Session。
+- 队列容量不足、Worker 启动失败时清空临时队列，允许再次从持久数据恢复。
+- TDD：生产启动最初没有执行已持久化排队任务；恢复失败重试最初遗留一个队列条目。增加回归、复现失败并修复后定向 15/15 通过。
+- 本次为启动恢复子阶段，运维后台、运行期间 Worker 恢复和真实 Provider 验收待后续实施。
+
 ## Stage 2A：持久化 Gateway 底座
 
 ### Delivered

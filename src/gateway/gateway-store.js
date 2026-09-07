@@ -295,6 +295,37 @@ function createGatewayStore(db, {
     return toOpenCodeSession(sessionByConversation.get(conversationId));
   }
 
+  function listQueuedJobs() {
+    return db.prepare(`
+      SELECT * FROM gateway_jobs
+      WHERE status = 'queued'
+      ORDER BY created_at, id
+    `).all().map(toJob);
+  }
+
+  function listRecoveringSessions() {
+    return db.prepare(`
+      SELECT * FROM opencode_sessions
+      WHERE recovery_status = 'recovering'
+      ORDER BY created_at, id
+    `).all().map(toOpenCodeSession);
+  }
+
+  function setSessionRecoveryStatus({ conversationId, recoveryStatus, workerId = null }) {
+    if (!RECOVERY_STATUSES.has(recoveryStatus)) {
+      throw storeError('INVALID_RECOVERY_STATUS', 'recovery status is invalid');
+    }
+    const result = db.prepare(`
+      UPDATE opencode_sessions
+      SET recovery_status = ?, worker_id = ?, updated_at = ?
+      WHERE conversation_id = ?
+    `).run(recoveryStatus, workerId, clock(), conversationId);
+    if (Number(result.changes) !== 1) {
+      throw storeError('SESSION_BINDING_NOT_FOUND', 'session binding was not found');
+    }
+    return toOpenCodeSession(sessionByConversation.get(conversationId));
+  }
+
   function createJob({ conversationId, userId, idempotencyKey, inputText }) {
     const conversation = requiredString(
       conversationId,
@@ -625,7 +656,10 @@ function createGatewayStore(db, {
     listConversations,
     listConversationMetadata,
     listEventsAfter,
+    listQueuedJobs,
+    listRecoveringSessions,
     recoverOnStartup,
+    setSessionRecoveryStatus,
     transitionJob,
     updateConversation,
     upsertWorker

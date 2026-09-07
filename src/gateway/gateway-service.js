@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { resolveWithinRoot } = require('../security/path-policy');
 const { GATEWAY_EVENT_TYPES } = require('../../packages/shared/gateway-events');
+const { recoverGateway } = require('./recovery');
 
 function serviceError(code, message) {
   const error = new Error(message);
@@ -68,6 +69,7 @@ function createGatewayService({
   let scheduling = null;
   let unsubscribeExits = null;
   let unsubscribeStatuses = null;
+  let recoveryReport = null;
 
   function workspaceFor(item) {
     const relative = `${safeSegment(item.userId, 'user id')}/${safeSegment(item.conversationId, 'conversation id')}`;
@@ -144,6 +146,7 @@ function createGatewayService({
       });
       publishConversation(item.conversationId, item.userId);
       let binding = store.getOpenCodeSession({ conversationId: item.conversationId });
+      if (binding?.recoveryStatus !== 'active') binding = null;
       if (!binding) {
         const conversation = store.getOwnedConversation({
           id: item.conversationId,
@@ -281,12 +284,13 @@ function createGatewayService({
       unsubscribeStatuses = pool.subscribeStatuses(handleWorkerStatus);
     }
     try {
-      await pool.start();
       fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
+      recoveryReport = await recoverGateway({ store, pool, queue, workspaceRoot });
       state = 'running';
       await schedule();
       return snapshot();
     } catch (error) {
+      await pool.stop().catch(() => {});
       unsubscribeExits?.();
       unsubscribeStatuses?.();
       unsubscribeExits = null;
@@ -423,7 +427,8 @@ function createGatewayService({
       status: state,
       running: active.size,
       queue: queue.snapshot(),
-      pool: pool.snapshot()
+      pool: pool.snapshot(),
+      recovery: recoveryReport
     };
   }
 

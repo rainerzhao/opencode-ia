@@ -11,7 +11,8 @@ const GATEWAY_EVENT_TYPES = Object.freeze({
   JOB_CANCELLED: 'job.cancelled',
   JOB_INTERRUPTED: 'job.interrupted',
   WORKER_STATUS: 'worker.status',
-  CONVERSATION_SNAPSHOT: 'conversation.snapshot'
+  CONVERSATION_SNAPSHOT: 'conversation.snapshot',
+  CONVERSATION_RECOVERY_BOUNDARY: 'conversation.recovery_boundary'
 });
 
 const GATEWAY_EVENT_TYPE_VALUES = new Set(Object.values(GATEWAY_EVENT_TYPES));

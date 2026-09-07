@@ -37,7 +37,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发，尚未开放为公司内网生产服务。Stage 2D 已在 Mac 完成常驻双 Worker Gateway、私人 Conversation、可续传 WebSocket 和 React 多会话产品链路；重启恢复、运维后台、真实内部模型联调、团队 Skill 中心和 Linux 部署仍未完成。
+> 当前版本用于产品体验和持续研发。多人私人对话已接通常驻 Gateway，并具备启动时的排队恢复和中断识别。运维后台、真实内部模型联调、团队 Skill 中心和 Linux 生产部署继续研发中。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -225,7 +225,7 @@ npm run check
 npm run security:scan
 ```
 
-- 自动测试覆盖真实 HTTP/WebSocket、私人 Conversation API、Gateway 续传与取消、OpenCode 子进程、Gateway 持久状态、双 Worker 调度、公平队列、20 用户模拟、路径、上传、URL 安全边界及 React 前端契约；当前共 182 项（提交前以最新全量输出为准）。
+- 自动测试覆盖真实 HTTP/WebSocket、私人 Conversation API、Gateway 续传与取消、OpenCode 子进程、Gateway 持久状态、双 Worker 调度、公平队列、20 用户模拟、路径、上传、URL 安全边界及 React 前端契约；当前共 186 项（提交前以最新全量输出为准）。
 - 语法检查只检查仓库自有 JavaScript 文件。
 - 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
 - `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
@@ -234,7 +234,9 @@ npm run security:scan
 
 ## 已知限制与下一阶段
 
-- Stage 2D 已完成 Mac 端产品切换；Gateway 重启后的排队任务重建、运维后台和真实内部模型多轮联调属于 Stage 2E，尚未完成。
+Stage 2E.1 已接入启动恢复：重启后恢复尚未执行的排队任务，将结果未知的运行任务标记为中断，并检查原 OpenCode 会话是否仍可使用。无法恢复的上下文会记录恢复边界。管理员运维视图、运行期间 Worker 重启演练和真实内部模型验收仍待完成。
+
+- Stage 2E.1 已完成启动恢复；运维后台和真实内部模型多轮联调仍未完成。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。

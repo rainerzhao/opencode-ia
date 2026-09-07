@@ -17,6 +17,7 @@ export function applyGatewayEvent(state, event) {
   if (event.sequence > 0 && event.sequence <= state.cursor) return state;
   let next = { ...state, cursor: Math.max(state.cursor, event.sequence || 0) };
   if (event.type === 'conversation.snapshot') return { ...next, recoveryBoundary: event.data?.recoveryBoundary === true };
+  if (event.type === 'conversation.recovery_boundary') return { ...next, recoveryBoundary: true };
   if (event.type === 'message.created') next.messages = upsert(next.messages, { id: `${event.jobId}:user`, role: 'user', text: event.data?.text || '' });
   if (event.type === 'message.delta') next.messages = upsert(next.messages, { id: `${event.jobId}:assistant`, role: 'assistant', text: event.data?.text || '' }, true);
   if (event.type === 'job.queued') next = { ...next, status: 'queued', activeJobId: event.jobId };

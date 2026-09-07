@@ -123,5 +123,10 @@ test('chat event reducer rebuilds private message history and execution state', 
     assert.equal(state.status, 'completed');
     assert.equal(state.cursor, 6);
     assert.equal(state.activeJobId, null);
+    state = applyGatewayEvent(state, {
+      type: 'conversation.recovery_boundary', sequence: 7, data: {}
+    });
+    assert.equal(state.recoveryBoundary, true);
+    assert.equal(state.messages.length, 2);
   });
 });

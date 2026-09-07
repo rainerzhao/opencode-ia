@@ -72,7 +72,7 @@
 - Stage 2B 单 Worker：通过。
 - Stage 2C Worker 池与队列：通过。
 - Stage 2D 多会话产品链路：通过；Conversation API、可续传协议、生产双 Worker 组合、React UI 和浏览器验收均完成。
-- Stage 2E 恢复与总验收：未开始。
+- Stage 2E.1 启动恢复：通过；定向 15/15、全量 186/186、构建、85 文件语法检查和密钥扫描通过。整阶段运维与真实模型验收待完成。
 
 ## Findings and Fixes
 
@@ -87,5 +87,5 @@
 
 ## Residual Risks
 
-- Stage 2E 尚未实现 Gateway 重启后的队列重建、运维后台和真实内部模型多轮联调。
+- Stage 2E 运维后台、运行期间 Worker 恢复演练和真实内部模型多轮联调尚未完成。
 - 当前只在 Mac 和本地模拟回复完成产品验收；Linux、Nginx、内部 Provider、备份恢复、容量压测和生产回滚演练仍是上线前门禁。
