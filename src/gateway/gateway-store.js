@@ -312,12 +312,27 @@ function createGatewayStore(db, {
     `).all();
   }
 
-  function listRecoveringSessions() {
+  function listRecoveringSessions({ workerId } = {}) {
+    const worker = workerId === undefined
+      ? null
+      : requiredString(workerId, 'INVALID_WORKER_ID', 'worker id is invalid');
     return db.prepare(`
-      SELECT * FROM opencode_sessions
-      WHERE recovery_status = 'recovering'
-      ORDER BY created_at, id
-    `).all().map(toOpenCodeSession);
+      SELECT s.*, c.owner_user_id
+      FROM opencode_sessions s
+      JOIN conversations c ON c.id = s.conversation_id
+      WHERE s.recovery_status = 'recovering'
+        AND (? IS NULL OR s.worker_id = ?)
+      ORDER BY s.created_at, s.id
+    `).all(worker, worker).map((row) => ({ ...toOpenCodeSession(row), ownerUserId: row.owner_user_id }));
+  }
+
+  function markWorkerSessionsRecovering({ workerId }) {
+    const worker = requiredString(workerId, 'INVALID_WORKER_ID', 'worker id is invalid');
+    return Number(db.prepare(`
+      UPDATE opencode_sessions
+      SET recovery_status = 'recovering', updated_at = ?
+      WHERE worker_id = ? AND recovery_status = 'active'
+    `).run(clock(), worker).changes);
   }
 
   function setSessionRecoveryStatus({ conversationId, recoveryStatus, workerId = null }) {
@@ -668,6 +683,7 @@ function createGatewayStore(db, {
     listQueuedJobs,
     listJobMetadata,
     listRecoveringSessions,
+    markWorkerSessionsRecovering,
     recoverOnStartup,
     setSessionRecoveryStatus,
     transitionJob,

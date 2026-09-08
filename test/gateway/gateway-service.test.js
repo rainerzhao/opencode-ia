@@ -71,9 +71,13 @@ function createFixture(t, {
     workerCount: 2,
     heartbeatMs: 60_000,
     workerFactory: ({ id, index, onExit }) => {
-      const record = { id, index, status: 'stopped', onExit, sessions: 0 };
+      const record = { id, index, status: 'stopped', onExit, sessions: 0, sessionsAvailable: true };
       records.push(record);
       const client = {
+        async getSession({ sessionId }) {
+          if (!record.sessionsAvailable) throw Object.assign(new Error('session missing'), { code: 'OPENCODE_API_ERROR' });
+          return { id: sessionId };
+        },
         async createSession({ directory }) {
           if (failSessionForWorker === id) {
             const error = new Error('session failed');
@@ -126,7 +130,8 @@ function createFixture(t, {
           };
         }
       };
-      record.crash = () => {
+      record.crash = ({ loseSessions = false } = {}) => {
+        if (loseSessions) record.sessionsAvailable = false;
         record.status = 'unhealthy';
         onExit({ expected: false, code: 71, signal: null });
       };
@@ -323,6 +328,39 @@ test('a recovered worker wakes sticky queued conversations without new user inpu
   assert.equal(fixture.store.getJob({ id: queued.id }).status, 'queued');
   await fixture.pool.heartbeat();
   await eventually(() => fixture.store.getJob({ id: queued.id }).status === 'completed');
+});
+
+test('runtime restart validates persisted sessions before resuming queued work', async (t) => {
+  const fixture = createFixture(t, { automatic: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1);
+  fixture.submit(conversation, 1, 'first');
+  await fixture.service.waitForIdle();
+  const original = fixture.store.getOpenCodeSession({ conversationId: conversation.id });
+  fixture.records.find((record) => record.id === original.workerId).crash();
+  assert.equal(fixture.store.getOpenCodeSession({ conversationId: conversation.id }).recoveryStatus, 'recovering');
+  const queued = fixture.submit(conversation, 1, 'after-restart');
+  await fixture.pool.heartbeat();
+  await eventually(() => fixture.store.getJob({ id: queued.id }).status === 'completed');
+  const restored = fixture.store.getOpenCodeSession({ conversationId: conversation.id });
+  assert.equal(restored.opencodeSessionId, original.opencodeSessionId);
+  assert.equal(restored.recoveryStatus, 'active');
+});
+
+test('runtime restart interrupts queued work when its previous session disappeared', async (t) => {
+  const fixture = createFixture(t, { automatic: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1);
+  fixture.submit(conversation, 1, 'first');
+  await fixture.service.waitForIdle();
+  const binding = fixture.store.getOpenCodeSession({ conversationId: conversation.id });
+  fixture.records.find((record) => record.id === binding.workerId).crash({ loseSessions: true });
+  const queued = fixture.submit(conversation, 1, 'must-not-run');
+  await fixture.pool.heartbeat();
+  await eventually(() => fixture.store.getJob({ id: queued.id }).status === 'interrupted');
+  assert.equal(fixture.store.getJob({ id: queued.id }).errorCode, 'OPENCODE_SESSION_UNAVAILABLE');
+  assert.equal(fixture.starts.includes('user-1:must-not-run'), false);
+  assert.equal(fixture.store.getOpenCodeSession({ conversationId: conversation.id }).recoveryStatus, 'unavailable');
 });
 
 test('cancels queued and running jobs and marks a deadline as timed out', async (t) => {

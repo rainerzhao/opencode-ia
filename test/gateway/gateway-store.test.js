@@ -247,3 +247,18 @@ test('does not accept new jobs after a conversation is archived', (t) => {
     (error) => error.code === 'CONVERSATION_ARCHIVED'
   );
 });
+
+test('marks only active session bindings for one unhealthy runtime as recovering', (t) => {
+  const { store } = createFixture(t);
+  for (const id of ['worker-1', 'worker-2']) store.upsertWorker({ id, instanceId: `${id}-instance`, status: 'healthy', capacity: 3 });
+  const conversations = ['a', 'b', 'c'].map((suffix) => store.createConversation({ ownerUserId: 'user-a', title: `Conversation ${suffix}` }));
+  for (const [index, conversation] of conversations.entries()) store.bindOpenCodeSession({
+    id: `binding-${index}`, conversationId: conversation.id, opencodeSessionId: `session-${index}`,
+    workerId: index < 2 ? 'worker-1' : 'worker-2', workspacePath: `/workspaces/${conversation.id}`,
+    recoveryStatus: index === 1 ? 'unavailable' : 'active'
+  });
+  assert.equal(store.markWorkerSessionsRecovering({ workerId: 'worker-1' }), 1);
+  assert.deepEqual(store.listRecoveringSessions({ workerId: 'worker-1' }).map((item) => item.conversationId), [conversations[0].id]);
+  assert.equal(store.getOpenCodeSession({ conversationId: conversations[1].id }).recoveryStatus, 'unavailable');
+  assert.equal(store.getOpenCodeSession({ conversationId: conversations[2].id }).recoveryStatus, 'active');
+});

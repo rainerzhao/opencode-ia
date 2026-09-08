@@ -1,5 +1,12 @@
 # Stage 2 Implementation Log
 
+## Stage 2E.5：运行期 Runtime 会话恢复
+
+- Runtime 不健康时，仅将绑定到该 Runtime 且处于 active 的 Session 标为 recovering；其他 Runtime 和已 unavailable 的会话不受影响。
+- Runtime 恢复健康后先校验原 Session，再唤醒排队任务。Session 丢失则写恢复边界并中断相关排队任务，不执行 Prompt。
+- 首轮正向测试发现恢复流程重入：租用槽位会同步发布健康状态，而恢复锁尚未登记，第二个流程抢不到同 Conversation 槽并误判丢失。根因定位后改为任何池操作前同步登记恢复守卫。
+- 定向 20/20 通过：Store 范围、正向恢复、Session 丢失、无新输入队列唤醒和既有调度行为。此处为确定性进程替身演练，真实 OpenCode 子进程崩溃留作下一验收点。
+
 ## Stage 2E.4：恢复边界禁止静默重放
 
 - 启动恢复先验证旧 OpenCode Session。若不可用，相关持久排队任务从内存公平队列移除并转为 `interrupted / OPENCODE_SESSION_UNAVAILABLE`；没有旧 Session 的新 Conversation 不受影响。

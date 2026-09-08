@@ -70,6 +70,7 @@ function createGatewayService({
   let unsubscribeExits = null;
   let unsubscribeStatuses = null;
   let recoveryReport = null;
+  const runtimeRecoveries = new Map();
 
   function workspaceFor(item) {
     const relative = `${safeSegment(item.userId, 'user id')}/${safeSegment(item.conversationId, 'conversation id')}`;
@@ -236,6 +237,7 @@ function createGatewayService({
       const item = queue.nextEligible((candidate) => {
         if (!canRun(candidate)) return false;
         const binding = store.getOpenCodeSession({ conversationId: candidate.conversationId });
+        if (binding?.recoveryStatus === 'recovering') return false;
         selectedLease = pool.acquire({
           conversationId: candidate.conversationId,
           ...(binding?.workerId ? { preferredWorkerId: binding.workerId } : {})
@@ -265,6 +267,74 @@ function createGatewayService({
     schedule();
   }
 
+  function interruptQueuedConversation(binding) {
+    let interrupted = 0;
+    for (const job of store.listQueuedJobs()) {
+      if (job.conversationId !== binding.conversationId || !queue.remove(job.id)) continue;
+      store.transitionJob({
+        jobId: job.id,
+        userId: job.userId,
+        event: 'interrupt',
+        errorCode: 'OPENCODE_SESSION_UNAVAILABLE'
+      });
+      interrupted += 1;
+    }
+    return interrupted;
+  }
+
+  function recoverRuntimeSessions(workerId) {
+    if (runtimeRecoveries.has(workerId)) return runtimeRecoveries.get(workerId);
+    // Acquiring a lease publishes worker status synchronously. Register a guard
+    // before any pool operation so that status callbacks cannot re-enter recovery.
+    runtimeRecoveries.set(workerId, Promise.resolve());
+    const recovery = (async () => {
+      for (const binding of store.listRecoveringSessions({ workerId })) {
+        if (state !== 'running') break;
+        let lease;
+        try {
+          lease = pool.acquire({ conversationId: binding.conversationId, preferredWorkerId: workerId });
+          if (!lease || typeof lease.client?.getSession !== 'function') {
+            throw serviceError('GATEWAY_RECOVERY_WORKER', 'worker cannot restore the session');
+          }
+          const session = await lease.client.getSession({
+            sessionId: binding.opencodeSessionId,
+            directory: binding.workspacePath
+          });
+          if (session?.id !== binding.opencodeSessionId) {
+            throw serviceError('OPENCODE_PROTOCOL_ERROR', 'restored session identity does not match');
+          }
+          store.setSessionRecoveryStatus({
+            conversationId: binding.conversationId,
+            recoveryStatus: 'active',
+            workerId
+          });
+        } catch (error) {
+          store.setSessionRecoveryStatus({
+            conversationId: binding.conversationId,
+            recoveryStatus: 'unavailable',
+            workerId: null
+          });
+          store.appendEvent({
+            conversationId: binding.conversationId,
+            type: GATEWAY_EVENT_TYPES.CONVERSATION_RECOVERY_BOUNDARY,
+            payload: { reason: error?.code || 'OPENCODE_SESSION_UNAVAILABLE' }
+          });
+          interruptQueuedConversation(binding);
+          publishConversation(binding.conversationId, binding.ownerUserId);
+        } finally {
+          if (lease) pool.release(lease);
+        }
+      }
+    })().catch(() => {
+      logger.error('Gateway runtime session recovery failed');
+    }).finally(() => {
+      runtimeRecoveries.delete(workerId);
+      if (state === 'running') schedule();
+    });
+    runtimeRecoveries.set(workerId, recovery);
+    return recovery;
+  }
+
   function handleWorkerStatus(worker) {
     store.upsertWorker({
       id: worker.id,
@@ -275,7 +345,12 @@ function createGatewayService({
       version: worker.version,
       capacity: worker.capacity
     });
-    if (worker.status === 'healthy' && state === 'running') schedule();
+    if (state !== 'running') return;
+    if (worker.status === 'unhealthy') {
+      store.markWorkerSessionsRecovering({ workerId: worker.id });
+      return;
+    }
+    if (worker.status === 'healthy') recoverRuntimeSessions(worker.id);
   }
 
   async function start() {
@@ -343,9 +418,10 @@ function createGatewayService({
   }
 
   async function waitForIdle() {
-    while (active.size > 0 || queue.snapshot().totalQueued > 0 || scheduling) {
+    while (active.size > 0 || queue.snapshot().totalQueued > 0 || scheduling || runtimeRecoveries.size > 0) {
       const promises = [...active.values()].map((context) => context.promise);
       if (scheduling) promises.push(scheduling);
+      promises.push(...runtimeRecoveries.values());
       if (promises.length > 0) await Promise.race(promises);
       else await new Promise((resolve) => setImmediate(resolve));
     }
@@ -362,6 +438,7 @@ function createGatewayService({
       transitionIfRunning(context, 'interrupt', 'GATEWAY_STOPPED');
     }
     await Promise.allSettled([...active.values()].map((context) => context.promise));
+    await Promise.allSettled([...runtimeRecoveries.values()]);
     await pool.stop();
     unsubscribeStatuses?.();
     unsubscribeStatuses = null;

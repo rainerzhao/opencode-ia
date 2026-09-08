@@ -1,5 +1,11 @@
 # Stage 2 Acceptance Report
 
+## Stage 2E.5 运行期确定性恢复
+
+**PASS WITH NOTES**：Runtime 异常后会话进入 recovering，原 Session 校验通过才继续排队工作；Session 消失时任务被安全中断。恢复流程的同步回调重入竞态已由失败测试复现并修复。Store 与 Gateway 定向 20/20 通过。真实 OpenCode 子进程 kill/restart 和真实上下文连续性仍待下一增量验证。
+
+完整验证：`npm test` 202/202；构建 40 modules；语法检查 88 files；密钥扫描及 `git diff --check` 通过。
+
 ## Stage 2E.4 恢复安全增量
 
 **PASS WITH NOTES**：结果未知的运行任务仍不重放；旧 Session 不可用时，其排队任务也转为中断并退出内存队列。新 Conversation 的首个任务保持排队，可在新 Session 正常执行。UI 明确要求确认上下文后重新发送。该增量覆盖启动恢复，不代表运行期间进程崩溃的完整恢复演练已经完成。
