@@ -3,7 +3,8 @@
 const TRANSITIONS = Object.freeze({
   queued: Object.freeze({
     start: 'running',
-    cancel: 'cancelled'
+    cancel: 'cancelled',
+    interrupt: 'interrupted'
   }),
   running: Object.freeze({
     complete: 'completed',

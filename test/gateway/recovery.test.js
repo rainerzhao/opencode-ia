@@ -102,7 +102,8 @@ test('recovers queued work in order, interrupts unknown running work, and valida
     interruptedJobs: 1,
     recoveringSessions: 2,
     stoppedWorkers: 1,
-    requeuedJobs: 2,
+    requeuedJobs: 1,
+    interruptedQueuedJobs: 1,
     restoredSessions: 1,
     unavailableSessions: 1
   });
@@ -111,20 +112,34 @@ test('recovers queued work in order, interrupts unknown running work, and valida
   assert.deepEqual(calls.getSession.sort(), ['session-missing', 'session-ok']);
   assert.equal(fixture.store.getJob({ id: running.id }).status, 'interrupted');
   assert.equal(fixture.store.getJob({ id: completed.id }).status, 'completed');
+  assert.equal(fixture.store.getJob({ id: queuedB.id }).status, 'interrupted');
+  assert.equal(fixture.store.getJob({ id: queuedB.id }).errorCode, 'OPENCODE_SESSION_UNAVAILABLE');
   assert.equal(fixture.store.getOpenCodeSession({ conversationId: available.id }).recoveryStatus, 'active');
   assert.equal(fixture.store.getOpenCodeSession({ conversationId: unavailable.id }).recoveryStatus, 'unavailable');
   assert.deepEqual(
-    [queue.nextEligible(), queue.nextEligible()].map((job) => job.id),
-    [queuedA.id, queuedB.id]
+    [queue.nextEligible(), queue.nextEligible()].map((job) => job?.id || null),
+    [queuedA.id, null]
   );
-  assert.equal(
+  assert.deepEqual(
     fixture.store.listEventsAfter({
       conversationId: unavailable.id,
       ownerUserId: 'user-1',
       afterSequence: 0
-    }).at(-1).type,
-    'conversation.recovery_boundary'
+    }).slice(-2).map((event) => event.type),
+    ['conversation.recovery_boundary', 'job.interrupted']
   );
+});
+
+test('keeps new conversations queued when no previous OpenCode session exists', async (t) => {
+  const { store, workspaceRoot } = createFixture(t);
+  const conversation = store.createConversation({ ownerUserId: 'user-1', title: 'First prompt' });
+  const job = store.createJob({ conversationId: conversation.id, userId: 'user-1', idempotencyKey: 'first', inputText: 'start a new session' });
+  const queue = createFairQueue({ maxQueuedPerUser: 3 });
+  const report = await recoverGateway({ store, queue, workspaceRoot, pool: { async start() {} } });
+  assert.equal(report.requeuedJobs, 1);
+  assert.equal(report.interruptedQueuedJobs, 0);
+  assert.equal(queue.nextEligible().id, job.id);
+  assert.equal(store.getJob({ id: job.id }).status, 'queued');
 });
 
 test('fails startup instead of silently dropping persisted jobs above the configured queue limit', async (t) => {

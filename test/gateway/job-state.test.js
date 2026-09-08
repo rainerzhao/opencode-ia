@@ -7,6 +7,7 @@ const { transitionJob } = require('../../src/gateway/job-state');
 test('moves queued and running jobs through only the supported lifecycle', () => {
   assert.equal(transitionJob('queued', 'start'), 'running');
   assert.equal(transitionJob('queued', 'cancel'), 'cancelled');
+  assert.equal(transitionJob('queued', 'interrupt'), 'interrupted');
   assert.equal(transitionJob('running', 'complete'), 'completed');
   assert.equal(transitionJob('running', 'fail'), 'failed');
   assert.equal(transitionJob('running', 'cancel'), 'cancelled');

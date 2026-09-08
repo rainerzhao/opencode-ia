@@ -1,6 +1,6 @@
 # Stage 2：常驻 OpenCode Gateway 与多 Worker 会话架构
 
-**状态：** Stage 2A–2D 已完成；启动恢复与运维页面已接入；Runtime 内多 Session 并发架构修正、故障恢复演练和真实模型验收待完成
+**状态：** Stage 2A–2D 已完成；启动恢复、运维页面及 Runtime 多 Session 真实验收已完成；运行期故障演练和工具执行隔离待完成
 **目标环境：** Mac 开发验收，随后迁移公司内网单台 Linux  
 **目标规模：** 15–20 名成员
 
@@ -106,7 +106,7 @@ workbench conversation_id -> opencode_session_id -> worker_id
 - Worker 心跳超时后停止分配新任务，当前任务标记为 `interrupted`。
 - Gateway 重启后从 SQLite 恢复队列；`running` 任务不能直接假定成功，必须向原 Worker/OpenCode 查询或转为可重试状态。
 - 有副作用的工具任务默认不自动重放；只读生成任务可由用户确认后重试。
-- Worker 重启优先使用原 `opencode_session_id` 恢复；不可恢复时创建新 Session，并在 UI 明确提示上下文恢复边界。
+- Worker 重启优先使用原 `opencode_session_id` 恢复；不可恢复时中断依赖旧上下文的排队任务并在 UI 明确提示，只有成员确认后发送的新任务才创建新 Session。
 - Gateway 退出时先停止接收新任务，再等待短时排空，超时后取消并持久化剩余状态。
 
 ## 安全与隔离

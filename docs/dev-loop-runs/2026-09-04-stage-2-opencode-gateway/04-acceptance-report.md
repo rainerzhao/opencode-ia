@@ -1,5 +1,11 @@
 # Stage 2 Acceptance Report
 
+## Stage 2E.4 恢复安全增量
+
+**PASS WITH NOTES**：结果未知的运行任务仍不重放；旧 Session 不可用时，其排队任务也转为中断并退出内存队列。新 Conversation 的首个任务保持排队，可在新 Session 正常执行。UI 明确要求确认上下文后重新发送。该增量覆盖启动恢复，不代表运行期间进程崩溃的完整恢复演练已经完成。
+
+验证：定向状态机、恢复、生产组合和 React 用例通过；全量 `npm test` 199/199，通过；构建 40 modules、语法检查 88 files、密钥扫描和 `git diff --check` 均通过。
+
 ## 2026-09-08 Runtime 并发验收增量
 
 **PASS WITH NOTES**：单常驻 OpenCode 1.18.25 Runtime、5 账号、15 Session、3 轮 45 请求真实链路通过，峰值 15 个运行任务、每人 3 个。每轮检查方案标识保留、其他会话标识不存在，以及账号列表和越权 REST。耗时 19257/3265/2551 ms，为一次 Mac 合成短测，不是 SLA。

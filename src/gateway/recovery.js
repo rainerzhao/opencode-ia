@@ -42,6 +42,7 @@ async function recoverGateway({ store, pool, queue, workspaceRoot }) {
   }
   let restoredSessions = 0;
   let unavailableSessions = 0;
+  const unavailableConversations = new Set();
   for (const binding of store.listRecoveringSessions()) {
     let lease;
     try {
@@ -78,14 +79,28 @@ async function recoverGateway({ store, pool, queue, workspaceRoot }) {
         payload: { reason: error?.code || 'OPENCODE_SESSION_UNAVAILABLE' }
       });
       unavailableSessions += 1;
+      unavailableConversations.add(binding.conversationId);
     } finally {
       if (lease) pool.release(lease);
     }
   }
 
+  let interruptedQueuedJobs = 0;
+  for (const job of queuedJobs) {
+    if (!unavailableConversations.has(job.conversationId) || !queue.remove(job.id)) continue;
+    store.transitionJob({
+      jobId: job.id,
+      userId: job.userId,
+      event: 'interrupt',
+      errorCode: 'OPENCODE_SESSION_UNAVAILABLE'
+    });
+    interruptedQueuedJobs += 1;
+  }
+
   return {
     ...report,
-    requeuedJobs: queuedJobs.length,
+    requeuedJobs: queuedJobs.length - interruptedQueuedJobs,
+    interruptedQueuedJobs,
     restoredSessions,
     unavailableSessions
   };

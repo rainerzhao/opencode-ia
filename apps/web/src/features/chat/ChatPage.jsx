@@ -157,7 +157,7 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
     <ConversationList conversations={conversations} activeId={activeId} busy={creating} onCreate={createConversation} onSelect={(id) => { activeRef.current = id; setActiveId(id); setNotice(''); }} />
     <div className="panel chat">
       <ExecutionStatus connection={connection} executionStatus={current.status} activeJobId={current.activeJobId} onCancel={cancel} />
-      {current.recoveryBoundary && <p className="recovery-banner">已恢复到最新一致状态</p>}
+      {(current.recoveryBoundary || current.status === 'interrupted') && <p className="recovery-banner">任务不会自动重放，请确认上下文后重新发送。</p>}
       <div className="message-list">{current.messages.length ? current.messages.map((message) => <p className={message.role} key={message.id || `${message.role}:${message.text}`}>{message.text}</p>) : <div className="empty"><b>{activeId ? '与 OpenCode 开始一次对话' : '先新建一个私人对话'}</b><span>模型、Agent、Skill 与工具执行统一经过服务端安全边界</span></div>}</div>
       <form onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="输入你的问题…" aria-label="对话内容" disabled={!activeId} /><button disabled={!activeId || connection !== 'connected'}>发送</button></form>
       <p className="chat-notice" role="status">{notice}</p>

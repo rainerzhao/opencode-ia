@@ -1,5 +1,12 @@
 # Stage 2 Implementation Log
 
+## Stage 2E.4：恢复边界禁止静默重放
+
+- 启动恢复先验证旧 OpenCode Session。若不可用，相关持久排队任务从内存公平队列移除并转为 `interrupted / OPENCODE_SESSION_UNAVAILABLE`；没有旧 Session 的新 Conversation 不受影响。
+- Job 状态机明确支持 `queued → interrupted`，事件序列保留恢复边界和任务中断，避免把系统中断误记为成员主动取消。
+- React 在恢复边界或任务中断时提示“不会自动重放，请确认上下文后重新发送”。
+- 采用测试先行：状态机和恢复用例先因缺少语义失败，UI 用例先因缺少提示失败；实现后定向测试通过。架构与安全内联复核结论：宁可要求成员确认，也不在新 Session 中静默执行依赖旧上下文的输入。
+
 ## Stage 2E.3：Runtime 多 Session 并发（2026-09-08）
 
 - 用户确认不采用一会话一进程。增加可配置 Runtime 容量，同 Conversation 串行，不同 Session 可同时分配到同 Runtime；配置与正式入口已接通。

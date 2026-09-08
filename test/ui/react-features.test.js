@@ -147,3 +147,16 @@ test('chat event reducer rebuilds private message history and execution state', 
     assert.equal(state.messages.length, 2);
   });
 });
+
+test('recovery boundary tells the user that uncertain work is not silently replayed', async () => {
+  await withViteModule('features/chat/ChatPage.jsx', ({ ChatPage }) => {
+    const html = renderToStaticMarkup(React.createElement(ChatPage, {
+      initialConversations: [{ id: 'conversation-1', title: '恢复测试', status: 'active' }],
+      initialActiveConversationId: 'conversation-1',
+      initialMessages: [],
+      initialExecutionStatus: 'interrupted'
+    }));
+    assert.match(html, /不会自动重放/);
+    assert.match(html, /确认上下文后重新发送/);
+  });
+});
