@@ -1,12 +1,12 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-07
+更新时间：2026-09-08
 
 ## 当前结论
 
 项目当前处于 **Stage 0、Stage 1、Stage 2A–2D 完成，Stage 2E 开发中** 的状态。
 
-Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻双 Worker Gateway、React 多 Conversation 和无密钥 Demo。启动恢复已接入，运维后台、真实内部模型联调和生产门禁尚未完成。
+Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复和无密钥 Demo。Stage 2E 仍需完成工具、文件与产物隔离门禁。
 
 ## 阶段总览
 
@@ -73,9 +73,9 @@ Stage 1 已在 Mac 上跑通管理员与成员浏览器闭环、React/Vite 迁�
 - ✅ Stage 2B：单个受保护的常驻 OpenCode Worker、HTTP/SSE 客户端、进程生命周期和本机真实 OpenCode 健康冒烟。
 - ✅ Stage 2C：2 Worker 池、粘性 Session、健康检查、按用户公平队列、并发限制和故障隔离。
 - ✅ Stage 2D：私人 Conversation API、WebSocket 订阅/提交/取消、断线补发和恢复边界、生产双 Worker 组合及 React 多会话体验。
-- ⏳ Stage 2E：重启恢复、管理后台、20 用户压测和真实 OpenCode 冒烟验收。
+- 🚧 Stage 2E：启动与运行期恢复、管理后台、20 用户模拟、真实 5×3×3 多会话和工具执行隔离。
 
-Stage 2E.1 已实现启动恢复与生产入口集成：排队重建、运行任务中断、Session 检查和恢复失败后的安全重试。Stage 2E 整体验收仍未完成。
+Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。工具、文件与产物隔离仍未完成，因此 Stage 2E 整体验收尚未关闭。
 
 出口标准：真实 OpenCode 与内部兼容 OpenAI 协议模型完成联调，Mac 上完成并发和恢复验证。
 

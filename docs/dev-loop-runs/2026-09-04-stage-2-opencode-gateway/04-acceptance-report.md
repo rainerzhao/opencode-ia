@@ -1,8 +1,16 @@
 # Stage 2 Acceptance Report
 
+## Stage 2E.6 真实 Runtime 崩溃恢复演练
+
+**PASS WITH NOTES**：opt-in 验收建立真实会话上下文后强制终止测试自行启动的 OpenCode Runtime。运行任务转为 interrupted，Runtime 以新 PID 自动恢复，原 Session 验证成功后排队任务继续完成并保留第一轮上下文标识。测试使用合成内容和 `permission: deny`；工具、文件与产物隔离以及 Linux 长时稳定性仍未覆盖，Stage 2E 尚不关闭。
+
+真实命令：`npm run test:runtime-crash`；结果 1/1 通过。失败门禁另以无效可执行文件确认 Runtime 无法启动时测试会失败。
+
+完整回归：202 项通过、1 项 opt-in 测试默认跳过、0 失败；构建 40 modules；语法检查 89 files；密钥扫描及 `git diff --check` 通过。
+
 ## Stage 2E.5 运行期确定性恢复
 
-**PASS WITH NOTES**：Runtime 异常后会话进入 recovering，原 Session 校验通过才继续排队工作；Session 消失时任务被安全中断。恢复流程的同步回调重入竞态已由失败测试复现并修复。Store 与 Gateway 定向 20/20 通过。真实 OpenCode 子进程 kill/restart 和真实上下文连续性仍待下一增量验证。
+**PASS WITH NOTES**：Runtime 异常后会话进入 recovering，原 Session 校验通过才继续排队工作；Session 消失时任务被安全中断。恢复流程的同步回调重入竞态已由失败测试复现并修复。Store 与 Gateway 定向 20/20 通过。真实 OpenCode 子进程 kill/restart 和上下文连续性已由 Stage 2E.6 补充验证。
 
 完整验证：`npm test` 202/202；构建 40 modules；语法检查 88 files；密钥扫描及 `git diff --check` 通过。
 

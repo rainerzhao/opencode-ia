@@ -3,29 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenCode 团队 AI 工作台 · Stage 2D 评审摘要</title>
+  <title>OpenCode 团队 AI 工作台 · Stage 2E 进展摘要</title>
   <style>
     :root{--paper:#f4f6f5;--ink:#17242d;--soft:#52616b;--faint:#78868e;--rule:#d7dfdc;--card:#fff;--accent:#0b766e;--accent-soft:#dcefeb;--warn:#9a6720;--warn-soft:#fff3da;--code:#e8edeb}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.65 ui-serif,Charter,Georgia,"Songti SC",serif;padding:56px 24px 88px}.doc{max-width:900px;margin:auto}.eyebrow,.meta,.label,th,code{font-family:ui-monospace,"SF Mono",Menlo,"PingFang SC",monospace}.head{padding-bottom:28px;border-bottom:1px solid var(--rule);margin-bottom:42px}.eyebrow{font-size:11px;letter-spacing:.13em;color:var(--accent)}h1{font-size:36px;line-height:1.15;margin:12px 0 8px}h2{font-size:22px;margin:48px 0 18px;padding-bottom:9px;border-bottom:1px solid var(--rule)}p{margin:0 0 14px}.meta{display:flex;flex-wrap:wrap;gap:24px;color:var(--faint);font-size:11px}.lead{background:var(--accent-soft);border-left:3px solid var(--accent);padding:20px 24px;margin:0 0 44px}.label{font-size:10px;letter-spacing:.12em;color:var(--accent);font-weight:700;margin-bottom:6px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{background:var(--card);border:1px solid var(--rule);padding:18px}.card strong{display:block;font-size:17px;margin-bottom:6px}.card span{color:var(--soft);font-size:13px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--rule);vertical-align:top}th{font-size:10px;letter-spacing:.08em;color:var(--faint)}.pass{color:var(--accent);font-weight:700}.evidence{display:grid;grid-template-columns:2fr 1fr;gap:14px}.evidence figure{margin:0;background:#fff;border:1px solid var(--rule);padding:8px}.evidence img{display:block;width:100%;height:auto}.evidence figcaption{font-size:11px;color:var(--faint);padding-top:7px}.warn{background:var(--warn-soft);border:1px solid #ead3aa;padding:18px 20px;color:#6f4a18}code{font-size:12px;background:var(--code);padding:2px 5px;border-radius:3px}ul{padding-left:22px}li{margin-bottom:7px}footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--rule);font-size:12px;color:var(--faint)}@media(max-width:720px){body{padding:30px 15px 60px}h1{font-size:28px}.cards,.evidence{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <article class="doc">
-    <section class="lead"><h2>2026-09-08：单 Runtime 多会话真实验收</h2><p>5 个账号、15 个 Session、3 轮 45 次真实 OpenCode 请求通过，峰值 15 个运行任务。同会话保持串行，不同会话共享常驻 Runtime 的多个执行槽。修复请求超时混用、内嵌模型错误误报成功、健康瞬时失败误中断及恢复后队列不唤醒。</p><p>合成输入，工具禁用；尚未完成文件执行沙箱、Linux 和长时稳定性验收。详情见 <a href="04-acceptance-report.md">验收报告</a>。</p></section>
+    <section class="lead"><h2>2026-09-08：多人多会话与真实崩溃恢复</h2><p>5 个账号、15 个 Session、3 轮 45 次真实 OpenCode 请求通过，峰值 15 个运行任务；另一次真实演练在任务运行和排队期间强制终止 Runtime，验证了运行任务明确中断、进程自动换 PID 恢复、原 Session 校验后继续上下文。</p><p>合成输入，工具禁用；尚未完成工具、文件与产物隔离、Linux 和长时稳定性验收。详情见 <a href="04-acceptance-report.md">验收报告</a>。</p></section>
     <section class="lead">
-      <h2>最新增量：管理员运维 API</h2>
-      <p>2026-09-07 · Stage 2E.2a：管理员可查询健康、Worker 和最近 200 条任务元数据，并取消任务。私人标题、正文、幂等键和连接凭据不向管理员返回。角色、CSRF、取消幂等、审计和失败脱敏定向测试 4/4 通过。</p>
-      <p>可视化后台、真实模型联调及 Linux 验收尚未完成。下方保留已交付多会话产品链路的评审记录。</p>
+      <h2>Stage 2E 当前边界</h2>
+      <p>启动恢复、管理员运行视图、真实多人多 Session、确定性故障恢复和真实 Runtime 崩溃演练已完成；私人标题、正文、幂等键和连接凭据仍不向管理员返回。</p>
+      <p>工具、文件与产物隔离是 Stage 2E 最后一项安全门禁，完成后进入团队 Skill 中心；Linux 生产化仍是后续独立阶段。</p>
     </section>
     <header class="head">
-      <div class="eyebrow">OPENCODE TEAM WORKBENCH · STAGE 2D</div>
-      <h1>常驻 Gateway 多会话产品链路</h1>
-      <p>把已验证的双 Worker 调度与可续传协议，接入成员真正使用的 React Conversation 界面。</p>
-      <div class="meta"><span>VERDICT · PASS</span><span>DATE · 2026-09-07</span><span>BRANCH · MAIN</span></div>
+      <div class="eyebrow">OPENCODE TEAM WORKBENCH · STAGE 2E</div>
+      <h1>常驻 Gateway 生产准备进展</h1>
+      <p>把多账号、多 Conversation、多 OpenCode Session 和少量常驻 Runtime 分层管理，并用真实故障验证恢复边界。</p>
+      <div class="meta"><span>VERDICT · PASS WITH NOTES</span><span>DATE · 2026-09-08</span><span>BRANCH · MAIN</span></div>
     </header>
 
     <div class="lead">
       <div class="label">TL;DR</div>
-      Stage 2D 已在 Mac 完成：正式入口常驻双 Worker Gateway，成员可创建和切换私人 Conversation，看到排队、运行、停止、完成与恢复状态；无密钥 Demo 也走同一条产品协议。Stage 2E、内部模型和 Linux 生产验收仍未完成。
+      Stage 2A–2D 已完成；Stage 2E 已完成恢复、运行管理和真实多会话关键链路，但仍需通过工具、文件与产物隔离门禁。当前结论只适用于 Mac 开发验收，不代表 Linux 生产就绪。
     </div>
 
     <section>
@@ -46,7 +46,7 @@
           <tr><td>实时协议</td><td>订阅、提交、取消、幂等、序号续传、恢复边界、登录撤销</td><td class="pass">完成</td></tr>
           <tr><td>成员界面</td><td>私人 Conversation、新建切换、历史恢复、执行状态、停止任务</td><td class="pass">完成</td></tr>
           <tr><td>无密钥 Demo</td><td>使用 <code>gateway.v1</code> 和本地模拟 Worker，不调用 Provider</td><td class="pass">完成</td></tr>
-          <tr><td>Stage 2E</td><td>重启恢复、运维后台、真实内部模型和生产验收</td><td>待开发</td></tr>
+          <tr><td>Stage 2E</td><td>恢复、运维、多会话和真实崩溃已验收；工具/文件/产物隔离待完成</td><td>进行中</td></tr>
         </tbody>
       </table>
     </section>
@@ -54,7 +54,8 @@
     <section>
       <h2>验收证据</h2>
       <ul>
-        <li><code>npm test</code>：182/182 通过；Vite 构建 39 modules transformed。</li>
+        <li><code>npm test</code>：202 项通过、1 项 opt-in 真实崩溃演练默认跳过；Vite 构建 40 modules transformed。</li>
+        <li><code>npm run test:runtime-crash</code>：1/1 通过，Runtime 强制终止后换 PID 恢复并继续原 Session 上下文。</li>
         <li>真实 HTTP/WebSocket 覆盖权限、CSRF、取消、断线补发、恢复边界与 512KB 帧上限。</li>
         <li>20 用户确定性模拟未突破全局并发 2、单用户并发 1，且无饥饿。</li>
         <li>双账号浏览器验证私人 Conversation 隔离；普通成员没有账号管理入口。</li>
@@ -68,7 +69,7 @@
 
     <section>
       <h2>上线边界</h2>
-      <div class="warn"><div class="label">NOT LINUX PRODUCTION READY</div>当前结论只覆盖 Mac 开发环境和本地模拟回复。Gateway 重启后的队列重建、管理员运维视图、真实内部模型、多轮故障演练、Nginx HTTPS、备份恢复与 Linux 容量验收仍是上线前门禁。</div>
+      <div class="warn"><div class="label">NOT LINUX PRODUCTION READY</div>当前结论只覆盖 Mac 开发环境。工具、文件与产物隔离、内部 Provider 正式联调、Nginx HTTPS、备份恢复、长时稳定性、生产回滚与 Linux 容量验收仍是上线前门禁。</div>
     </section>
 
     <footer>依据：<code>04-acceptance-report.md</code> · <code>docs/ROADMAP.md</code> · <code>docs/architecture/stage-2-opencode-gateway.md</code></footer>

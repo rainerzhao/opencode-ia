@@ -1,5 +1,36 @@
 # Stage 2 Implementation Log
 
+## Stage 2E.6：真实 Runtime 崩溃恢复演练
+
+### Delivered
+
+- 新增 opt-in 真实验收 `test/integration/runtime-crash-recovery.test.js`，默认测试不会调用模型或终止本机其他进程。
+- 演练建立真实 OpenCode Session 和首轮上下文后，在第二轮已运行、第三轮已排队时 SIGKILL 该测试自行启动并确认 PID 的 Runtime。
+- 验收运行任务明确转为 interrupted、Runtime 自动以新 PID 恢复，并覆盖两条安全分支：原 Session 可用时继续排队任务并保留上下文；Session 丢失时写入恢复边界且排队任务不得执行。
+- 新增 `npm run test:runtime-crash` 作为 Mac/Linux 显式验收入口；继续使用合成内容和 `permission: deny`。
+
+### TDD and Debugging Evidence
+
+1. 先以 `/usr/bin/false` 代替 Runtime，验收按预期在启动门禁失败，证明不会把未启动的进程误报为通过。
+2. 首次真实运行在第一轮被 `OPENCODE_TIMEOUT` 中断。事件证据定位到测试把心跳配置成每 100ms、一次失败即摘除，真实 Prompt 期间的短暂健康超时被测试误判为进程故障。
+3. 测试参数对齐已通过 45 次真实请求的生产策略：5 秒心跳、2 秒探针、连续 3 次失败才摘除；真实 SIGKILL 仍由子进程退出事件立即捕获。
+4. 修正后真实演练通过：原 Runtime 与重启 Runtime PID 不同，原 OpenCode Session 标识一致，第三轮回复保留第一轮随机上下文标识。
+
+### Verification
+
+- `npm run test:runtime-crash`：1/1 通过。
+- `npm test`：202 项通过，1 项 opt-in 真实崩溃演练默认跳过，0 失败。
+- `npm run build`：通过，40 modules transformed。
+- `npm run check`：通过，89 files。
+- `npm run security:scan`：通过，无发现。
+- `git diff --check`：通过。
+- Stage 2 HTML 评审摘要经本地 HTTP 在桌面浏览器可见，标题、状态表和上线边界正常渲染，无可见横向溢出。
+
+### Boundary
+
+- 这是单 Runtime、单次 Mac 故障演练，不是长时稳定性、Linux 容量或生产 SLA。
+- 工具保持禁用，尚未验证路径逃逸、软链接、跨账号文件读取和产物串用。
+
 ## Stage 2E.5：运行期 Runtime 会话恢复
 
 - Runtime 不健康时，仅将绑定到该 Runtime 且处于 active 的 Session 标为 recovering；其他 Runtime 和已 unavailable 的会话不受影响。

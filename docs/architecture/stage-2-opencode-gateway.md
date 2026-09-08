@@ -1,6 +1,6 @@
 # Stage 2：常驻 OpenCode Gateway 与多 Worker 会话架构
 
-**状态：** Stage 2A–2D 已完成；启动恢复、运维页面及 Runtime 多 Session 真实验收已完成；运行期确定性故障恢复已完成，真实进程演练和工具执行隔离待完成
+**状态：** Stage 2A–2D 已完成；Stage 2E 的启动恢复、运维页面、Runtime 多 Session 真实验收和真实进程故障演练已完成；工具、文件与产物隔离待完成
 **目标环境：** Mac 开发验收，随后迁移公司内网单台 Linux  
 **目标规模：** 15–20 名成员
 
@@ -15,13 +15,14 @@
 - 真实命令：`WORKBENCH_REAL_ACCEPTANCE=1 WORKBENCH_MULTI_SESSION_ACCEPTANCE=1 node --test test/integration/five-users-multiround.test.js`。使用合成知识库方案、临时工作目录和 `permission: deny`。该验收不覆盖工具执行沙箱，也不是长期吞吐 SLA。
 - 修复健康检查 1 秒超时误用于 Session 创建和模型请求；现在普通请求 10 秒、健康探针 1 秒、Prompt 使用独立任务期限。HTTP 200 响应中的模型错误不再视作成功空回复。
 - 生产连续 3 次健康检查失败才将 Runtime 判为故障；恢复前停止旧进程，健康恢复后自动唤醒排队会话。未知执行结果不自动重放。
-- 下方“首次真实模式失败”为历史记录，已由本次真实并发验收推进；完整文件/工具隔离和重启上下文恢复仍待独立验收。
+- 真实崩溃命令：`npm run test:runtime-crash`。验收主动 SIGKILL 自己启动的 Runtime，确认运行任务转为 interrupted、Runtime 以新 PID 自动恢复、原 OpenCode Session 校验成功后排队任务继续且上下文标识保留。本次属于单次 Mac 故障演练，不代表长期稳定性。
+- 完整文件、工具与产物隔离仍待独立验收；该门禁完成前 Stage 2E 不宣告完成。
 
 账号、持久 Conversation 和 Runtime 是独立维度。少量常驻 OpenCode Runtime 应能承载多个用户的多个 Session；不把一个 Session 等同于一个进程，也不把每个 Runtime 只能执行一个任务作为最终架构。需要先验证 OpenCode 1.18.25 同 Runtime 多 Session 并发，再配置每 Runtime 执行槽、全局配额与每用户配额。一个 Conversation 内保持串行，不同 Conversation 可并发。会话映射独立不代表工具沙箱：必须另行验证文件、权限和产物隔离，未验证前不宣称完整安全隔离。
 
-新增产品验收：5 个真实登录账号，每人 3 个私人 Conversation，至少 3 轮方案讨论；检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型，`WORKBENCH_REAL_ACCEPTANCE=1` 显式调用当前 OpenCode 模型，使用合成输入且禁止工具。首次模拟模式 45/45 通过；当前实现仍是 2 个单槽 Worker，不能以此作为最终并发验收。首次真实模式在 Worker 启动阶段失败，尚未取得真实模型结果。
+产品验收使用 5 个真实登录账号，每人 3 个私人 Conversation，完成 3 轮方案讨论，检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型，显式开启真实模式才调用当前 OpenCode 模型；真实 5×3×3 已完成。对 Codex、WorkBuddy 仅参考用户体验与可靠性要求，不假定其未公开内部实现。
 
-后续顺序：诊断真实启动失败 → 验证单 Runtime 多 Session → 按证据修改容量与恢复 → 复跑 5×3×3 真实验收 → Stage 4。对 Codex、WorkBuddy 仅参考用户体验与可靠性要求，不假定其未公开内部实现。
+后续顺序：完成工具、文件与产物隔离门禁 → Stage 4 团队 Skill 中心 → Stage 5 Linux 生产化。
 
 Stage 2 采用“一个常驻 Gateway 控制面 + 多个常驻 OpenCode Worker 执行面 + 多个逻辑会话”的单机架构。
 
@@ -106,6 +107,7 @@ workbench conversation_id -> opencode_session_id -> worker_id
 - 运行期 Runtime 变为不健康时，其 active Session 先统一转为 recovering。进程恢复健康后逐个校验原 Session；校验完成前，相关 Conversation 不会被调度到新 Session。
 - 原 Session 可用时恢复 active 并自动唤醒排队任务；原 Session 丢失时写入恢复边界、将依赖它的排队任务转为 interrupted，成员确认后才能重新发送。
 - Runtime 恢复使用同步登记的互斥守卫，避免租用恢复槽位时状态回调重入、误判 Session 丢失。
+- 真实进程验收会在首轮上下文建立后强制终止 Runtime，并在运行任务和排队任务同时存在时观察恢复；恢复分支必须保留原 Session 和上下文，丢失分支必须中断排队任务，两者之外均失败。
 
 - Worker 心跳超时后停止分配新任务，当前任务标记为 `interrupted`。
 - Gateway 重启后从 SQLite 恢复队列；`running` 任务不能直接假定成功，必须向原 Worker/OpenCode 查询或转为可重试状态。
