@@ -275,6 +275,7 @@ function createGatewayService({
       version: worker.version,
       capacity: worker.capacity
     });
+    if (worker.status === 'healthy' && state === 'running') schedule();
   }
 
   async function start() {

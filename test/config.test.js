@@ -17,6 +17,8 @@ test('derives data paths from the injected project directory', () => {
   assert.equal(config.loginLockSeconds, 15 * 60);
   assert.equal(config.opencodeWorkerBasePort, 4319);
   assert.equal(config.opencodeWorkerCount, 2);
+  assert.equal(config.opencodeWorkerCapacity, 1);
+  assert.equal(config.opencodeWorkerHeartbeatFailures, 3);
   assert.equal(config.opencodeWorkerHeartbeatMs, 5000);
   assert.equal(config.opencodeWorkerHeartbeatTimeoutMs, 2000);
   assert.equal(config.gatewayGlobalRunning, 2);

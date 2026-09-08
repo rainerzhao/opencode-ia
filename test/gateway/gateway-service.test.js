@@ -310,6 +310,21 @@ test('marks a job failed when OpenCode session creation fails', async (t) => {
   assert.equal(fixture.store.getJob({ id: job.id }).errorCode, 'OPENCODE_API_ERROR');
 });
 
+test('a recovered worker wakes sticky queued conversations without new user input', async (t) => {
+  const fixture = createFixture(t, { automatic: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1);
+  fixture.submit(conversation, 1, 'first');
+  await fixture.service.waitForIdle();
+  const binding = fixture.store.getOpenCodeSession({ conversationId: conversation.id });
+  fixture.records.find((record) => record.id === binding.workerId).crash();
+  const queued = fixture.submit(conversation, 1, 'after-recovery');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fixture.store.getJob({ id: queued.id }).status, 'queued');
+  await fixture.pool.heartbeat();
+  await eventually(() => fixture.store.getJob({ id: queued.id }).status === 'completed');
+});
+
 test('cancels queued and running jobs and marks a deadline as timed out', async (t) => {
   const fixture = createFixture(t, { jobTimeoutMs: 30 });
   await fixture.service.start();

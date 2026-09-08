@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const net = require('node:net');
+const { spawn } = require('node:child_process');
 const WebSocket = require('ws');
 const { createAuthenticatedWorkbench, authHeaders } = require('../fixtures/authenticated-workbench');
 const { createGatewayService } = require('../../src/gateway/gateway-service');
@@ -17,6 +18,11 @@ const { createWorkerProcess } = require('../../src/gateway/worker-process');
 // Opt-in sends 45 synthetic prompts through the user's configured OpenCode model.
 // Default CI mode exercises the same authenticated HTTP/WS/Gateway path with a fake model.
 const real = process.env.WORKBENCH_REAL_ACCEPTANCE === '1';
+const multiSession = process.env.WORKBENCH_MULTI_SESSION_ACCEPTANCE === '1';
+const workerCount = multiSession ? 1 : 2;
+const capacity = multiSession ? 15 : 1;
+const globalRunning = multiSession ? 15 : 2;
+const userRunning = multiSession ? 3 : 1;
 
 async function until(check, timeout = real ? 240_000 : 10_000) {
   const deadline = Date.now() + timeout;
@@ -37,21 +43,36 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
   const samples = [];
   const sessions = new Map();
   const ports = [];
-  if (real) for (let i = 0; i < 2; i++) {
+  if (real) for (let i = 0; i < workerCount; i++) {
     const server = net.createServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     ports.push(server.address().port);
     await new Promise((resolve) => server.close(resolve));
   }
   const pool = createWorkerPool({
-    workerCount: 2,
+    workerCount, workerCapacity: capacity,
     heartbeatMs: 5000,
+    heartbeatFailureThreshold: 3,
     workerFactory: ({ index, onExit }) => {
       if (real) return createWorkerProcess({
         command: process.env.OPENCODE_CMD || 'opencode',
         cwd: workspaceRoot,
         env: { ...process.env, OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'deny' }) },
         hostname: '127.0.0.1', port: ports[index], onExit,
+        spawnImpl(command, args, options) {
+          const child = spawn(command, args, { ...options, stdio: ['ignore', 'ignore', 'pipe'] });
+          let diagnostic = '';
+          child.stderr.on('data', (chunk) => { diagnostic = (diagnostic + chunk).slice(-8192); });
+          child.on('close', (code, signal) => {
+            if (code) t.diagnostic(JSON.stringify({ worker: index, exitCode: code, signal,
+              portConflict: /EADDRINUSE|address already in use/i.test(diagnostic),
+              databaseError: /SQLITE|database.*(?:lock|error)/i.test(diagnostic),
+              configError: /config.*(?:invalid|error)|Invalid config/i.test(diagnostic),
+              filesystemError: /ENOENT|EACCES|EPERM/i.test(diagnostic),
+              optionError: /unknown option|unrecognized|Usage:/i.test(diagnostic) }));
+          });
+          return child;
+        },
         logger: { log() {}, error() {} }
       });
       return {
@@ -79,7 +100,7 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
   const fixture = await createAuthenticatedWorkbench(t, {
     maxSessions: 20,
     gatewayServiceFactory: ({ store }) => {
-      gateway = createGatewayService({ store, pool, workspaceRoot, queue: createFairQueue({ maxQueuedPerUser: 3 }), limits: { globalRunning: 2, userRunning: 1, jobTimeoutMs: real ? 120_000 : 5000 } });
+      gateway = createGatewayService({ store, pool, workspaceRoot, queue: createFairQueue({ maxQueuedPerUser: 3 }), limits: { globalRunning, userRunning, jobTimeoutMs: real ? 120_000 : 5000 } });
       return gateway;
     }
   });
@@ -104,7 +125,7 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
     const since = Date.now();
     for (const track of tracks) {
       const text = round === 0
-        ? `我们讨论一个企业内部知识库试点方案。方案标识 ${track.marker}，预算 10 万，周期 4 周。请给出两个实施步骤。此后每轮回答必须保留本方案标识，只基于当前会话。不要使用工具，每次回答不超过 100 字。`
+        ? `我们讨论一个企业内部知识库试点方案。方案标识 ${track.marker}，预算 10 万，周期 4 周。请首先原样输出方案标识，再给出两个实施步骤。本轮和以后每轮回答必须保留本方案标识，只基于当前会话。不要使用工具，每次回答不超过 100 字。`
         : round === 1 ? '沿用上轮标识、预算和周期，补充两个风险及应对。不要使用工具，不超过 100 字。'
           : '沿用前两轮方案标识，汇总实施步骤并给出两个可量化验收条件，保留预算和周期。不要使用工具，不超过 100 字。';
       track.ws.send(JSON.stringify({ type: 'prompt', conversationId: track.record.id, idempotencyKey: `${track.record.id}-round-${round}`, text }));
@@ -116,7 +137,7 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
       const counts = new Map();
       for (const track of tracks) {
         const failed = track.messages.find((event) => event.type === 'error' || ['job.failed', 'job.interrupted', 'job.timed_out'].includes(event.type));
-        assert.ok(!failed, `round ${round + 1}: ${failed?.code || failed?.type || ''}`);
+        assert.ok(!failed, `round ${round + 1}: ${failed?.code || failed?.type || ''} ${failed?.data?.errorCode || ''}`);
         const current = track.messages.filter((event) => event.type === 'job.started').at(-1);
         if (current && !track.messages.some((event) => event.jobId === current.jobId && event.type === 'job.completed')) counts.set(track.member.user.id, (counts.get(track.member.user.id) || 0) + 1);
       }
@@ -127,7 +148,7 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
     for (const track of tracks) {
       const completed = track.messages.filter((event) => event.type === 'job.completed').at(-1);
       const answer = track.messages.filter((event) => event.jobId === completed.jobId && event.type === 'message.delta').map((event) => event.data.text).join('');
-      assert.ok(answer.includes(track.marker), `round ${round + 1}: context marker lost`);
+      assert.ok(answer.includes(track.marker), `round ${round + 1}: context marker lost; answer characters=${answer.length}`);
       for (const other of tracks) if (other !== track) assert.ok(!answer.includes(other.marker), 'cross-conversation context leak');
     }
     t.diagnostic(`round ${round + 1}: 15/15 completed, context markers isolated, ${samples.at(-1)} ms`);
@@ -140,8 +161,8 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
     const denied = await fetch(`${fixture.origin}/api/conversations/${other.record.id}`, { headers: authHeaders(member) });
     assert.equal(denied.status, 404);
   }
-  assert.equal(maxRunning, 2);
-  assert.ok(maxUserRunning <= 1);
-  assert.ok(maxQueued > 0);
-  t.diagnostic(JSON.stringify({ mode: real ? 'real' : 'simulated', users: 5, conversations: 15, rounds: 3, completed: 45, maxRunning, maxUserRunning, maxQueued, roundMilliseconds: samples }));
+  assert.equal(maxRunning, globalRunning);
+  assert.ok(maxUserRunning <= userRunning);
+  if (!multiSession) assert.ok(maxQueued > 0);
+  t.diagnostic(JSON.stringify({ mode: real ? 'real' : 'simulated', workerCount, capacity, users: 5, conversations: 15, rounds: 3, completed: 45, maxRunning, maxUserRunning, maxQueued, roundMilliseconds: samples }));
 });

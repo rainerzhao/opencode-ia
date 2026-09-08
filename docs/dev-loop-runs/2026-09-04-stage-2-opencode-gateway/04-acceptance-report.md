@@ -1,5 +1,13 @@
 # Stage 2 Acceptance Report
 
+## 2026-09-08 Runtime 并发验收增量
+
+**PASS WITH NOTES**：单常驻 OpenCode 1.18.25 Runtime、5 账号、15 Session、3 轮 45 请求真实链路通过，峰值 15 个运行任务、每人 3 个。每轮检查方案标识保留、其他会话标识不存在，以及账号列表和越权 REST。耗时 19257/3265/2551 ms，为一次 Mac 合成短测，不是 SLA。
+
+边界：工具被禁止；完整文件沙箱、Linux 资源压测、运行期间 Session 丢失处理以及长时稳定性仍未验收。Stage 2E 不宣告整阶段完成。新增 Runtime 多槽、健康失败门限、模型错误处理和恢复唤醒回归覆盖；代码复核在主线程内联完成，未派发子代理。
+
+完整回归重跑 197/197 通过；构建 40 modules、语法检查 88 files、密钥扫描无发现、`git diff --check` 通过。首次偶发 WebSocket 失败及复跑过程保留在实现日志中，根因未确认。
+
 ## Overall Verdict
 
 ### Stage 2E.2a 运维 API

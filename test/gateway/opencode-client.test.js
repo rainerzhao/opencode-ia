@@ -5,6 +5,25 @@ const assert = require('node:assert/strict');
 const { createOpenCodeClient } = require('../../src/gateway/opencode-client');
 const { createFakeOpenCodeServer } = require('../fixtures/fake-opencode-server');
 
+test('prompt deadline is independent from the short health deadline', async () => {
+  const client = createOpenCodeClient({
+    endpoint: 'http://127.0.0.1:4319', username: 'opencode', password: 'worker-secret',
+    requestTimeoutMs: 10, promptTimeoutMs: 200,
+    fetchImpl: (_url, { signal }) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve({ ok: true, json: async () => ({ parts: [{ text: 'slow answer' }] }) }), 40);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('aborted')); }, { once: true });
+    })
+  });
+  assert.equal((await client.prompt({ sessionId: 'session-1', text: 'hello', directory: '/safe/workspace' })).parts[0].text, 'slow answer');
+  await assert.rejects(client.health(), { code: 'OPENCODE_TIMEOUT' });
+});
+
+test('HTTP 200 model errors are not treated as successful empty replies', async () => {
+  const client = createOpenCodeClient({ endpoint: 'http://127.0.0.1:4319', username: 'opencode', password: 'worker-secret',
+    fetchImpl: async () => ({ ok: true, json: async () => ({ info: { error: { name: 'APIError', data: { message: 'PRIVATE KEY' } } }, parts: [] }) }) });
+  await assert.rejects(client.prompt({ sessionId: 's1', directory: '/safe/workspace', text: 'hello' }), (error) => error.code === 'OPENCODE_MODEL_ERROR' && !error.message.includes('PRIVATE'));
+});
+
 async function useServer(t, options) {
   const server = createFakeOpenCodeServer(options);
   const endpoint = await server.start();

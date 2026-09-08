@@ -34,6 +34,7 @@ function createWorkerProcess({
   password,
   expectedVersion = '1.18.25',
   startupTimeoutMs = 10_000,
+  promptTimeoutMs = 120_000,
   healthIntervalMs = 100,
   stopGraceMs = 2_000,
   killGraceMs = 1_000,
@@ -77,7 +78,9 @@ function createWorkerProcess({
     username,
     password: runtimePassword,
     expectedVersion,
-    requestTimeoutMs: Math.min(startupTimeoutMs, 1_000),
+    requestTimeoutMs: 10_000,
+    healthTimeoutMs: Math.min(startupTimeoutMs, 1_000),
+    promptTimeoutMs,
     fetchImpl
   });
 

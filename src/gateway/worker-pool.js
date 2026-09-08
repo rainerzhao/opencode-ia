@@ -34,15 +34,19 @@ function withTimeout(promise, milliseconds) {
 
 function createWorkerPool({
   workerCount,
+  workerCapacity = 1,
   workerFactory,
   heartbeatMs = 5_000,
   heartbeatTimeoutMs = 2_000,
+  heartbeatFailureThreshold = 1,
   onWorkerExit = () => {},
   onWorkerStatus = () => {}
 }) {
   positiveInteger(workerCount, 'worker count');
+  positiveInteger(workerCapacity, 'worker capacity');
   positiveInteger(heartbeatMs, 'worker heartbeat interval');
   positiveInteger(heartbeatTimeoutMs, 'worker heartbeat timeout');
+  positiveInteger(heartbeatFailureThreshold, 'worker heartbeat failure threshold');
   if (typeof workerFactory !== 'function') throw new TypeError('worker factory is required');
   if (typeof onWorkerExit !== 'function' || typeof onWorkerStatus !== 'function') {
     throw new TypeError('worker pool callbacks are invalid');
@@ -67,7 +71,7 @@ function createWorkerPool({
       endpoint: process.endpoint || null,
       processId: process.processId || null,
       version: process.version || null,
-      capacity: 1,
+      capacity: workerCapacity,
       running: slot.leases.size
     };
   }
@@ -117,6 +121,7 @@ function createWorkerPool({
           instanceId: `${process.pid}-worker-${index + 1}`,
           index,
           status: 'stopped',
+          healthFailures: 0,
           worker: null,
           leases: new Map()
         };
@@ -150,17 +155,18 @@ function createWorkerPool({
   function acquire({ conversationId, preferredWorkerId } = {}) {
     if (status !== 'running') return null;
     const conversation = requiredString(conversationId, 'conversation id');
+    if (slots.some((slot) => [...slot.leases.values()].some((value) => value.conversationId === conversation))) return null;
     if (preferredWorkerId !== undefined) requiredString(preferredWorkerId, 'preferred worker id');
     const stickyId = preferredWorkerId || stickyWorkers.get(conversation);
     if (stickyId) {
       const sticky = slots.find((slot) => slot.id === stickyId);
-      if (!sticky || sticky.status !== 'healthy' || sticky.leases.size >= 1) return null;
+      if (!sticky || sticky.status !== 'healthy' || sticky.leases.size >= workerCapacity) return null;
       return lease(sticky, conversation);
     }
     for (let offset = 0; offset < slots.length; offset += 1) {
       const index = (nextSlot + offset) % slots.length;
       const slot = slots[index];
-      if (slot.status !== 'healthy' || slot.leases.size >= 1) continue;
+      if (slot.status !== 'healthy' || slot.leases.size >= workerCapacity) continue;
       nextSlot = (index + 1) % slots.length;
       stickyWorkers.set(conversation, slot.id);
       return lease(slot, conversation);
@@ -197,8 +203,11 @@ function createWorkerPool({
       if (slot.status === 'healthy') {
         try {
           await withTimeout(Promise.resolve(slot.worker.health()), heartbeatTimeoutMs);
+          slot.healthFailures = 0;
           publish(slot);
         } catch (error) {
+          slot.healthFailures += 1;
+          if (slot.healthFailures < heartbeatFailureThreshold) continue;
           const affected = markUnhealthy(slot.id, error.code || 'WORKER_HEARTBEAT_FAILED');
           if (affected.leases.length > 0) {
             for (const listener of exitListeners) {
@@ -207,7 +216,7 @@ function createWorkerPool({
           }
         }
       } else if (slot.status === 'unhealthy') {
-        try { await startSlot(slot); } catch {}
+        try { await slot.worker.stop(); await startSlot(slot); slot.healthFailures = 0; } catch {}
       }
     }
     return snapshot();

@@ -10,6 +10,7 @@
 </head>
 <body>
   <article class="doc">
+    <section class="lead"><h2>2026-09-08：单 Runtime 多会话真实验收</h2><p>5 个账号、15 个 Session、3 轮 45 次真实 OpenCode 请求通过，峰值 15 个运行任务。同会话保持串行，不同会话共享常驻 Runtime 的多个执行槽。修复请求超时混用、内嵌模型错误误报成功、健康瞬时失败误中断及恢复后队列不唤醒。</p><p>合成输入，工具禁用；尚未完成文件执行沙箱、Linux 和长时稳定性验收。详情见 <a href="04-acceptance-report.md">验收报告</a>。</p></section>
     <section class="lead">
       <h2>最新增量：管理员运维 API</h2>
       <p>2026-09-07 · Stage 2E.2a：管理员可查询健康、Worker 和最近 200 条任务元数据，并取消任务。私人标题、正文、幂等键和连接凭据不向管理员返回。角色、CSRF、取消幂等、审计和失败脱敏定向测试 4/4 通过。</p>

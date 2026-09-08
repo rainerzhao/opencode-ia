@@ -58,6 +58,8 @@ function createOpenCodeClient({
   password,
   expectedVersion = null,
   requestTimeoutMs = 10_000,
+  promptTimeoutMs = requestTimeoutMs,
+  healthTimeoutMs = requestTimeoutMs,
   maxEventBytes = 256 * 1024,
   fetchImpl = fetch
 }) {
@@ -89,12 +91,15 @@ function createOpenCodeClient({
     return url;
   }
 
-  async function withDeadline(callerSignal, action) {
+  if (!Number.isInteger(promptTimeoutMs) || promptTimeoutMs < 1) throw new TypeError('OpenCode prompt timeout is invalid');
+  if (!Number.isInteger(healthTimeoutMs) || healthTimeoutMs < 1) throw new TypeError('OpenCode health timeout is invalid');
+
+  async function withDeadline(callerSignal, action, timeoutMs = requestTimeoutMs) {
     if (callerSignal?.aborted) {
       throw clientError('OPENCODE_ABORTED', 'OpenCode request was cancelled');
     }
     const timeoutController = new AbortController();
-    const timeout = setTimeout(() => timeoutController.abort(), requestTimeoutMs);
+    const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
     timeout.unref();
     const signals = [timeoutController.signal, ...(callerSignal ? [callerSignal] : [])];
     try {
@@ -131,7 +136,8 @@ function createOpenCodeClient({
     method = 'GET',
     body,
     signal,
-    directory
+    directory,
+    timeoutMs = requestTimeoutMs
   } = {}) {
     return withDeadline(signal, async (deadlineSignal) => {
       const response = await authenticatedFetch(target(pathname, directory), {
@@ -155,11 +161,11 @@ function createOpenCodeClient({
         if (deadlineSignal.aborted) throw error;
         throw clientError('OPENCODE_PROTOCOL_ERROR', 'OpenCode worker returned an invalid response');
       }
-    });
+    }, timeoutMs);
   }
 
   async function health({ signal } = {}) {
-    const result = await requestJson('/global/health', { signal });
+    const result = await requestJson('/global/health', { signal, timeoutMs: healthTimeoutMs });
     if (!result || result.healthy !== true || typeof result.version !== 'string') {
       throw clientError('OPENCODE_PROTOCOL_ERROR', 'OpenCode health response is invalid');
     }
@@ -202,7 +208,7 @@ function createOpenCodeClient({
     return requestJson(`/session/${encodeURIComponent(id)}`, { directory, signal });
   }
 
-  function prompt({ sessionId, directory, text, model, agent, signal } = {}) {
+  async function prompt({ sessionId, directory, text, model, agent, signal } = {}) {
     const id = requiredString(
       sessionId,
       'INVALID_OPENCODE_SESSION',
@@ -218,12 +224,15 @@ function createOpenCodeClient({
     const body = { parts: [{ type: 'text', text: promptText }] };
     if (model !== undefined) body.model = model;
     if (agent !== undefined) body.agent = agent;
-    return requestJson(`/session/${encodeURIComponent(id)}/message`, {
+    const result = await requestJson(`/session/${encodeURIComponent(id)}/message`, {
+      timeoutMs: promptTimeoutMs,
       method: 'POST',
       body,
       directory,
       signal
     });
+    if (result?.info?.error) throw clientError('OPENCODE_MODEL_ERROR', 'OpenCode model execution failed');
+    return result;
   }
 
   function abortSession({ sessionId, directory, signal } = {}) {

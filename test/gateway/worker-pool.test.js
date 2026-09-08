@@ -4,6 +4,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createWorkerPool } = require('../../src/gateway/worker-pool');
 
+test('one runtime leases multiple isolated sessions while serializing each conversation', async (t) => {
+  const fixture = createWorkerFactory();
+  const pool = createWorkerPool({ workerCount: 1, workerCapacity: 3, workerFactory: fixture.factory });
+  t.after(() => pool.stop());
+  await pool.start();
+  const leases = ['a', 'b', 'c'].map((conversationId) => pool.acquire({ conversationId }));
+  assert.ok(leases.every(Boolean));
+  assert.equal(new Set(leases.map((lease) => lease.workerId)).size, 1);
+  assert.equal(pool.acquire({ conversationId: 'd' }), null);
+  pool.release(leases[0]);
+  assert.equal(pool.acquire({ conversationId: 'b' }), null);
+  assert.ok(pool.acquire({ conversationId: 'd' }));
+  assert.equal(pool.snapshot().workers[0].capacity, 3);
+  assert.equal(pool.snapshot().workers[0].running, 3);
+});
+
 function createWorkerFactory() {
   const records = [];
   const factory = ({ id, index, onExit }) => {
@@ -120,6 +136,27 @@ test('heartbeat removes a failed worker then restarts it on a later pass', async
   await pool.heartbeat();
   assert.equal(pool.snapshot().workers[0].status, 'healthy');
   assert.equal(fixture.records[0].starts, 2);
+});
+
+test('transient heartbeat failures do not interrupt sessions and recovery resets the failure count', async (t) => {
+  const fixture = createWorkerFactory();
+  const pool = createWorkerPool({ workerCount: 1, workerCapacity: 3, heartbeatFailureThreshold: 2, workerFactory: fixture.factory });
+  t.after(() => pool.stop());
+  await pool.start();
+  pool.acquire({ conversationId: 'a' });
+  fixture.records[0].healthFailures = 1;
+  await pool.heartbeat();
+  assert.equal(pool.snapshot().workers[0].running, 1);
+  await pool.heartbeat();
+  fixture.records[0].healthFailures = 2;
+  await pool.heartbeat();
+  assert.equal(pool.snapshot().workers[0].status, 'healthy');
+  await pool.heartbeat();
+  assert.equal(pool.snapshot().workers[0].status, 'unhealthy');
+  assert.equal(pool.snapshot().workers[0].running, 0);
+  await pool.heartbeat();
+  assert.equal(fixture.records[0].stops, 1);
+  assert.equal(pool.snapshot().workers[0].status, 'healthy');
 });
 
 test('uses the worker startup deadline rather than the shorter heartbeat deadline', async (t) => {

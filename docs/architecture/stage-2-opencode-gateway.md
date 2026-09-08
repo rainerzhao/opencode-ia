@@ -8,6 +8,15 @@
 
 ### 2026-09-07 产品要求修正（优先于下方首版容量参数）
 
+#### 2026-09-08 已验证增量
+
+- `OPENCODE_WORKER_CAPACITY` 将 Runtime 进程数与单 Runtime 并发 Session 数分开；同 Conversation 保持串行。默认容量暂保留 1，部署需按真实服务额度设置全局和每用户配额，不把 Mac 短压测当作 Linux 容量结论。
+- OpenCode 1.18.25、当前配置模型：单 Runtime、15 执行槽、5 账号、每人 3 会话，3 轮 45/45 成功；峰值 15 个运行任务、每用户 3 个；每轮耗时 19257/3265/2551 ms。后两轮未重复提供随机方案标识，回复仍保留本会话标识；检查其他会话标识不存在、跨账号 REST 读取返回 404。
+- 真实命令：`WORKBENCH_REAL_ACCEPTANCE=1 WORKBENCH_MULTI_SESSION_ACCEPTANCE=1 node --test test/integration/five-users-multiround.test.js`。使用合成知识库方案、临时工作目录和 `permission: deny`。该验收不覆盖工具执行沙箱，也不是长期吞吐 SLA。
+- 修复健康检查 1 秒超时误用于 Session 创建和模型请求；现在普通请求 10 秒、健康探针 1 秒、Prompt 使用独立任务期限。HTTP 200 响应中的模型错误不再视作成功空回复。
+- 生产连续 3 次健康检查失败才将 Runtime 判为故障；恢复前停止旧进程，健康恢复后自动唤醒排队会话。未知执行结果不自动重放。
+- 下方“首次真实模式失败”为历史记录，已由本次真实并发验收推进；完整文件/工具隔离和重启上下文恢复仍待独立验收。
+
 账号、持久 Conversation 和 Runtime 是独立维度。少量常驻 OpenCode Runtime 应能承载多个用户的多个 Session；不把一个 Session 等同于一个进程，也不把每个 Runtime 只能执行一个任务作为最终架构。需要先验证 OpenCode 1.18.25 同 Runtime 多 Session 并发，再配置每 Runtime 执行槽、全局配额与每用户配额。一个 Conversation 内保持串行，不同 Conversation 可并发。会话映射独立不代表工具沙箱：必须另行验证文件、权限和产物隔离，未验证前不宣称完整安全隔离。
 
 新增产品验收：5 个真实登录账号，每人 3 个私人 Conversation，至少 3 轮方案讨论；检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型，`WORKBENCH_REAL_ACCEPTANCE=1` 显式调用当前 OpenCode 模型，使用合成输入且禁止工具。首次模拟模式 45/45 通过；当前实现仍是 2 个单槽 Worker，不能以此作为最终并发验收。首次真实模式在 Worker 启动阶段失败，尚未取得真实模型结果。

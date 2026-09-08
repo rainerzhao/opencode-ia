@@ -69,6 +69,8 @@ function loadConfig({ env = process.env, projectDir }) {
     opencodeCwd: path.resolve(env.OPENCODE_CWD || root),
     opencodeWorkerBasePort,
     opencodeWorkerCount,
+    opencodeWorkerCapacity: boundedPositiveInteger(env.OPENCODE_WORKER_CAPACITY, 1, 'OPENCODE_WORKER_CAPACITY', 16),
+    opencodeWorkerHeartbeatFailures: boundedPositiveInteger(env.OPENCODE_WORKER_HEARTBEAT_FAILURES, 3, 'OPENCODE_WORKER_HEARTBEAT_FAILURES', 10),
     opencodeWorkerHeartbeatMs: positiveInteger(
       env.OPENCODE_WORKER_HEARTBEAT_MS,
       5000,

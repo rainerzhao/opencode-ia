@@ -33,6 +33,7 @@ function createProductionWorkbench({
     username: config.opencodeWorkerUsername,
     expectedVersion: config.opencodeVerifiedVersion,
     startupTimeoutMs: config.opencodeWorkerStartupTimeoutMs,
+    promptTimeoutMs: config.opencodeTimeoutMs,
     healthIntervalMs: config.opencodeWorkerReadinessIntervalMs,
     stopGraceMs: config.opencodeWorkerStopGraceMs,
     killGraceMs: config.opencodeWorkerKillGraceMs,
@@ -48,9 +49,11 @@ function createProductionWorkbench({
       const queue = createFairQueue({ maxQueuedPerUser: config.gatewayUserQueued });
       const pool = createWorkerPool({
         workerCount: config.opencodeWorkerCount,
+        workerCapacity: config.opencodeWorkerCapacity,
         workerFactory: createWorker,
         heartbeatMs: config.opencodeWorkerHeartbeatMs,
-        heartbeatTimeoutMs: config.opencodeWorkerHeartbeatTimeoutMs
+        heartbeatTimeoutMs: config.opencodeWorkerHeartbeatTimeoutMs,
+        heartbeatFailureThreshold: config.opencodeWorkerHeartbeatFailures
       });
       gatewayService = createGatewayService({
         store,
