@@ -34,10 +34,11 @@ flowchart TB
 - 查看排队、运行、完成、中断等执行状态，并可停止任务；
 - 搜索、新建、编辑和上传个人知识；
 - 将确认过的对话保存为个人方案；
+- 创建、编辑和归档自己的私人 Skill 草稿；
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；服务启动和 Runtime 故障后都会先验证会话上下文，再决定继续排队或要求成员确认。团队 Skill 中心、Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 4A 已交付默认私有的 Skill 草稿与版本数据底座。Skill 校验、团队发布、安装启用、升级回滚，以及 Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -61,6 +62,7 @@ Demo 包含：
 - 完整的登录、退出和账号管理体验；
 - 知识搜索、新建、编辑和上传体验；
 - 多 Conversation 对话、执行状态与“沉淀为方案”体验；
+- 私人 Skill 草稿创建、编辑和归档体验；
 - 展示三篇示例知识文档；
 - 使用明确标注的“Demo 模拟回复”，不调用真实模型；
 - 所有数据只用于本次体验，关闭 Demo 后自动清理。
@@ -84,8 +86,8 @@ DEMO_PORT=4321 npm run demo
 | 常驻多会话 Gateway | ✅ Mac 已验收 | 多 Runtime/多 Session、公平排队、会话粘性、故障恢复、断线续传和 React 多会话已接通 |
 | 运行管理 | ✅ Mac 可体验 | 管理员在账号管理页查看健康、Worker 和任务状态，二次确认取消任务；私人内容不向管理员展示 |
 | 工具与产物边界 | ✅ Mac 应用级验收 | 每个账号和 Conversation 使用独立工作目录，默认关闭 Bash、联网、子代理和外部插件 |
-| Skill 资产浏览 | ✅ 基础版可体验 | 展示服务器中已经安装的 Skill |
-| 团队 Skill 中心 | 📝 待开发 | 成员创建、校验、发布、安装、启用、版本和回滚 Skill |
+| 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
+| 团队 Skill 中心 | 🚧 4A 已完成 | 草稿与版本数据底座已交付；校验、发布、安装、启用、升级和回滚继续开发 |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
@@ -118,6 +120,10 @@ flowchart LR
 ```
 
 当前使用 React/Vite 前端 + 模块化 Express 后端。Stage 2A 建立持久状态，Stage 2B 验证受保护的常驻 OpenCode 进程与 HTTP/SSE 协议，Stage 2C 完成默认双 Worker 调度，Stage 2D 已将这些能力接入正式生产组合和成员界面：私人 Conversation、排队与停止状态、WebSocket 断线补发、恢复边界和历史重建均经过 Mac 浏览器验收。
+
+Stage 4A 已把 Skill 从只读目录展示升级为受账号和权限约束的私人草稿产品：成员拥有自己的草稿与初始版本，管理员可以治理资产，草稿不会进入 OpenCode 发现目录。下一步 Stage 4B 将建立结构、安全和受限运行校验，只有校验通过并经人工确认的版本才能进入团队发布流程。
+
+![Stage 4A 私人 Skill 草稿编辑器](docs/dev-loop-runs/2026-09-09-stage-4-skill-center/artifacts/screenshots/stage-4a-skill-desktop-final.png)
 
 ## 真实模式：Mac 开发启动
 
@@ -246,11 +252,12 @@ npm run security:scan
 运行期间 Runtime 异常也会把关联会话置为恢复中：原 Session 可用时继续排队任务，不可用时中断相关任务并提示成员。确定性故障测试和真实 OpenCode 进程强制终止、自动重启、上下文恢复演练均已通过。
 
 - Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
+- Stage 4A 已完成 Mac 端验收：普通成员可以创建、编辑和归档默认私有的 Skill 草稿，版本、所有权和审计进入 SQLite 事实源。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **Stage 4 团队 Skill 中心**。Stage 3 的知识与方案发布闭环仍在路线图中；Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚属于 Stage 5。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)。
+下一交付点是 **Stage 4B Skill 校验系统**，随后依次完成发布安装、OpenCode 发现、版本升级与回滚。Stage 3 的知识与方案发布闭环仍在路线图中；Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚属于 Stage 5。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 

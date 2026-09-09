@@ -70,6 +70,39 @@ test('knowledge page exposes search, authoring, and upload workflows', async () 
   });
 });
 
+test('Skill center exposes private draft creation and editing controls', async () => {
+  await withViteModule('features/skills/SkillsPage.jsx', ({ SkillsPage }) => {
+    const skill = {
+      id: 'skill-1',
+      slug: 'gpu-planner',
+      displayName: 'GPU 规划助手',
+      description: '估算容量',
+      status: 'draft',
+      visibility: 'private',
+      version: {
+        version: '0.1.0',
+        status: 'draft',
+        skillMd: '# GPU Planner'
+      }
+    };
+    const html = renderToStaticMarkup(React.createElement(SkillsPage, {
+      initialSkills: [{ ...skill, version: '0.1.0', versionStatus: 'draft' }],
+      initialSelectedSkill: skill
+    }));
+
+    assert.match(html, /私人草稿/);
+    assert.match(html, /GPU 规划助手/);
+    assert.match(html, /0\.1\.0/);
+    assert.match(html, /SKILL\.md/);
+    assert.match(html, />保存草稿</);
+    assert.match(html, />归档</);
+    assert.match(html, /name="slug"/);
+    assert.match(html, /name="displayName"/);
+    assert.match(html, /name="description"/);
+    assert.match(html, /name="skillMd"/);
+  });
+});
+
 test('editing an existing knowledge article keeps its title in submitted form data', async () => {
   await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
     const html = renderToStaticMarkup(React.createElement(KnowledgePage, {

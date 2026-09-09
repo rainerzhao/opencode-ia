@@ -1,0 +1,28 @@
+Stage 4A verification snapshot
+Date: 2026-09-09 Asia/Shanghai
+
+npm test
+  tests 229
+  pass 227
+  fail 0
+  skipped 2 (explicit real-environment acceptance tests)
+
+npm run build
+  40 modules transformed
+  exit 0
+
+npm run check
+  JavaScript syntax check passed: 97 files
+
+npm run security:scan
+  Secret scan passed: no findings
+
+git diff --check
+  exit 0
+
+Browser
+  Desktop 1440x900: create/edit/archive passed, horizontal overflow 0
+  Mobile 390x844: create/edit/archive passed, horizontal overflow 0
+  Console errors: 0
+  Page errors: 0
+  Demo temporary directory removed after shutdown

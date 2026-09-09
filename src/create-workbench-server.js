@@ -24,6 +24,8 @@ const {
 const { attachGatewaySocket, createGatewayRouter } = require('./modules/gateway/routes');
 const { createGatewayStore } = require('./gateway/gateway-store');
 const { createGatewayAdminRouter } = require('./modules/admin/gateway-routes');
+const { createSkillRouter } = require('./modules/skills/routes');
+const { createSkillStore } = require('./skills/skill-store');
 
 function createWorkbenchServer({
   config,
@@ -69,6 +71,7 @@ const authService = createAuthService({
 const authMiddleware = createAuthMiddleware({ authService });
 const requestAuditor = createRequestAuditor({ db });
 const gatewayStore = createGatewayStore(db);
+const skillStore = createSkillStore(db);
 const activeGatewayService = gatewayService || gatewayServiceFactory?.({ store: gatewayStore });
 
 const app = express();
@@ -140,6 +143,7 @@ app.use('/api/admin/conversations', createConversationAdminRouter({
   store: gatewayStore,
   requireAdmin: authMiddleware.requireRole('admin')
 }));
+app.use('/api/skills', createSkillRouter({ store: skillStore, requestAuditor }));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);
@@ -279,30 +283,6 @@ app.get('/api/config', (req, res) => {
     activeSessions: sessions.size,
     model
   });
-});
-
-// API: 列出 Skills
-app.get('/api/skills', (req, res) => {
-  try {
-    if (!fs.existsSync(config.skillsDir)) {
-      return res.json([]);
-    }
-    const dirs = fs.readdirSync(config.skillsDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => {
-        const skillPath = safePath(config.skillsDir, `${safeFileName(d.name)}/SKILL.md`, { extensions: ['.md'] });
-        let description = '';
-        if (fs.existsSync(skillPath)) {
-          const content = fs.readFileSync(skillPath, 'utf-8');
-          const match = content.match(/description:\s*(.+)/);
-          if (match) description = match[1].trim();
-        }
-        return { name: d.name, description };
-      });
-    res.json(dirs);
-  } catch (err) {
-    res.json([]);
-  }
 });
 
 // API: 会话列表

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Stage 4A · 私人 Skill 草稿</title>
+  <style>
+    :root{color-scheme:light;--ink:#15253a;--muted:#5d6d81;--line:#dce4ee;--blue:#1769aa;--pale:#edf6ff;--green:#14734d}*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:var(--ink);font:15px/1.65 system-ui,-apple-system,"PingFang SC",sans-serif}main{width:min(1080px,calc(100% - 32px));margin:32px auto 64px}.hero,.card,details{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 32px rgba(31,60,95,.07)}.hero{padding:36px;background:linear-gradient(135deg,#fff 20%,var(--pale))}.eyebrow{margin:0;color:var(--blue);font-weight:800;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(30px,5vw,54px);line-height:1.12;margin:10px 0 16px}.lead{max-width:760px;font-size:18px;color:var(--muted)}.verdict{display:inline-flex;padding:8px 13px;border-radius:999px;background:#e7f7ef;color:var(--green);font-weight:800}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:18px 0}.card{padding:22px}.card h2{font-size:17px;margin:0 0 10px}.card p{margin:0;color:var(--muted)}.metric{display:block;font-size:30px;font-weight:850;color:var(--blue)}figure{margin:18px 0;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden}figure img{display:block;width:100%;height:auto}figcaption{padding:12px 18px;color:var(--muted)}details{padding:18px 22px;margin-top:14px}summary{cursor:pointer;font-weight:800}ul{padding-left:20px}.risk{color:#7a4a12}.foot{margin-top:22px;color:var(--muted);font-size:13px}@media(max-width:760px){main{width:min(100% - 20px,1080px);margin-top:10px}.hero{padding:24px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <p class="eyebrow">OpenCode 团队 AI 工作台 · Stage 4A</p>
+    <h1>普通成员开始沉淀自己的 Skill</h1>
+    <p class="lead">本阶段把 Skill 从服务器目录里的只读展示，升级为受账号、权限、版本和审计约束的私人草稿产品。草稿默认私有，不会在未经校验和人工确认时进入团队资产或 OpenCode 发现目录。</p>
+    <span class="verdict">Mac 应用级验收：PASS_WITH_NOTES</span>
+  </section>
+
+  <section class="grid" aria-label="交付摘要">
+    <article class="card"><h2>用户获得什么</h2><p>创建、切换、编辑和归档自己的 `SKILL.md` 草稿，并看到明确的版本与私有状态。</p></article>
+    <article class="card"><h2>平台补齐什么</h2><p>SQLite 事实源、所有权隔离、管理员治理、安全审计和面向后续发布安装的生命周期模型。</p></article>
+    <article class="card"><h2>明确没有提前承诺</h2><p>校验、发布、安装、OpenCode 发现、升级回滚和 Linux 生产上线仍属于后续阶段。</p></article>
+  </section>
+
+  <section class="grid" aria-label="验收数字">
+    <article class="card"><span class="metric">229</span><h2>自动测试</h2><p>227 通过、0 失败；2 个真实环境专项用例按默认策略跳过。</p></article>
+    <article class="card"><span class="metric">2</span><h2>浏览器尺寸</h2><p>1440×900 与 390×844 均完成真实创建、编辑和归档流程。</p></article>
+    <article class="card"><span class="metric">0</span><h2>泄露与页面错误</h2><p>密钥扫描无发现，横向溢出、Console Error 和 Page Error 均为 0。</p></article>
+  </section>
+
+  <figure>
+    <img src="artifacts/screenshots/stage-4a-skill-desktop-final.png" alt="Stage 4A 私人 Skill 草稿桌面界面">
+    <figcaption>桌面浏览器真实流程：私人草稿列表、版本状态与 `SKILL.md` 编辑器。</figcaption>
+  </figure>
+
+  <details open><summary>核心边界</summary><ul><li>普通成员只能访问自己的草稿；跨账号访问返回 404。</li><li>团队可见读取只接受 published/disabled，避免 draft/archived 误配置泄露。</li><li>审计只记录资源、状态和版本，不复制 Skill 正文。</li><li>未来多版本列表只返回每个 Skill 的最新版本摘要。</li></ul></details>
+  <details><summary>本轮验证</summary><ul><li>`npm test`：229 tests，227 pass，2 skip，0 fail。</li><li>Vite build：40 modules transformed。</li><li>语法检查：97 files；密钥扫描无发现；Git diff 检查通过。</li><li>Demo 关闭后端口释放，隔离临时数据自动删除。</li></ul></details>
+  <details><summary>下一阶段与风险</summary><p class="risk">Stage 4B 将实现 frontmatter、目录文件、安全规则、敏感信息、路径与危险命令校验，并把结果持久化。任何真实运行验证继续通过受限 OpenCode Runtime；4A 完成不等于 Skill 已可向团队发布，也不等于 Linux 生产就绪。</p></details>
+  <p class="foot">证据目录：docs/dev-loop-runs/2026-09-09-stage-4-skill-center/</p>
+</main>
+</body>
+</html>

@@ -133,6 +133,68 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX gateway_events_job_sequence_idx
         ON gateway_events(job_id, sequence);
     `
+  }),
+  Object.freeze({
+    version: 3,
+    sql: `
+      CREATE TABLE skills (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        slug TEXT NOT NULL COLLATE NOCASE UNIQUE
+          CHECK (length(slug) BETWEEN 2 AND 64),
+        display_name TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 100),
+        description TEXT NOT NULL DEFAULT '' CHECK (length(description) <= 500),
+        status TEXT NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'published', 'disabled', 'archived')),
+        visibility TEXT NOT NULL DEFAULT 'private'
+          CHECK (visibility IN ('private', 'team')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX skills_owner_status_idx
+        ON skills(owner_user_id, status, updated_at DESC);
+      CREATE INDEX skills_visibility_status_idx
+        ON skills(visibility, status, updated_at DESC);
+
+      CREATE TABLE skill_versions (
+        id TEXT PRIMARY KEY,
+        skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+        version TEXT NOT NULL CHECK (length(version) BETWEEN 5 AND 32),
+        status TEXT NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'validated', 'published', 'retired')),
+        skill_md TEXT NOT NULL CHECK (length(skill_md) BETWEEN 1 AND 262144),
+        validation_report_json TEXT NOT NULL DEFAULT '{}'
+          CHECK (json_valid(validation_report_json)),
+        content_sha256 TEXT CHECK (content_sha256 IS NULL OR length(content_sha256) = 64),
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        published_at TEXT,
+        UNIQUE (skill_id, version),
+        UNIQUE (skill_id, id)
+      ) STRICT;
+
+      CREATE INDEX skill_versions_skill_status_idx
+        ON skill_versions(skill_id, status, created_at DESC);
+
+      CREATE TABLE skill_installations (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+        version_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'installed'
+          CHECK (status IN ('installed', 'enabled', 'disabled')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (user_id, skill_id),
+        FOREIGN KEY (skill_id, version_id)
+          REFERENCES skill_versions(skill_id, id) ON DELETE RESTRICT
+      ) STRICT;
+
+      CREATE INDEX skill_installations_user_status_idx
+        ON skill_installations(user_id, status, updated_at DESC);
+    `
   })
 ]);
 
