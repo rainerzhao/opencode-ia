@@ -105,8 +105,23 @@ async function main() {
     workerFactory({ id }) {
       return {
         client: {
+          async requestJson(pathname, { directory } = {}) {
+            if (pathname !== '/skill') throw new Error('Demo worker received an unsupported request');
+            const skillRoot = path.join(directory, '.opencode', 'skills');
+            return fs.existsSync(skillRoot)
+              ? fs.readdirSync(skillRoot, { withFileTypes: true })
+                .filter((entry) => entry.isDirectory())
+                .map((entry) => ({ name: entry.name }))
+              : [];
+          },
           async createSession() { return { id: `demo-${id}-${crypto.randomUUID()}` }; },
           async prompt({ text }) {
+            if (text.startsWith('OpenCode Skill validation marker:')) {
+              const marker = text.split('\n', 1)[0]
+                .slice('OpenCode Skill validation marker:'.length)
+                .trim();
+              return { parts: [{ type: 'text', text: marker }] };
+            }
             return { parts: [{ type: 'text', text: `【Demo 模拟回复】${text.trim()}` }] };
           },
           async abortSession() { return {}; }

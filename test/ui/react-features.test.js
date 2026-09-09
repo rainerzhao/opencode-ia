@@ -103,6 +103,57 @@ test('Skill center exposes private draft creation and editing controls', async (
   });
 });
 
+test('Skill center exposes package files and a private validation report without publishing controls', async () => {
+  await withViteModule('features/skills/SkillsPage.jsx', ({ SkillsPage }) => {
+    const skill = {
+      id: 'skill-validation',
+      slug: 'gpu-planner',
+      displayName: 'GPU 规划助手',
+      description: '估算容量',
+      status: 'draft',
+      visibility: 'private',
+      files: [{
+        id: 'file-1',
+        path: 'references/guide.md',
+        content: '# Guide',
+        sizeBytes: 7
+      }],
+      version: {
+        version: '0.1.0',
+        status: 'draft',
+        skillMd: '# GPU Planner',
+        validationReport: {
+          schemaVersion: 1,
+          verdict: 'fail',
+          summary: { errors: 1, warnings: 0, files: 2, totalBytes: 20 },
+          checks: [{
+            id: 'frontmatter',
+            status: 'fail',
+            severity: 'error',
+            message: 'frontmatter must contain unique name and description fields',
+            findings: []
+          }],
+          runtime: { status: 'skipped', provider: 'opencode-gateway' }
+        }
+      }
+    };
+    const html = renderToStaticMarkup(React.createElement(SkillsPage, {
+      initialSkills: [{ ...skill, version: '0.1.0', versionStatus: 'draft' }],
+      initialSelectedSkill: skill
+    }));
+
+    assert.match(html, /附加文件/);
+    assert.match(html, /references\/guide\.md/);
+    assert.match(html, /新增文件/);
+    assert.match(html, /开始校验/);
+    assert.match(html, /校验未通过/);
+    assert.match(html, /OpenCode 运行门禁：已跳过/);
+    assert.match(html, /frontmatter must contain unique name/);
+    assert.match(html, /私人草稿/);
+    assert.doesNotMatch(html, />发布</);
+  });
+});
+
 test('editing an existing knowledge article keeps its title in submitted form data', async () => {
   await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
     const html = renderToStaticMarkup(React.createElement(KnowledgePage, {

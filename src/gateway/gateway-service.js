@@ -7,6 +7,7 @@ const { resolveWithinRoot, secureWorkspaceTree } = require('../security/path-pol
 const { GATEWAY_EVENT_TYPES } = require('../../packages/shared/gateway-events');
 const { recoverGateway } = require('./recovery');
 const { WORKSPACE_PROMPT_TOOLS } = require('./tool-policy');
+const { normalizeSkillFiles } = require('../skills/skill-package');
 
 function serviceError(code, message) {
   const error = new Error(message);
@@ -42,6 +43,33 @@ function responseText(response) {
     .join('');
 }
 
+function hasCompletedSkillLoad(response, slug) {
+  if (!response || !Array.isArray(response.parts)) return false;
+  return response.parts.some((part) =>
+    part?.type === 'tool' &&
+    part.tool === 'skill' &&
+    part?.state?.status === 'completed' &&
+    part?.state?.input?.name === slug &&
+    typeof part?.state?.output === 'string' &&
+    part.state.output.trim().length > 0 &&
+    !part?.state?.error
+  );
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function discoveredSkillNames(value) {
+  const list = Array.isArray(value) ? value : Array.isArray(value?.skills) ? value.skills : null;
+  if (list) {
+    return list.map((item) => typeof item === 'string' ? item : item?.name || item?.id)
+      .filter((item) => typeof item === 'string');
+  }
+  if (value && typeof value === 'object') return Object.keys(value);
+  return [];
+}
+
 function createGatewayService({
   store,
   pool,
@@ -72,6 +100,10 @@ function createGatewayService({
   let unsubscribeStatuses = null;
   let recoveryReport = null;
   const runtimeRecoveries = new Map();
+  const validationOperations = new Set();
+  const validationControllers = new Set();
+  let activeValidations = 0;
+  let validationTail = Promise.resolve();
 
   function workspaceFor(item) {
     const userSegment = safeSegment(item.userId, 'user id');
@@ -256,7 +288,7 @@ function createGatewayService({
   }
 
   function dispatch() {
-    while (state === 'running' && active.size < globalRunning) {
+    while (state === 'running' && active.size + activeValidations < globalRunning) {
       let selectedLease = null;
       const item = queue.nextEligible((candidate) => {
         if (!canRun(candidate)) return false;
@@ -443,13 +475,160 @@ function createGatewayService({
   }
 
   async function waitForIdle() {
-    while (active.size > 0 || queue.snapshot().totalQueued > 0 || scheduling || runtimeRecoveries.size > 0) {
+    while (active.size > 0 || queue.snapshot().totalQueued > 0 || scheduling ||
+      runtimeRecoveries.size > 0 || validationOperations.size > 0) {
       const promises = [...active.values()].map((context) => context.promise);
       if (scheduling) promises.push(scheduling);
       promises.push(...runtimeRecoveries.values());
+      promises.push(...validationOperations);
       if (promises.length > 0) await Promise.race(promises);
       else await new Promise((resolve) => setImmediate(resolve));
     }
+  }
+
+  async function performSkillValidation(input) {
+    if (state !== 'running') throw serviceError('GATEWAY_UNAVAILABLE', 'gateway is not running');
+    const ownerUserId = safeSegment(input?.ownerUserId, 'owner user id');
+    const skillId = safeSegment(input?.skillId, 'skill id');
+    const versionId = safeSegment(input?.versionId, 'version id');
+    const slug = safeSegment(input?.slug, 'skill slug');
+    const skillMd = requiredString(input?.skillMd, 'skill source');
+    if (!/^[a-f0-9]{64}$/.test(input?.contentSha256 || '')) {
+      throw serviceError('INVALID_SKILL_PACKAGE', 'skill package digest is invalid');
+    }
+    const files = normalizeSkillFiles(input?.files || [], skillMd);
+    const deadline = Date.now() + jobTimeoutMs;
+    while (active.size > 0 || queue.snapshot().totalQueued > 0 || scheduling ||
+      (runningByUser.get(ownerUserId) || 0) >= userRunningLimit) {
+      if (state !== 'running') throw serviceError('GATEWAY_UNAVAILABLE', 'gateway is not running');
+      if (Date.now() >= deadline) {
+        throw serviceError('SKILL_RUNTIME_QUEUE_TIMEOUT', 'skill runtime validation timed out in queue');
+      }
+      await delay(10);
+    }
+
+    const validationId = `skill-validation-${crypto.randomUUID()}`;
+    const lease = pool.acquire({ conversationId: validationId });
+    if (!lease) throw serviceError('SKILL_RUNTIME_UNAVAILABLE', 'no OpenCode runtime is available');
+    const controller = new AbortController();
+    validationControllers.add(controller);
+    activeValidations += 1;
+    setRunning({ userId: ownerUserId, conversationId: validationId }, 1);
+    const startedAt = Date.now();
+    let directory = null;
+    let timeout = null;
+    try {
+      const validationRoot = resolveWithinRoot(workspaceRoot, 'skill-validation');
+      fs.mkdirSync(validationRoot, { recursive: true, mode: 0o700 });
+      fs.chmodSync(validationRoot, 0o700);
+      directory = fs.mkdtempSync(path.join(validationRoot, 'run-'));
+      fs.chmodSync(directory, 0o700);
+      const skillRoot = resolveWithinRoot(directory, `.opencode/skills/${slug}`);
+      fs.mkdirSync(skillRoot, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(path.join(skillRoot, 'SKILL.md'), skillMd, { flag: 'wx', mode: 0o600 });
+      for (const file of files) {
+        const target = resolveWithinRoot(skillRoot, file.path);
+        fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(target, file.content, { flag: 'wx', mode: 0o600 });
+      }
+      secureWorkspaceTree(directory);
+      timeout = setTimeout(() => controller.abort(), Math.max(1, deadline - Date.now()));
+      timeout.unref();
+
+      const catalog = await lease.client.requestJson('/skill', {
+        directory,
+        signal: controller.signal
+      });
+      if (!discoveredSkillNames(catalog).includes(slug)) {
+        throw serviceError('SKILL_RUNTIME_DISCOVERY_FAILED', 'OpenCode did not discover the Skill');
+      }
+      const marker = `SKILL_VALIDATION_OK_${crypto.randomBytes(12).toString('hex')}`;
+      const session = await lease.client.createSession({
+        directory,
+        title: `Validate Skill ${slug}`,
+        signal: controller.signal
+      });
+      const response = await lease.client.prompt({
+        sessionId: session.id,
+        directory,
+        agent: 'build',
+        tools: WORKSPACE_PROMPT_TOOLS,
+        signal: controller.signal,
+        text: [
+          `OpenCode Skill validation marker: ${marker}`,
+          `Load the locally discovered Skill named ${slug}.`,
+          'Do not run shell commands, access the network, use subagents, or read outside this workspace.',
+          `After loading its instructions, reply with exactly ${marker} and no other text.`
+        ].join('\n')
+      });
+      secureWorkspaceTree(directory);
+      const actual = responseText(response).trim();
+      const nativeSkillLoadCompleted = hasCompletedSkillLoad(response, slug);
+      if (actual !== marker && !nativeSkillLoadCompleted) {
+        const error = serviceError(
+          'SKILL_RUNTIME_RESPONSE_INVALID',
+          'OpenCode Skill validation response was invalid'
+        );
+        error.diagnostics = {
+          markerIncluded: actual.includes(marker),
+          markerLength: marker.length,
+          responseLength: actual.length,
+          textPartCount: Array.isArray(response?.parts)
+            ? response.parts.filter((part) => part?.type === 'text').length
+            : 0,
+          partTypes: Array.isArray(response?.parts)
+            ? response.parts.map((part) => part?.type || 'unknown').slice(0, 20)
+            : [],
+          toolParts: Array.isArray(response?.parts)
+            ? response.parts.filter((part) => part?.type === 'tool').map((part) => ({
+              tool: part?.tool || null,
+              status: part?.state?.status || null,
+              inputKeys: part?.state?.input && typeof part.state.input === 'object'
+                ? Object.keys(part.state.input).sort().slice(0, 20)
+                : [],
+              requestedSkillMatched: [
+                part?.state?.input?.name,
+                part?.state?.input?.skill,
+                part?.state?.input?.slug
+              ].includes(slug),
+              hasOutput: typeof part?.state?.output === 'string' && part.state.output.length > 0,
+              hasError: Boolean(part?.state?.error)
+            })).slice(0, 20)
+            : []
+        };
+        throw error;
+      }
+      return {
+        status: 'passed',
+        provider: 'opencode-gateway',
+        evidence: nativeSkillLoadCompleted ? 'skill-tool-completed' : 'exact-marker',
+        durationMs: Date.now() - startedAt
+      };
+    } catch (error) {
+      if (controller.signal.aborted && error?.code !== 'OPENCODE_ABORTED') {
+        throw serviceError('SKILL_RUNTIME_TIMEOUT', 'OpenCode Skill validation timed out');
+      }
+      throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      validationControllers.delete(controller);
+      if (directory) fs.rmSync(directory, { recursive: true, force: true });
+      setRunning({ userId: ownerUserId, conversationId: validationId }, -1);
+      activeValidations -= 1;
+      pool.release(lease);
+      schedule();
+    }
+  }
+
+  function validateSkillPackage(input) {
+    const operation = validationTail.catch(() => {}).then(() => performSkillValidation(input));
+    validationTail = operation.catch(() => {});
+    validationOperations.add(operation);
+    operation.then(
+      () => validationOperations.delete(operation),
+      () => validationOperations.delete(operation)
+    );
+    return operation;
   }
 
   async function stop() {
@@ -462,7 +641,9 @@ function createGatewayService({
       context.controller.abort();
       transitionIfRunning(context, 'interrupt', 'GATEWAY_STOPPED');
     }
+    for (const controller of validationControllers) controller.abort();
     await Promise.allSettled([...active.values()].map((context) => context.promise));
+    await Promise.allSettled([...validationOperations]);
     await Promise.allSettled([...runtimeRecoveries.values()]);
     await pool.stop();
     unsubscribeStatuses?.();
@@ -535,7 +716,17 @@ function createGatewayService({
     };
   }
 
-  return { cancel, recover, snapshot, start, stop, submit, subscribe, waitForIdle };
+  return {
+    cancel,
+    recover,
+    snapshot,
+    start,
+    stop,
+    submit,
+    subscribe,
+    validateSkillPackage,
+    waitForIdle
+  };
 }
 
 module.exports = { createGatewayService };

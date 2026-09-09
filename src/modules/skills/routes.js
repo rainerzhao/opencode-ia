@@ -2,6 +2,11 @@
 
 const express = require('express');
 
+function asyncRoute(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next))
+    .catch((error) => next(mapStoreError(error)));
+}
+
 function routeError(code, message, status) {
   const error = new Error(message);
   error.code = code;
@@ -27,19 +32,24 @@ function mapStoreError(error) {
     INVALID_SKILL_STATUS: 400,
     INVALID_SKILL_PAGE: 400,
     INVALID_SKILL_UPDATE: 400,
+    INVALID_SKILL_FILES: 400,
+    INVALID_SKILL_VALIDATION_REPORT: 400,
     SKILL_SLUG_IMMUTABLE: 400,
     SKILL_NOT_FOUND: 404,
     SKILL_OWNER_NOT_FOUND: 404,
     SKILL_SLUG_CONFLICT: 409,
     SKILL_NOT_EDITABLE: 409,
+    SKILL_VALIDATION_STALE: 409,
     SKILL_NOT_ARCHIVABLE: 409
   };
   if (statuses[error.code]) error.status = statuses[error.code];
   return error;
 }
 
-function createSkillRouter({ store, requestAuditor }) {
-  if (!store || !requestAuditor) throw new TypeError('skill route dependencies are required');
+function createSkillRouter({ store, requestAuditor, validationService }) {
+  if (!store || !requestAuditor || !validationService) {
+    throw new TypeError('skill route dependencies are required');
+  }
   const router = express.Router();
 
   router.get('/', (req, res, next) => {
@@ -104,6 +114,51 @@ function createSkillRouter({ store, requestAuditor }) {
       res.json({ skill });
     } catch (error) { next(mapStoreError(error)); }
   });
+
+  router.put('/:skillId/files', (req, res, next) => {
+    try {
+      const skill = store.replaceDraftFiles({
+        actor: req.auth.user,
+        id: skillId(req.params.skillId),
+        files: req.body?.files
+      });
+      requestAuditor.record(req, {
+        action: 'skill.files.replace',
+        targetType: 'skill',
+        targetId: skill.id,
+        metadata: {
+          version: skill.version.version,
+          fileCount: skill.files.length,
+          totalBytes: skill.files.reduce((sum, file) => sum + file.sizeBytes, 0)
+        }
+      });
+      res.json({ skill });
+    } catch (error) { next(mapStoreError(error)); }
+  });
+
+  router.post('/:skillId/validate', asyncRoute(async (req, res) => {
+    const skill = await validationService.validate({
+      actor: req.auth.user,
+      id: skillId(req.params.skillId)
+    });
+    const report = skill.version.validationReport;
+    requestAuditor.record(req, {
+      action: 'skill.validate',
+      targetType: 'skill',
+      targetId: skill.id,
+      metadata: {
+        version: skill.version.version,
+        verdict: report.verdict,
+        errors: report.summary.errors,
+        warnings: report.summary.warnings,
+        failedRules: report.checks
+          .filter((item) => item.status === 'fail')
+          .map((item) => item.id),
+        runtimeStatus: report.runtime.status
+      }
+    });
+    res.json({ skill });
+  }));
 
   router.delete('/:skillId', (req, res, next) => {
     try {

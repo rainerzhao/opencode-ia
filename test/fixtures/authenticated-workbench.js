@@ -96,7 +96,8 @@ async function createAuthenticatedWorkbench(t, options = {}) {
     logger: options.logger || { log() {}, error() {} },
     urlFetchOptions: options.urlFetchOptions,
     fetchAllowedTextImpl: options.fetchAllowedTextImpl,
-    gatewayServiceFactory: options.gatewayServiceFactory
+    gatewayServiceFactory: options.gatewayServiceFactory,
+    skillRuntimeValidator: options.skillRuntimeValidator
   });
   const address = await workbench.start(0, '127.0.0.1');
   const origin = `http://127.0.0.1:${address.port}`;

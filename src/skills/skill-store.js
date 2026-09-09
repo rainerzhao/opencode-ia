@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { normalizeSkillFiles, skillPackageDigest } = require('./skill-package');
 
 const SKILL_STATUSES = new Set(['draft', 'published', 'disabled', 'archived']);
 
@@ -88,11 +89,24 @@ function toSummary(row) {
   };
 }
 
-function toDetail(row) {
+function toFile(row) {
+  return {
+    id: row.id,
+    path: row.path,
+    content: row.content,
+    sizeBytes: row.size_bytes,
+    contentSha256: row.content_sha256,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toDetail(row, files = []) {
   const skill = toSummary(row);
   if (!skill) return null;
   return {
     ...skill,
+    files,
     version: {
       id: row.version_id,
       version: row.version,
@@ -129,6 +143,17 @@ function createSkillStore(db, {
   `;
   const byId = db.prepare(detailSql);
   const bySlug = db.prepare('SELECT id FROM skills WHERE slug = ? COLLATE NOCASE');
+  const filesByVersion = db.prepare(`
+    SELECT id, path, content, size_bytes, content_sha256, created_at, updated_at
+    FROM skill_files
+    WHERE version_id = ?
+    ORDER BY path ASC
+  `);
+
+  function detail(row) {
+    if (!row) return null;
+    return toDetail(row, filesByVersion.all(row.version_id).map(toFile));
+  }
 
   function transaction(action) {
     db.exec('BEGIN IMMEDIATE;');
@@ -205,7 +230,7 @@ function createSkillStore(db, {
       }
       throw error;
     }
-    return toDetail(byId.get(skillId));
+    return detail(byId.get(skillId));
   }
 
   function listVisible({ actor, status = 'draft', limit = 100, offset = 0 } = {}) {
@@ -240,12 +265,20 @@ function createSkillStore(db, {
   }
 
   function getVisible({ actor, id }) {
-    return toDetail(visibleRow({ actor, id }));
+    return detail(visibleRow({ actor, id }));
+  }
+
+  function getValidationCandidate({ actor, id }) {
+    const row = editableRow({ actor, id });
+    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+      throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be validated');
+    }
+    return detail(row);
   }
 
   function updateDraft({ actor, id, displayName, description, skillMd }) {
     const row = editableRow({ actor, id });
-    if (row.status !== 'draft' || row.version_status !== 'draft') {
+    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
       throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be changed');
     }
     if (displayName === undefined && description === undefined && skillMd === undefined) {
@@ -261,7 +294,8 @@ function createSkillStore(db, {
       );
     const nextDescription = description === undefined ? row.description : descriptionText(description);
     const nextSource = skillMd === undefined ? row.skill_md : sourceText(skillMd);
-    const digest = crypto.createHash('sha256').update(nextSource).digest('hex');
+    const files = filesByVersion.all(row.version_id).map(toFile);
+    const digest = skillPackageDigest(nextSource, files);
     const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
 
     transaction(() => {
@@ -275,21 +309,101 @@ function createSkillStore(db, {
         WHERE id = ?
       `).run(nextSource, digest, now, row.version_id);
     });
-    return toDetail(byId.get(row.id));
+    return detail(byId.get(row.id));
+  }
+
+  function replaceDraftFiles({ actor, id, files }) {
+    const row = editableRow({ actor, id });
+    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+      throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be changed');
+    }
+    const normalizedFiles = normalizeSkillFiles(files, row.skill_md);
+    const digest = skillPackageDigest(row.skill_md, normalizedFiles);
+    const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+
+    transaction(() => {
+      db.prepare('DELETE FROM skill_files WHERE version_id = ?').run(row.version_id);
+      const insert = db.prepare(`
+        INSERT INTO skill_files (
+          id, version_id, path, content, size_bytes, content_sha256, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const file of normalizedFiles) {
+        insert.run(
+          normalizeId(idFactory(), 'INVALID_SKILL_FILE_ID'),
+          row.version_id,
+          file.path,
+          file.content,
+          file.sizeBytes,
+          crypto.createHash('sha256').update(file.content).digest('hex'),
+          now,
+          now
+        );
+      }
+      db.prepare(`
+        UPDATE skill_versions
+        SET status = 'draft', validation_report_json = '{}', content_sha256 = ?, updated_at = ?
+        WHERE id = ?
+      `).run(digest, now, row.version_id);
+      db.prepare('UPDATE skills SET updated_at = ? WHERE id = ?').run(now, row.id);
+    });
+    return detail(byId.get(row.id));
+  }
+
+  function saveValidationReport({ actor, id, expectedContentSha256, report }) {
+    const row = editableRow({ actor, id });
+    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+      throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be validated');
+    }
+    if (typeof expectedContentSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expectedContentSha256) ||
+        !report || typeof report !== 'object' || !['pass', 'fail'].includes(report.verdict) ||
+        !['passed', 'failed', 'skipped', 'unavailable'].includes(report.runtime?.status)) {
+      throw skillError('INVALID_SKILL_VALIDATION_REPORT', 'skill validation report is invalid');
+    }
+    const serialized = JSON.stringify(report);
+    if (Buffer.byteLength(serialized, 'utf8') > 262144) {
+      throw skillError('INVALID_SKILL_VALIDATION_REPORT', 'skill validation report is invalid');
+    }
+    const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+    transaction(() => {
+      const current = byId.get(row.id);
+      if (!current || current.content_sha256 !== expectedContentSha256) {
+        throw skillError('SKILL_VALIDATION_STALE', 'skill changed while validation was running');
+      }
+      const status = report.verdict === 'pass' && report.runtime.status === 'passed'
+        ? 'validated'
+        : 'draft';
+      db.prepare(`
+        UPDATE skill_versions
+        SET status = ?, validation_report_json = ?, updated_at = ?
+        WHERE id = ?
+      `).run(status, serialized, now, current.version_id);
+      db.prepare('UPDATE skills SET updated_at = ? WHERE id = ?').run(now, current.id);
+    });
+    return detail(byId.get(row.id));
   }
 
   function archiveDraft({ actor, id }) {
     const row = editableRow({ actor, id });
-    if (row.status === 'archived') return toDetail(row);
+    if (row.status === 'archived') return detail(row);
     if (row.status !== 'draft') {
       throw skillError('SKILL_NOT_ARCHIVABLE', 'skill cannot be archived from its current status');
     }
     db.prepare(`UPDATE skills SET status = 'archived', updated_at = ? WHERE id = ?`)
       .run(requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 }), row.id);
-    return toDetail(byId.get(row.id));
+    return detail(byId.get(row.id));
   }
 
-  return { archiveDraft, createDraft, getVisible, listVisible, updateDraft };
+  return {
+    archiveDraft,
+    createDraft,
+    getValidationCandidate,
+    getVisible,
+    listVisible,
+    replaceDraftFiles,
+    saveValidationReport,
+    updateDraft
+  };
 }
 
 module.exports = { createSkillStore };

@@ -108,6 +108,86 @@ test('lists each visible Skill once using only its latest version', (t) => {
   assert.equal(listed[0].version, '0.2.0');
 });
 
+test('replaces bounded draft files atomically and invalidates a prior validation report', (t) => {
+  const { db, store } = useFixture(t);
+  const created = store.createDraft({
+    actor: memberOne, slug: 'package-skill', displayName: 'Package', skillMd: '# Package'
+  });
+  db.prepare(`
+    UPDATE skill_versions
+    SET status = 'validated', validation_report_json = '{"verdict":"pass"}'
+    WHERE id = ?
+  `).run(created.version.id);
+
+  const replaced = store.replaceDraftFiles({
+    actor: memberOne,
+    id: created.id,
+    files: [
+      { path: 'references/guide.md', content: '# Guide' },
+      { path: 'scripts/check.js', content: "console.log('check');" }
+    ]
+  });
+
+  assert.deepEqual(replaced.files.map((file) => file.path), [
+    'references/guide.md', 'scripts/check.js'
+  ]);
+  assert.equal(replaced.version.status, 'draft');
+  assert.deepEqual(replaced.version.validationReport, {});
+  assert.equal(replaced.version.contentSha256.length, 64);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM skill_files').get().count, 2);
+
+  const second = store.replaceDraftFiles({
+    actor: memberOne,
+    id: created.id,
+    files: [{ path: 'references/only.md', content: 'Only' }]
+  });
+  assert.deepEqual(second.files.map((file) => file.path), ['references/only.md']);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM skill_files').get().count, 1);
+});
+
+test('rejects unsafe, duplicate, oversized and cross-account Skill package files', (t) => {
+  const { db, store } = useFixture(t);
+  const created = store.createDraft({
+    actor: memberOne, slug: 'safe-package', displayName: 'Safe package', skillMd: '# Safe'
+  });
+
+  for (const files of [
+    [{ path: '../escape.md', content: 'escape' }],
+    [{ path: '/absolute.md', content: 'absolute' }],
+    [{ path: 'nested\\windows.md', content: 'windows' }],
+    [{ path: '.hidden.md', content: 'hidden' }],
+    [{ path: 'binary.txt', content: 'bad\0content' }],
+    [{ path: 'unsupported.exe', content: 'unsafe' }],
+    [{ path: 'same.md', content: 'first' }, { path: 'same.md', content: 'second' }],
+    [{ path: 'huge.md', content: 'x'.repeat(262145) }]
+  ]) {
+    assert.throws(
+      () => store.replaceDraftFiles({ actor: memberOne, id: created.id, files }),
+      (error) => error.code === 'INVALID_SKILL_FILES'
+    );
+  }
+  assert.throws(
+    () => store.replaceDraftFiles({
+      actor: memberOne,
+      id: created.id,
+      files: Array.from({ length: 65 }, (_, index) => ({ path: `file-${index}.md`, content: 'x' }))
+    }),
+    (error) => error.code === 'INVALID_SKILL_FILES'
+  );
+  assert.throws(
+    () => store.replaceDraftFiles({
+      actor: memberTwo, id: created.id, files: [{ path: 'stolen.md', content: 'stolen' }]
+    }),
+    (error) => error.code === 'SKILL_NOT_FOUND'
+  );
+
+  db.prepare("UPDATE skill_versions SET status = 'published' WHERE id = ?").run(created.version.id);
+  assert.throws(
+    () => store.replaceDraftFiles({ actor: memberOne, id: created.id, files: [] }),
+    (error) => error.code === 'SKILL_NOT_EDITABLE'
+  );
+});
+
 test('updates only editable draft fields and archives idempotently', (t) => {
   const { store } = useFixture(t);
   const created = store.createDraft({

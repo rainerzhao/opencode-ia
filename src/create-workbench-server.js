@@ -26,6 +26,8 @@ const { createGatewayStore } = require('./gateway/gateway-store');
 const { createGatewayAdminRouter } = require('./modules/admin/gateway-routes');
 const { createSkillRouter } = require('./modules/skills/routes');
 const { createSkillStore } = require('./skills/skill-store');
+const { createSkillValidationService } = require('./skills/skill-validation-service');
+const { createOpenCodeSkillRuntimeValidator } = require('./skills/opencode-skill-runtime-validator');
 
 function createWorkbenchServer({
   config,
@@ -35,7 +37,8 @@ function createWorkbenchServer({
   urlFetchOptions = {},
   fetchAllowedTextImpl = fetchAllowedText,
   gatewayService,
-  gatewayServiceFactory
+  gatewayServiceFactory,
+  skillRuntimeValidator = null
 }) {
 
 let db = database;
@@ -73,6 +76,15 @@ const requestAuditor = createRequestAuditor({ db });
 const gatewayStore = createGatewayStore(db);
 const skillStore = createSkillStore(db);
 const activeGatewayService = gatewayService || gatewayServiceFactory?.({ store: gatewayStore });
+const activeSkillRuntimeValidator = skillRuntimeValidator || (
+  typeof activeGatewayService?.validateSkillPackage === 'function'
+    ? createOpenCodeSkillRuntimeValidator({ gatewayService: activeGatewayService })
+    : null
+);
+const skillValidationService = createSkillValidationService({
+  store: skillStore,
+  runtimeValidator: activeSkillRuntimeValidator
+});
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -143,7 +155,11 @@ app.use('/api/admin/conversations', createConversationAdminRouter({
   store: gatewayStore,
   requireAdmin: authMiddleware.requireRole('admin')
 }));
-app.use('/api/skills', createSkillRouter({ store: skillStore, requestAuditor }));
+app.use('/api/skills', createSkillRouter({
+  store: skillStore,
+  requestAuditor,
+  validationService: skillValidationService
+}));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);

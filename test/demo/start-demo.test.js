@@ -146,6 +146,37 @@ test('starts an isolated full-stack demo and removes its temporary data on shutd
   const documentCount = tree.reduce((count, item) => count + (item.children?.length || 0), 0);
   assert.equal(documentCount, 3);
 
+  const createdSkillResponse = await fetch(`${ready.url}/api/skills`, {
+    method: 'POST',
+    headers: { cookie: session.cookie, 'x-csrf-token': session.csrfToken, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      slug: 'demo-reviewer',
+      displayName: 'Demo Reviewer',
+      description: 'Validate a private Skill without a real model',
+      skillMd: [
+        '---',
+        'name: demo-reviewer',
+        'description: Review a bounded demo input',
+        '---',
+        '',
+        '# Instructions',
+        '',
+        'Return a concise review.'
+      ].join('\n')
+    })
+  });
+  assert.equal(createdSkillResponse.status, 201);
+  const createdSkill = (await createdSkillResponse.json()).skill;
+  const validatedSkillResponse = await fetch(`${ready.url}/api/skills/${createdSkill.id}/validate`, {
+    method: 'POST',
+    headers: { cookie: session.cookie, 'x-csrf-token': session.csrfToken }
+  });
+  assert.equal(validatedSkillResponse.status, 200);
+  const validatedSkill = (await validatedSkillResponse.json()).skill;
+  assert.equal(validatedSkill.version.status, 'validated');
+  assert.equal(validatedSkill.version.validationReport.verdict, 'pass');
+  assert.equal(validatedSkill.version.validationReport.runtime.status, 'passed');
+
   const ws = new WebSocket(ready.url.replace('http:', 'ws:'), {
     headers: { cookie: session.cookie }
   });

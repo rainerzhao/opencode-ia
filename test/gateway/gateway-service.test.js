@@ -36,7 +36,11 @@ function createFixture(t, {
   jobTimeoutMs = 1000,
   failSessionForWorker = null,
   writeArtifacts = false,
-  emptyResponse = false
+  emptyResponse = false,
+  validationDiscovery = true,
+  validationMarkerMatches = true,
+  validationToolResult = null,
+  validationGate = null
 } = {}) {
   const db = openDatabase({ filename: ':memory:' });
   migrateDatabase(db);
@@ -71,6 +75,7 @@ function createFixture(t, {
   const starts = [];
   const promptRequests = [];
   const abortRequests = [];
+  const validationRequests = [];
   const pool = createWorkerPool({
     workerCount: 2,
     heartbeatMs: 60_000,
@@ -78,6 +83,14 @@ function createFixture(t, {
       const record = { id, index, status: 'stopped', onExit, sessions: 0, sessionsAvailable: true };
       records.push(record);
       const client = {
+        async requestJson(pathname, { directory } = {}) {
+          if (pathname !== '/skill') throw new Error(`unexpected request: ${pathname}`);
+          const root = path.join(directory, '.opencode', 'skills');
+          if (!validationDiscovery || !fs.existsSync(root)) return [];
+          return fs.readdirSync(root, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => ({ name: entry.name }));
+        },
         async getSession({ sessionId }) {
           if (!record.sessionsAvailable) throw Object.assign(new Error('session missing'), { code: 'OPENCODE_API_ERROR' });
           return { id: sessionId };
@@ -93,6 +106,52 @@ function createFixture(t, {
         },
         async prompt({ text, directory, agent, tools, signal }) {
           promptRequests.push({ text, directory, agent, tools });
+          if (text.startsWith('OpenCode Skill validation marker:')) {
+            const marker = text.split('\n', 1)[0].slice('OpenCode Skill validation marker:'.length).trim();
+            const skillRoot = path.join(directory, '.opencode', 'skills');
+            const [slug] = fs.readdirSync(skillRoot);
+            validationRequests.push({
+              marker,
+              slug,
+              skillMd: fs.readFileSync(path.join(skillRoot, slug, 'SKILL.md'), 'utf8'),
+              guide: fs.readFileSync(path.join(skillRoot, slug, 'references', 'guide.md'), 'utf8'),
+              directory,
+              agent,
+              tools,
+              directoryMode: fs.statSync(directory).mode & 0o777,
+              skillMode: fs.statSync(path.join(skillRoot, slug, 'SKILL.md')).mode & 0o777
+            });
+            if (validationGate) {
+              const onAbort = () => {
+                const error = new Error('validation aborted');
+                error.code = 'OPENCODE_ABORTED';
+                validationGate.reject(error);
+              };
+              signal?.addEventListener('abort', onAbort, { once: true });
+              try {
+                await validationGate.promise;
+              } finally {
+                signal?.removeEventListener('abort', onAbort);
+              }
+            }
+            if (validationToolResult) {
+              return {
+                parts: [{
+                  type: 'tool',
+                  tool: 'skill',
+                  state: {
+                    status: validationToolResult.status,
+                    input: { name: validationToolResult.name || slug },
+                    output: validationToolResult.output || '',
+                    error: validationToolResult.error || null
+                  }
+                }]
+              };
+            }
+            return {
+              parts: [{ type: 'text', text: validationMarkerMatches ? marker : 'VALIDATION_FAILED' }]
+            };
+          }
           const [userId] = text.split(':');
           running += 1;
           maxRunning = Math.max(maxRunning, running);
@@ -187,12 +246,179 @@ function createFixture(t, {
     starts,
     promptRequests,
     abortRequests,
+    validationRequests,
     workspaceRoot,
     conversation,
     submit,
     metrics: () => ({ maxRunning, maxPerUser })
   };
 }
+
+test('validates a Skill through the shared OpenCode worker pool in a disposable restricted workspace', async (t) => {
+  const fixture = createFixture(t, { automatic: true });
+  await fixture.service.start();
+
+  const result = await fixture.service.validateSkillPackage({
+    skillId: 'skill-validation',
+    versionId: 'version-validation',
+    ownerUserId: 'user-1',
+    slug: 'gpu-planner',
+    skillMd: '---\nname: gpu-planner\ndescription: Plan safely\n---\n# Instructions',
+    files: [{ path: 'references/guide.md', content: '# Guide' }],
+    contentSha256: 'a'.repeat(64)
+  });
+
+  assert.equal(result.status, 'passed');
+  assert.equal(result.provider, 'opencode-gateway');
+  assert.equal(result.evidence, 'exact-marker');
+  assert.equal(Number.isInteger(result.durationMs), true);
+  assert.equal(fixture.validationRequests.length, 1);
+  const request = fixture.validationRequests[0];
+  assert.equal(request.slug, 'gpu-planner');
+  assert.match(request.skillMd, /name: gpu-planner/);
+  assert.equal(request.guide, '# Guide');
+  assert.equal(request.directoryMode, 0o700);
+  assert.equal(request.skillMode, 0o600);
+  assert.equal(request.agent, 'build');
+  assert.deepEqual(request.tools, {
+    bash: false,
+    task: false,
+    webfetch: false,
+    websearch: false
+  });
+  assert.equal(fs.existsSync(request.directory), false);
+});
+
+test('fails closed when OpenCode cannot discover the Skill or return the exact validation marker', async (t) => {
+  const missing = createFixture(t, { automatic: true, validationDiscovery: false });
+  await missing.service.start();
+  const input = {
+    skillId: 'skill-validation',
+    versionId: 'version-validation',
+    ownerUserId: 'user-1',
+    slug: 'gpu-planner',
+    skillMd: '---\nname: gpu-planner\ndescription: Plan safely\n---\n# Instructions',
+    files: [{ path: 'references/guide.md', content: '# Guide' }],
+    contentSha256: 'a'.repeat(64)
+  };
+  await assert.rejects(
+    missing.service.validateSkillPackage(input),
+    (error) => error.code === 'SKILL_RUNTIME_DISCOVERY_FAILED'
+  );
+
+  const mismatch = createFixture(t, { automatic: true, validationMarkerMatches: false });
+  await mismatch.service.start();
+  await assert.rejects(
+    mismatch.service.validateSkillPackage(input),
+    (error) => error.code === 'SKILL_RUNTIME_RESPONSE_INVALID'
+  );
+});
+
+test('accepts OpenCode native evidence that the exact Skill tool completed with output', async (t) => {
+  const fixture = createFixture(t, {
+    automatic: true,
+    validationToolResult: {
+      status: 'completed',
+      name: 'gpu-planner',
+      output: 'loaded private Skill instructions'
+    }
+  });
+  await fixture.service.start();
+
+  const result = await fixture.service.validateSkillPackage({
+    skillId: 'skill-validation',
+    versionId: 'version-validation',
+    ownerUserId: 'user-1',
+    slug: 'gpu-planner',
+    skillMd: '---\nname: gpu-planner\ndescription: Plan safely\n---\n# Instructions',
+    files: [{ path: 'references/guide.md', content: '# Guide' }],
+    contentSha256: 'a'.repeat(64)
+  });
+
+  assert.equal(result.status, 'passed');
+  assert.equal(result.provider, 'opencode-gateway');
+  assert.equal(result.evidence, 'skill-tool-completed');
+});
+
+test('rejects Skill tool evidence for the wrong Skill, failed tool, or empty output', async (t) => {
+  const input = {
+    skillId: 'skill-validation',
+    versionId: 'version-validation',
+    ownerUserId: 'user-1',
+    slug: 'gpu-planner',
+    skillMd: '---\nname: gpu-planner\ndescription: Plan safely\n---\n# Instructions',
+    files: [{ path: 'references/guide.md', content: '# Guide' }],
+    contentSha256: 'a'.repeat(64)
+  };
+  for (const validationToolResult of [
+    { status: 'completed', name: 'other-skill', output: 'loaded' },
+    { status: 'error', name: 'gpu-planner', output: '', error: 'load failed' },
+    { status: 'completed', name: 'gpu-planner', output: '' }
+  ]) {
+    const fixture = createFixture(t, { automatic: true, validationToolResult });
+    await fixture.service.start();
+    await assert.rejects(
+      fixture.service.validateSkillPackage(input),
+      (error) => error.code === 'SKILL_RUNTIME_RESPONSE_INVALID'
+    );
+  }
+});
+
+test('keeps Skill validation behind business jobs and includes it in waitForIdle', async (t) => {
+  const validationGate = deferred();
+  const fixture = createFixture(t, { validationGate });
+  await fixture.service.start();
+  const firstConversation = fixture.conversation(1, 'priority-first');
+  const secondConversation = fixture.conversation(2, 'priority-second');
+  fixture.submit(firstConversation, 1, 'priority-first');
+  await eventually(() => fixture.pending.has('user-1:priority-first'));
+
+  const validation = fixture.service.validateSkillPackage({
+    skillId: 'skill-validation',
+    versionId: 'version-validation',
+    ownerUserId: 'user-3',
+    slug: 'gpu-planner',
+    skillMd: '---\nname: gpu-planner\ndescription: Plan safely\n---\n# Instructions',
+    files: [{ path: 'references/guide.md', content: '# Guide' }],
+    contentSha256: 'a'.repeat(64)
+  });
+  fixture.submit(secondConversation, 2, 'priority-second');
+  await eventually(() => fixture.pending.has('user-2:priority-second'));
+  assert.equal(fixture.validationRequests.length, 0);
+
+  fixture.pending.get('user-1:priority-first').resolve('answer:first');
+  fixture.pending.get('user-2:priority-second').resolve('answer:second');
+  await eventually(() => fixture.validationRequests.length === 1);
+  let idleResolved = false;
+  const idle = fixture.service.waitForIdle().then(() => { idleResolved = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(idleResolved, false);
+
+  validationGate.resolve();
+  await validation;
+  await idle;
+  assert.equal(idleResolved, true);
+});
+
+test('aborts an active Skill validation during clean Gateway shutdown', async (t) => {
+  const validationGate = deferred();
+  const fixture = createFixture(t, { validationGate });
+  await fixture.service.start();
+  const validation = fixture.service.validateSkillPackage({
+    skillId: 'skill-validation',
+    versionId: 'version-validation',
+    ownerUserId: 'user-1',
+    slug: 'gpu-planner',
+    skillMd: '---\nname: gpu-planner\ndescription: Plan safely\n---\n# Instructions',
+    files: [{ path: 'references/guide.md', content: '# Guide' }],
+    contentSha256: 'a'.repeat(64)
+  });
+  await eventually(() => fixture.validationRequests.length === 1);
+
+  const stopped = await fixture.service.stop();
+  assert.equal(stopped.status, 'stopped');
+  await assert.rejects(validation, (error) => error.code === 'OPENCODE_ABORTED');
+});
 
 test('derives private workspace directories and applies the restricted prompt tool profile', async (t) => {
   const fixture = createFixture(t, { automatic: true, writeArtifacts: true });

@@ -195,6 +195,25 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX skill_installations_user_status_idx
         ON skill_installations(user_id, status, updated_at DESC);
     `
+  }),
+  Object.freeze({
+    version: 4,
+    sql: `
+      CREATE TABLE skill_files (
+        id TEXT PRIMARY KEY,
+        version_id TEXT NOT NULL REFERENCES skill_versions(id) ON DELETE CASCADE,
+        path TEXT NOT NULL CHECK (length(path) BETWEEN 1 AND 200),
+        content TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 0 AND 262144),
+        content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (version_id, path)
+      ) STRICT;
+
+      CREATE INDEX skill_files_version_path_idx
+        ON skill_files(version_id, path);
+    `
   })
 ]);
 

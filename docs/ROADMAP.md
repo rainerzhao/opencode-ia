@@ -4,9 +4,9 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1、Stage 2 已完成 Mac 验收，Stage 4A 已完成、4B–4D 开发中，Stage 3 待开发** 的状态。
+项目当前处于 **Stage 0、Stage 1、Stage 2 已完成 Mac 验收，Stage 4A–4B 已完成、4C–4D 开发中，Stage 3 待开发** 的状态。
 
-Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
+Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、真实 OpenCode Skill 加载门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
 ## 阶段总览
 
@@ -16,7 +16,7 @@ Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、
 | Stage 1 产品底座 | ✅ 完成 | React/Vite、账号密码、SQLite、角色与审计 | 多用户身份清晰、数据可追踪、默认私有 |
 | Stage 2 OpenCode Gateway | ✅ Mac 验收完成 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，多人多会话可控 |
 | Stage 3 知识与方案 | ⏳ 待开发 | FTS5 检索、版本、私有到发布流程 | 知识可查、可审、可撤回、可追溯 |
-| Stage 4 Skill 中心 | 🚧 4A 完成 | 草稿、校验、发布、安装、启用、版本和回滚 | 成员能安全生产并共享 Skill |
+| Stage 4 Skill 中心 | 🚧 4A–4B 完成 | 草稿、校验、发布、安装、启用、版本和回滚 | 成员能安全生产并共享 Skill |
 | Stage 5 Linux 生产化 | ⏳ 待实施 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
 
 ## Stage 0：安全可演示基线
@@ -96,11 +96,11 @@ Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢
 分阶段交付进度：
 
 - ✅ Stage 4A：SQLite Skill/版本/安装数据模型，默认私有草稿，成员创建、编辑和归档，管理员治理，React 浏览器体验。
-- 🚧 Stage 4B：frontmatter、目录、文件、敏感信息、路径和危险命令校验，持久化报告与受限 OpenCode 运行验收。
+- ✅ Stage 4B：frontmatter、目录、文件、敏感信息、路径和危险命令校验，持久化报告与受限 OpenCode 运行验收。
 - ⏳ Stage 4C：人工发布、成员安装与启用、原子落盘和 OpenCode 发现验证。
 - ⏳ Stage 4D：新版本、升级、回滚、停用、归档和跨账号完整验收。
 
-Stage 4A 已完成 Mac 应用级验收。私人草稿只对创建者和治理管理员可见，团队可见性不能暴露 draft/archived 内容；列表在未来多版本场景中只返回最新版本摘要。4A 不执行 Skill，也不表示团队发布链路已经可用。
+Stage 4A–4B 已完成 Mac 应用级验收。私人草稿只对创建者和治理管理员可见，团队可见性不能暴露 draft/archived 内容；列表在未来多版本场景中只返回最新版本摘要。校验支持受控多文件包，报告不复制疑似秘密原文，静态检查与真实 OpenCode 受限加载必须同时通过；内容变化会使旧报告失效，过期异步结果不能覆盖新版本。4B 不表示团队发布、安装链路已经可用。
 
 出口标准：创建、校验、发布、安装、使用到回滚的完整流程通过端到端验收。
 
