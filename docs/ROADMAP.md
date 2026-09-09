@@ -4,9 +4,9 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1、Stage 2A–2D 完成，Stage 2E 开发中** 的状态。
+项目当前处于 **Stage 0、Stage 1、Stage 2 已完成 Mac 验收，Stage 3 与 Stage 4 待开发** 的状态。
 
-Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复和无密钥 Demo。Stage 2E 仍需完成工具、文件与产物隔离门禁。
+Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
 ## 阶段总览
 
@@ -14,7 +14,7 @@ Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、
 | --- | --- | --- | --- |
 | Stage 0 安全基线 | ✅ 完成 | 让原型可测试、可演示、可公开协作 | 自动测试、密钥扫描、浏览器验收通过 |
 | Stage 1 产品底座 | ✅ 完成 | React/Vite、账号密码、SQLite、角色与审计 | 多用户身份清晰、数据可追踪、默认私有 |
-| Stage 2 OpenCode Gateway | 🚧 2E 开发中 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，15–20 人会话可控 |
+| Stage 2 OpenCode Gateway | ✅ Mac 验收完成 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，多人多会话可控 |
 | Stage 3 知识与方案 | ⏳ 待开发 | FTS5 检索、版本、私有到发布流程 | 知识可查、可审、可撤回、可追溯 |
 | Stage 4 Skill 中心 | ⏳ 待开发 | 校验、发布、安装、启用、版本和回滚 | 成员能安全生产并共享 Skill |
 | Stage 5 Linux 生产化 | ⏳ 待实施 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
@@ -73,11 +73,11 @@ Stage 1 已在 Mac 上跑通管理员与成员浏览器闭环、React/Vite 迁�
 - ✅ Stage 2B：单个受保护的常驻 OpenCode Worker、HTTP/SSE 客户端、进程生命周期和本机真实 OpenCode 健康冒烟。
 - ✅ Stage 2C：2 Worker 池、粘性 Session、健康检查、按用户公平队列、并发限制和故障隔离。
 - ✅ Stage 2D：私人 Conversation API、WebSocket 订阅/提交/取消、断线补发和恢复边界、生产双 Worker 组合及 React 多会话体验。
-- 🚧 Stage 2E：启动与运行期恢复、管理后台、20 用户模拟、真实 5×3×3 多会话和工具执行隔离。
+- ✅ Stage 2E：启动与运行期恢复、管理后台、20 用户模拟、真实 5×3×3 多会话和工具执行隔离。
 
-Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。工具、文件与产物隔离仍未完成，因此 Stage 2E 整体验收尚未关闭。
+Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。每个 Conversation 的目录和产物相互隔离；Runtime 以 pure 模式运行，并从全局、Agent 和 Prompt 三层关闭高风险工具。Stage 2 在 Mac 的应用级验收已经关闭。
 
-出口标准：真实 OpenCode 与内部兼容 OpenAI 协议模型完成联调，Mac 上完成并发和恢复验证。
+出口标准：真实 OpenCode 在 Mac 完成多账号、多 Session、排队、恢复和应用级工具隔离验证。内部 Provider 与 Linux 进程级隔离在 Stage 5 验收。
 
 ## Stage 3：知识与方案闭环
 

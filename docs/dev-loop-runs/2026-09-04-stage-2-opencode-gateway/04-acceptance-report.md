@@ -1,5 +1,17 @@
 # Stage 2 Acceptance Report
 
+## Stage 2E.7 工具、文件与产物隔离
+
+**PASS WITH NOTES**：Stage 2A–2E 已完成 Mac 验收。真实 OpenCode 可在所属 Conversation 创建产物，无法读取兄弟 Conversation 的随机 canary；Runtime 使用 pure 模式，全局、Agent 和 Prompt 三层关闭外部目录、Bash、联网及子代理。账号与 Conversation 目录独立，权限和文件类型在执行前后校验。
+
+真实 5×3×3 使用 1 个 Runtime、5 个账号、15 个持久 Session 和 5 个 Provider 执行槽：每轮 15 个 Session 同时提交，3 轮 45/45 完成，峰值运行 5、排队 10，耗时 26850/8106/6810 ms。此前 15 路直接推理在当前 Provider 下稳定留下 2–3 个长期 busy 请求，因此会话容量与推理槽位已明确分离，不再把短时成功等同于稳定容量。
+
+可靠性修正：Prompt 使用 `prompt_async` 和 messageID 精确回查；Runtime 连接丢失会立即从调度池摘除并进入 interrupted，避免退出事件到达前误派新任务；超时主动终止 Session，空白响应明确失败。真实 Runtime 崩溃恢复与真实工具隔离均在最终代码上重跑通过。
+
+完整门禁：`npm test` 216 项通过、2 项 opt-in 真实验收默认跳过、0 失败；构建 40 modules；语法检查 92 files；密钥扫描和 `git diff --check` 通过。异步轮询取消竞态、连接丢失调度窗口和空白完成均以红绿测试复现并关闭。
+
+残余边界：本结论仅覆盖 Mac 应用级隔离。Linux 服务账号、文件系统/系统调用沙箱、内部 Provider、长时稳定性、生产容量和回滚仍是 Stage 5 门禁。
+
 ## Stage 2E.6 真实 Runtime 崩溃恢复演练
 
 **PASS WITH NOTES**：opt-in 验收建立真实会话上下文后强制终止测试自行启动的 OpenCode Runtime。运行任务转为 interrupted，Runtime 以新 PID 自动恢复，原 Session 验证成功后排队任务继续完成并保留第一轮上下文标识。测试使用合成内容和 `permission: deny`；工具、文件与产物隔离以及 Linux 长时稳定性仍未覆盖，Stage 2E 尚不关闭。

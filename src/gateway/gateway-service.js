@@ -3,9 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { resolveWithinRoot } = require('../security/path-policy');
+const { resolveWithinRoot, secureWorkspaceTree } = require('../security/path-policy');
 const { GATEWAY_EVENT_TYPES } = require('../../packages/shared/gateway-events');
 const { recoverGateway } = require('./recovery');
+const { WORKSPACE_PROMPT_TOOLS } = require('./tool-policy');
 
 function serviceError(code, message) {
   const error = new Error(message);
@@ -73,9 +74,16 @@ function createGatewayService({
   const runtimeRecoveries = new Map();
 
   function workspaceFor(item) {
-    const relative = `${safeSegment(item.userId, 'user id')}/${safeSegment(item.conversationId, 'conversation id')}`;
+    const userSegment = safeSegment(item.userId, 'user id');
+    const conversationSegment = safeSegment(item.conversationId, 'conversation id');
+    const userDirectory = resolveWithinRoot(workspaceRoot, userSegment);
+    fs.mkdirSync(userDirectory, { recursive: true, mode: 0o700 });
+    fs.chmodSync(userDirectory, 0o700);
+    const relative = `${userSegment}/${conversationSegment}`;
     const directory = resolveWithinRoot(workspaceRoot, relative);
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    fs.chmodSync(directory, 0o700);
+    secureWorkspaceTree(directory);
     return directory;
   }
 
@@ -131,13 +139,8 @@ function createGatewayService({
 
   async function execute(context) {
     const { item, lease } = context;
-    const directory = workspaceFor(item);
-    context.directory = directory;
-    const timeout = setTimeout(() => {
-      context.timedOut = true;
-      context.controller.abort();
-    }, jobTimeoutMs);
-    timeout.unref();
+    let directory;
+    let timeout;
     try {
       store.transitionJob({
         jobId: item.id,
@@ -146,6 +149,13 @@ function createGatewayService({
         workerId: lease.workerId
       });
       publishConversation(item.conversationId, item.userId);
+      directory = workspaceFor(item);
+      context.directory = directory;
+      timeout = setTimeout(() => {
+        context.timedOut = true;
+        context.controller.abort();
+      }, jobTimeoutMs);
+      timeout.unref();
       let binding = store.getOpenCodeSession({ conversationId: item.conversationId });
       if (binding?.recoveryStatus !== 'active') binding = null;
       if (!binding) {
@@ -180,32 +190,46 @@ function createGatewayService({
         sessionId: binding.opencodeSessionId,
         directory,
         text: item.inputText,
+        agent: 'build',
+        tools: WORKSPACE_PROMPT_TOOLS,
         signal: context.controller.signal
       });
+      secureWorkspaceTree(directory);
       if (context.cancelled || context.interrupted || context.timedOut) {
         throw serviceError('GATEWAY_EXECUTION_STOPPED', 'gateway execution stopped');
       }
       const text = responseText(response);
-      if (text) {
-        store.appendEvent({
-          conversationId: item.conversationId,
-          jobId: item.id,
-          type: GATEWAY_EVENT_TYPES.MESSAGE_DELTA,
-          payload: { text }
-        });
-        publishConversation(item.conversationId, item.userId);
+      if (!text.trim()) {
+        throw serviceError('OPENCODE_EMPTY_RESPONSE', 'OpenCode returned no assistant text');
       }
+      store.appendEvent({
+        conversationId: item.conversationId,
+        jobId: item.id,
+        type: GATEWAY_EVENT_TYPES.MESSAGE_DELTA,
+        payload: { text }
+      });
+      publishConversation(item.conversationId, item.userId);
       transitionIfRunning(context, 'complete');
     } catch (error) {
       if (context.cancelled || context.interrupted) return;
       if (context.timedOut) {
+        if (context.binding && context.directory) {
+          await context.lease.client.abortSession({
+            sessionId: context.binding.opencodeSessionId,
+            directory: context.directory
+          }).catch(() => {});
+        }
         transitionIfRunning(context, 'timeout', 'GATEWAY_JOB_TIMEOUT');
+        return;
+      }
+      if (error?.code === 'OPENCODE_UNAVAILABLE') {
+        handleWorkerExit(pool.markUnhealthy(context.lease.workerId, error.code));
         return;
       }
       transitionIfRunning(context, 'fail', error.code || 'GATEWAY_EXECUTION_FAILED');
       logger.error('Gateway job failed');
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
     }
   }
 
@@ -361,6 +385,7 @@ function createGatewayService({
     }
     try {
       fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
+      fs.chmodSync(workspaceRoot, 0o700);
       recoveryReport = await recoverGateway({ store, pool, queue, workspaceRoot });
       state = 'running';
       await schedule();

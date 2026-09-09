@@ -35,6 +35,37 @@ function nearestExistingAncestor(target) {
   return current;
 }
 
+function secureWorkspaceTree(root, { maxEntries = 10_000 } = {}) {
+  if (typeof root !== 'string' || !path.isAbsolute(root) || root.includes('\0') ||
+      !Number.isInteger(maxEntries) || maxEntries < 1) {
+    throw unsafePath();
+  }
+  const rootStat = fs.lstatSync(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw unsafePath();
+  const stack = [root];
+  let entries = 0;
+  fs.chmodSync(root, 0o700);
+
+  while (stack.length > 0) {
+    const directory = stack.pop();
+    for (const name of fs.readdirSync(directory)) {
+      entries += 1;
+      if (entries > maxEntries) throw unsafePath();
+      const target = path.join(directory, name);
+      const stat = fs.lstatSync(target);
+      if (stat.isSymbolicLink()) throw unsafePath();
+      if (stat.isDirectory()) {
+        fs.chmodSync(target, 0o700);
+        stack.push(target);
+        continue;
+      }
+      if (!stat.isFile() || stat.nlink !== 1) throw unsafePath();
+      fs.chmodSync(target, 0o600);
+    }
+  }
+  return root;
+}
+
 function resolveWithinRoot(root, relativePath, options = {}) {
   if (typeof root !== 'string' || typeof relativePath !== 'string' ||
       root.includes('\0') || relativePath.includes('\0') ||
@@ -84,4 +115,4 @@ function validateFileName(name) {
   return normalized;
 }
 
-module.exports = { resolveWithinRoot, validateFileName };
+module.exports = { resolveWithinRoot, secureWorkspaceTree, validateFileName };

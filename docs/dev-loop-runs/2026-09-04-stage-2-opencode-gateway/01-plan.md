@@ -12,6 +12,14 @@
 | 2D | Conversation API、WebSocket 续传与前端多会话体验 | 两用户隔离、取消、重连补发、浏览器验收 | `main` 提交 4 |
 | 2E | 重启恢复、健康后台、20 用户压测与真实 OpenCode 冒烟 | 恢复演练、并发、真实链路、完整回归 | `main` 提交 5 |
 
+### Stage 2E.7：工具、文件与产物隔离
+
+1. 新增集中式 Workspace Tool Policy：保留管理员更严格的 OpenCode 配置，同时强制 `external_directory`、Bash、联网和子代理为 deny；Prompt 同步关闭对应工具，形成配置层与请求层双门禁。
+2. 常驻 Runtime 默认使用 OpenCode `--pure`，阻止未经工作台治理的外部插件绕过标准工具权限；不把浏览器输入映射为命令参数或宿主机路径。
+3. 为两个账号、多个 Conversation 验证服务端派生目录唯一、目录权限收紧、产物只写入所属目录；路径逃逸和中间软链接继续由 realpath 边界拒绝。
+4. 增加 opt-in 真实 OpenCode 工具验收：核对 Runtime 生效权限，并尝试工作区内产物与跨工作区 canary；不得读取其他 Conversation 内容。
+5. 完整回归、构建、语法、密钥与 diff 检查通过后更新 README、路线图、架构和验收报告，中文提交并推送；Stage 2E 只声明应用级隔离，Linux OS 沙箱仍留 Stage 5。
+
 ## Architecture Summary
 
 ### Stage 2E 运维拆分

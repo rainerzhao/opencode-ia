@@ -14,6 +14,7 @@
     "admin:create": "node scripts/create-admin.js",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "test:runtime-crash": "WORKBENCH_RUNTIME_CRASH_ACCEPTANCE=1 node --test test/integration/runtime-crash-recovery.test.js",
+    "test:tool-isolation": "WORKBENCH_TOOL_ISOLATION_ACCEPTANCE=1 node --test test/integration/tool-isolation.test.js",
     "check": "node scripts/check-js.js",
     "security:scan": "node scripts/scan-secrets.js"
   },

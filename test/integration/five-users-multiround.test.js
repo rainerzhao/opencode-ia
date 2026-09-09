@@ -20,9 +20,12 @@ const { createWorkerProcess } = require('../../src/gateway/worker-process');
 const real = process.env.WORKBENCH_REAL_ACCEPTANCE === '1';
 const multiSession = process.env.WORKBENCH_MULTI_SESSION_ACCEPTANCE === '1';
 const workerCount = multiSession ? 1 : 2;
-const capacity = multiSession ? 15 : 1;
-const globalRunning = multiSession ? 15 : 2;
-const userRunning = multiSession ? 3 : 1;
+// Fifteen persistent sessions submit together, while provider-facing execution
+// slots remain a separately governed resource. Five slots keep all five users
+// active without assuming the configured model API safely sustains 15 streams.
+const capacity = multiSession ? 5 : 1;
+const globalRunning = multiSession ? 5 : 2;
+const userRunning = 1;
 
 async function until(check, timeout = real ? 240_000 : 10_000) {
   const deadline = Date.now() + timeout;
@@ -163,6 +166,6 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
   }
   assert.equal(maxRunning, globalRunning);
   assert.ok(maxUserRunning <= userRunning);
-  if (!multiSession) assert.ok(maxQueued > 0);
+  assert.ok(maxQueued > 0);
   t.diagnostic(JSON.stringify({ mode: real ? 'real' : 'simulated', workerCount, capacity, users: 5, conversations: 15, rounds: 3, completed: 45, maxRunning, maxUserRunning, maxQueued, roundMilliseconds: samples }));
 });

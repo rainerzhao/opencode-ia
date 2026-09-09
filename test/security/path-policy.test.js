@@ -3,7 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { resolveWithinRoot, validateFileName } = require('../../src/security/path-policy');
+const {
+  resolveWithinRoot,
+  secureWorkspaceTree,
+  validateFileName
+} = require('../../src/security/path-policy');
 
 test('accepts a normal Chinese markdown path inside the root', () => {
   assert.equal(
@@ -69,4 +73,37 @@ test('rejects an existing intermediate symlink that escapes the root', (t) => {
   t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
 
   assert.throws(() => resolveWithinRoot(root, 'link/secret.md'), /unsafe path/i);
+});
+
+test('hardens workspace directories and regular artifacts while rejecting links', (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-tree-'));
+  const workspace = path.join(tempDir, 'workspace');
+  const nested = path.join(workspace, 'nested');
+  fs.mkdirSync(nested, { recursive: true });
+  const artifact = path.join(nested, 'artifact.txt');
+  fs.writeFileSync(artifact, 'private artifact', { mode: 0o666 });
+  fs.chmodSync(workspace, 0o777);
+  fs.chmodSync(nested, 0o777);
+  fs.chmodSync(artifact, 0o666);
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  secureWorkspaceTree(workspace);
+
+  assert.equal(fs.statSync(workspace).mode & 0o777, 0o700);
+  assert.equal(fs.statSync(nested).mode & 0o777, 0o700);
+  assert.equal(fs.statSync(artifact).mode & 0o777, 0o600);
+  fs.symlinkSync(artifact, path.join(workspace, 'linked.txt'));
+  assert.throws(() => secureWorkspaceTree(workspace), /unsafe path/i);
+});
+
+test('rejects a hard-linked artifact that can alias data outside the workspace', (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-hardlink-'));
+  const workspace = path.join(tempDir, 'workspace');
+  const outside = path.join(tempDir, 'outside.txt');
+  fs.mkdirSync(workspace);
+  fs.writeFileSync(outside, 'outside');
+  fs.linkSync(outside, path.join(workspace, 'alias.txt'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  assert.throws(() => secureWorkspaceTree(workspace), /unsafe path/i);
 });

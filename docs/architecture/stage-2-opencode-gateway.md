@@ -1,6 +1,6 @@
 # Stage 2：常驻 OpenCode Gateway 与多 Worker 会话架构
 
-**状态：** Stage 2A–2D 已完成；Stage 2E 的启动恢复、运维页面、Runtime 多 Session 真实验收和真实进程故障演练已完成；工具、文件与产物隔离待完成
+**状态：** Stage 2A–2E 已完成 Mac 验收；Linux OS 沙箱、内部 Provider 与生产容量属于 Stage 5
 **目标环境：** Mac 开发验收，随后迁移公司内网单台 Linux  
 **目标规模：** 15–20 名成员
 
@@ -11,18 +11,19 @@
 #### 2026-09-08 已验证增量
 
 - `OPENCODE_WORKER_CAPACITY` 将 Runtime 进程数与单 Runtime 并发 Session 数分开；同 Conversation 保持串行。默认容量暂保留 1，部署需按真实服务额度设置全局和每用户配额，不把 Mac 短压测当作 Linux 容量结论。
-- OpenCode 1.18.25、当前配置模型：单 Runtime、15 执行槽、5 账号、每人 3 会话，3 轮 45/45 成功；峰值 15 个运行任务、每用户 3 个；每轮耗时 19257/3265/2551 ms。后两轮未重复提供随机方案标识，回复仍保留本会话标识；检查其他会话标识不存在、跨账号 REST 读取返回 404。
-- 真实命令：`WORKBENCH_REAL_ACCEPTANCE=1 WORKBENCH_MULTI_SESSION_ACCEPTANCE=1 node --test test/integration/five-users-multiround.test.js`。使用合成知识库方案、临时工作目录和 `permission: deny`。该验收不覆盖工具执行沙箱，也不是长期吞吐 SLA。
+- OpenCode 1.18.25、当前配置模型：单 Runtime、5 个 Provider 执行槽、5 账号、每人 3 会话，3 轮 45/45 成功；15 个 Session 每轮同时提交，峰值运行 5、排队 10，每轮耗时 26850/8106/6810 ms。后两轮未重复提供随机方案标识，回复仍保留本会话标识；检查其他会话标识不存在、跨账号 REST 读取返回 404。
+- 真实命令：`WORKBENCH_REAL_ACCEPTANCE=1 WORKBENCH_MULTI_SESSION_ACCEPTANCE=1 node --test test/integration/five-users-multiround.test.js`。使用合成知识库方案和临时工作目录。它验证持久 Session、调度和上下文隔离，不是长期吞吐 SLA。
 - 修复健康检查 1 秒超时误用于 Session 创建和模型请求；现在普通请求 10 秒、健康探针 1 秒、Prompt 使用独立任务期限。HTTP 200 响应中的模型错误不再视作成功空回复。
 - 生产连续 3 次健康检查失败才将 Runtime 判为故障；恢复前停止旧进程，健康恢复后自动唤醒排队会话。未知执行结果不自动重放。
 - 真实崩溃命令：`npm run test:runtime-crash`。验收主动 SIGKILL 自己启动的 Runtime，确认运行任务转为 interrupted、Runtime 以新 PID 自动恢复、原 OpenCode Session 校验成功后排队任务继续且上下文标识保留。本次属于单次 Mac 故障演练，不代表长期稳定性。
-- 完整文件、工具与产物隔离仍待独立验收；该门禁完成前 Stage 2E 不宣告完成。
+- OpenCode 改用 `prompt_async` 和客户端 messageID 回查完成结果，避免阻塞响应把已完成消息误判为超时；Runtime 连接丢失会立即摘除对应执行节点并进入 interrupted 边界，超时会主动终止 Session，空白响应不会再被标记为完成。
+- 真实工具验收确认所属 Conversation 可创建产物，兄弟 Conversation 的随机 canary 不会泄漏；`external_directory`、Bash、联网、子代理和外部插件均被强制关闭。目录为 `0700`、普通产物为 `0600`，软链接、硬链接、特殊文件和过量条目被拒绝。
 
 账号、持久 Conversation 和 Runtime 是独立维度。少量常驻 OpenCode Runtime 应能承载多个用户的多个 Session；不把一个 Session 等同于一个进程，也不把每个 Runtime 只能执行一个任务作为最终架构。需要先验证 OpenCode 1.18.25 同 Runtime 多 Session 并发，再配置每 Runtime 执行槽、全局配额与每用户配额。一个 Conversation 内保持串行，不同 Conversation 可并发。会话映射独立不代表工具沙箱：必须另行验证文件、权限和产物隔离，未验证前不宣称完整安全隔离。
 
 产品验收使用 5 个真实登录账号，每人 3 个私人 Conversation，完成 3 轮方案讨论，检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型，显式开启真实模式才调用当前 OpenCode 模型；真实 5×3×3 已完成。对 Codex、WorkBuddy 仅参考用户体验与可靠性要求，不假定其未公开内部实现。
 
-后续顺序：完成工具、文件与产物隔离门禁 → Stage 4 团队 Skill 中心 → Stage 5 Linux 生产化。
+后续顺序：Stage 4 团队 Skill 中心 → Stage 5 Linux 生产化；Stage 3 知识与方案发布闭环仍按路线图推进。
 
 Stage 2 采用“一个常驻 Gateway 控制面 + 多个常驻 OpenCode Worker 执行面 + 多个逻辑会话”的单机架构。
 
@@ -129,7 +130,7 @@ workbench conversation_id -> opencode_session_id -> worker_id
 2. ✅ Stage 2B：监管单个受保护的常驻 OpenCode Worker，完成 HTTP/SSE 客户端契约和真实 Worker 健康冒烟。
 3. ✅ Stage 2C：增加 Worker 池、粘性映射、健康检查、公平队列和并发限制，并接通 Gateway 内部 Session 执行链路。
 4. ✅ Stage 2D：完成 Conversation API、可续传 WebSocket、生产双 Worker Gateway 组合和 React 多会话体验。
-5. Stage 2E：完成 Gateway/Worker 重启恢复、故障演练、真实多轮消息与 2 Worker 压测。
+5. ✅ Stage 2E：完成 Gateway/Worker 重启恢复、故障演练、真实多轮消息、容量验收和应用级工具隔离。
 6. Stage 5：把相同架构迁移到 Linux，接入内部 Provider 并验证 2–4 Worker。
 
 ## 验收标准

@@ -65,6 +65,7 @@ test('real OpenCode crash interrupts active work and either restores or safely c
   const marker = `CRASH_CASE_${crypto.randomBytes(8).toString('hex')}`;
   let gateway;
   let store;
+  let runtimeWorker;
 
   const pool = createWorkerPool({
     workerCount: 1,
@@ -72,24 +73,27 @@ test('real OpenCode crash interrupts active work and either restores or safely c
     heartbeatMs: 5_000,
     heartbeatTimeoutMs: 2_000,
     heartbeatFailureThreshold: 3,
-    workerFactory: ({ onExit }) => createWorkerProcess({
-      command: process.env.OPENCODE_CMD || 'opencode',
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'deny' })
-      },
-      hostname: '127.0.0.1',
-      port,
-      expectedVersion: process.env.OPENCODE_VERIFIED_VERSION || '1.18.25',
-      startupTimeoutMs: 30_000,
-      promptTimeoutMs: 120_000,
-      healthIntervalMs: 100,
-      stopGraceMs: 2_000,
-      killGraceMs: 1_000,
-      logger: { log() {}, error() {} },
-      onExit
-    })
+    workerFactory: ({ onExit }) => {
+      runtimeWorker = createWorkerProcess({
+        command: process.env.OPENCODE_CMD || 'opencode',
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'deny' })
+        },
+        hostname: '127.0.0.1',
+        port,
+        expectedVersion: process.env.OPENCODE_VERIFIED_VERSION || '1.18.25',
+        startupTimeoutMs: 30_000,
+        promptTimeoutMs: 120_000,
+        healthIntervalMs: 100,
+        stopGraceMs: 2_000,
+        killGraceMs: 1_000,
+        logger: { log() {}, error() {} },
+        onExit
+      });
+      return runtimeWorker;
+    }
   });
 
   const fixture = await createAuthenticatedWorkbench(t, {
@@ -194,8 +198,44 @@ test('real OpenCode crash interrupts active work and either restores or safely c
   });
   if (recoveredBinding.recoveryStatus === 'active') {
     assert.equal(recoveredBinding.opencodeSessionId, originalBinding.opencodeSessionId);
-    await untilJob(messages, thirdAccepted.jobId, 'job.completed');
-    assert.match(answerFor(messages, thirdAccepted.jobId), new RegExp(marker));
+    try {
+      await untilJob(messages, thirdAccepted.jobId, 'job.completed');
+    } catch (error) {
+      t.diagnostic(JSON.stringify({
+        phase: 'restored-session-follow-up',
+        originalProcessId: originalWorker.processId,
+        restartedProcessId: restartedWorker.processId,
+        currentPool: gateway.snapshot().pool,
+        currentBinding: store.getOpenCodeSession({ conversationId: conversation.id }),
+        terminalEvents: messages.filter((message) =>
+          message.jobId === thirdAccepted.jobId && message.type.startsWith('job.')
+        ).map((message) => ({ type: message.type, errorCode: message.data?.errorCode || null }))
+      }));
+      throw error;
+    }
+    const restoredAnswer = answerFor(messages, thirdAccepted.jobId);
+    if (!restoredAnswer) {
+      const sessionMessages = await runtimeWorker.client.requestJson(
+        `/session/${encodeURIComponent(recoveredBinding.opencodeSessionId)}/message?limit=100`,
+        { directory: recoveredBinding.workspacePath }
+      );
+      t.diagnostic(JSON.stringify({
+        phase: 'restored-session-empty-answer',
+        messages: sessionMessages.map((message) => ({
+          role: message?.info?.role || null,
+          parentId: message?.info?.parentID || null,
+          completed: Boolean(message?.info?.time?.completed),
+          hasError: Boolean(message?.info?.error),
+          parts: Array.isArray(message?.parts) ? message.parts.map((part) => ({
+            type: part?.type || null,
+            textLength: typeof part?.text === 'string' ? part.text.length : null,
+            tool: part?.tool || null,
+            status: part?.state?.status || null
+          })) : []
+        }))
+      }));
+    }
+    assert.match(restoredAnswer, new RegExp(marker));
     t.diagnostic(JSON.stringify({
       result: 'session-restored',
       originalProcessId: originalWorker.processId,

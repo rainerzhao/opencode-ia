@@ -19,12 +19,15 @@ function createFakeOpenCodeServer({
   password = 'worker-secret',
   version = '1.18.25',
   healthDelayMs = 0,
-  healthBodyDelayMs = 0
+  healthBodyDelayMs = 0,
+  promptCompletionDelayMs = 0,
+  promptError = null
 } = {}) {
   const requests = [];
   const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
   let server;
   let sessionCounter = 0;
+  const sessionMessages = new Map();
 
   async function handler(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -54,6 +57,7 @@ function createFakeOpenCodeServer({
 
     if (url.pathname === '/session' && req.method === 'POST') {
       const id = `ses_fake_${++sessionCounter}`;
+      sessionMessages.set(id, []);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         id,
@@ -82,6 +86,52 @@ function createFakeOpenCodeServer({
         version,
         time: { created: 1788483600000, updated: 1788483600000 }
       }));
+      return;
+    }
+
+    if (/^\/session\/[^/]+\/prompt_async$/.test(url.pathname) && req.method === 'POST') {
+      const sessionId = decodeURIComponent(url.pathname.split('/')[2]);
+      const messages = sessionMessages.get(sessionId) || [];
+      messages.push({
+        availableAt: Date.now() + promptCompletionDelayMs,
+        response: {
+          info: {
+            id: `msg_fake_${messages.length + 1}`,
+            sessionID: sessionId,
+            role: 'assistant',
+            time: { created: 1788483600000, completed: 1788483600100 },
+            parentID: body.messageID,
+            modelID: 'deepseek-chat',
+            providerID: 'deepseek',
+            mode: 'build',
+            agent: body.agent || 'build',
+            path: { cwd: '/workspace', root: '/workspace' },
+            cost: 0,
+            tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            ...(promptError ? { error: promptError } : { finish: 'stop' })
+          },
+          parts: [{
+            id: `part_fake_${messages.length + 1}`,
+            sessionID: sessionId,
+            messageID: `msg_fake_${messages.length + 1}`,
+            type: 'text',
+            text: 'fake answer'
+          }]
+        }
+      });
+      sessionMessages.set(sessionId, messages);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (/^\/session\/[^/]+\/message$/.test(url.pathname) && req.method === 'GET') {
+      const sessionId = decodeURIComponent(url.pathname.split('/')[2]);
+      const messages = (sessionMessages.get(sessionId) || [])
+        .filter((message) => message.availableAt <= Date.now())
+        .map((message) => message.response);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(messages));
       return;
     }
 

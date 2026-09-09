@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { createOpenCodeClient } = require('./opencode-client');
+const { secureOpenCodeConfigContent } = require('./tool-policy');
 
 function workerError(code, message, cause) {
   const error = new Error(message);
@@ -73,6 +74,7 @@ function createWorkerProcess({
     throw new TypeError('OpenCode worker password is invalid');
   }
   const endpoint = `http://${hostname}:${port}`;
+  const securedConfigContent = secureOpenCodeConfigContent(env.OPENCODE_CONFIG_CONTENT);
   const client = createOpenCodeClient({
     endpoint,
     username,
@@ -157,6 +159,7 @@ function createWorkerProcess({
           [
             ...baseArgs,
             'serve',
+            '--pure',
             '--hostname',
             hostname,
             '--port',
@@ -169,6 +172,7 @@ function createWorkerProcess({
             cwd,
             env: {
               ...env,
+              OPENCODE_CONFIG_CONTENT: securedConfigContent,
               OPENCODE_SERVER_USERNAME: username,
               OPENCODE_SERVER_PASSWORD: runtimePassword
             },

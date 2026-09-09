@@ -34,7 +34,9 @@ async function eventually(check, message = 'condition was not reached') {
 function createFixture(t, {
   automatic = false,
   jobTimeoutMs = 1000,
-  failSessionForWorker = null
+  failSessionForWorker = null,
+  writeArtifacts = false,
+  emptyResponse = false
 } = {}) {
   const db = openDatabase({ filename: ':memory:' });
   migrateDatabase(db);
@@ -67,6 +69,8 @@ function createFixture(t, {
   const runningByUser = new Map();
   let maxPerUser = 0;
   const starts = [];
+  const promptRequests = [];
+  const abortRequests = [];
   const pool = createWorkerPool({
     workerCount: 2,
     heartbeatMs: 60_000,
@@ -87,7 +91,8 @@ function createFixture(t, {
           record.sessions += 1;
           return { id: `${id}-session-${record.sessions}`, directory };
         },
-        async prompt({ text, signal }) {
+        async prompt({ text, directory, agent, tools, signal }) {
+          promptRequests.push({ text, directory, agent, tools });
           const [userId] = text.split(':');
           running += 1;
           maxRunning = Math.max(maxRunning, running);
@@ -97,7 +102,10 @@ function createFixture(t, {
           starts.push(text);
           const gate = deferred();
           pending.set(text, gate);
-          if (automatic) setImmediate(() => gate.resolve(`answer:${text}`));
+          if (automatic) setImmediate(() => {
+            if (writeArtifacts) fs.writeFileSync(path.join(directory, 'artifact.txt'), text);
+            gate.resolve(`answer:${text}`);
+          });
           const onAbort = () => {
             const error = new Error('aborted');
             error.code = 'OPENCODE_ABORTED';
@@ -106,6 +114,7 @@ function createFixture(t, {
           signal?.addEventListener('abort', onAbort, { once: true });
           try {
             const answer = await gate.promise;
+            if (emptyResponse) return { parts: [] };
             return { parts: [{ type: 'text', text: answer }] };
           } finally {
             signal?.removeEventListener('abort', onAbort);
@@ -114,7 +123,10 @@ function createFixture(t, {
             runningByUser.set(userId, runningByUser.get(userId) - 1);
           }
         },
-        async abortSession() { return true; }
+        async abortSession(request) {
+          abortRequests.push(request);
+          return true;
+        }
       };
       record.worker = {
         client,
@@ -173,11 +185,83 @@ function createFixture(t, {
     records,
     pending,
     starts,
+    promptRequests,
+    abortRequests,
+    workspaceRoot,
     conversation,
     submit,
     metrics: () => ({ maxRunning, maxPerUser })
   };
 }
+
+test('derives private workspace directories and applies the restricted prompt tool profile', async (t) => {
+  const fixture = createFixture(t, { automatic: true, writeArtifacts: true });
+  await fixture.service.start();
+  const first = fixture.conversation(1, 'first');
+  const second = fixture.conversation(1, 'second');
+  const otherUser = fixture.conversation(2, 'first');
+  const widened = path.join(fixture.workspaceRoot, 'user-1', first.id);
+  fs.mkdirSync(widened, { recursive: true });
+  fs.chmodSync(widened, 0o777);
+
+  fixture.submit(first, 1, 'workspace-first');
+  fixture.submit(second, 1, 'workspace-second');
+  fixture.submit(otherUser, 2, 'workspace-other-user');
+  await fixture.service.waitForIdle();
+
+  assert.equal(fixture.promptRequests.length, 3);
+  const directories = new Set(fixture.promptRequests.map((request) => request.directory));
+  assert.equal(directories.size, 3);
+  for (const request of fixture.promptRequests) {
+    assert.deepEqual(request.tools, {
+      bash: false,
+      task: false,
+      webfetch: false,
+      websearch: false
+    });
+    assert.equal(request.agent, 'build');
+    assert.equal(fs.statSync(request.directory).mode & 0o777, 0o700);
+    const artifact = path.join(request.directory, 'artifact.txt');
+    assert.equal(fs.readFileSync(artifact, 'utf8'), request.text);
+    assert.equal(fs.statSync(artifact).mode & 0o777, 0o600);
+  }
+});
+
+test('fails a job before OpenCode when a user workspace symlink escapes the root', async (t) => {
+  const fixture = createFixture(t, { automatic: true, writeArtifacts: true });
+  await fixture.service.start();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-workspace-outside-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  fs.symlinkSync(outside, path.join(fixture.workspaceRoot, 'user-1'));
+  const conversation = fixture.conversation(1, 'symlink');
+
+  const job = fixture.submit(conversation, 1, 'symlink-escape');
+  await fixture.service.waitForIdle();
+
+  assert.equal(fixture.store.getJob({ id: job.id }).status, 'failed');
+  assert.equal(fixture.promptRequests.length, 0);
+  assert.deepEqual(fs.readdirSync(outside), []);
+});
+
+test('rejects a symlink planted inside a conversation workspace before tool execution', async (t) => {
+  const fixture = createFixture(t, { automatic: true, writeArtifacts: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1, 'inner-symlink');
+  const directory = path.join(fixture.workspaceRoot, 'user-1', conversation.id);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-artifact-outside-'));
+  const secret = path.join(outside, 'secret.txt');
+  fs.writeFileSync(secret, 'must-not-be-read');
+  fs.mkdirSync(directory, { recursive: true });
+  fs.symlinkSync(secret, path.join(directory, 'linked-secret.txt'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+
+  const job = fixture.submit(conversation, 1, 'inner-symlink');
+  await fixture.service.waitForIdle();
+
+  assert.equal(fixture.store.getJob({ id: job.id }).status, 'failed');
+  assert.equal(fixture.promptRequests.length, 0);
+  assert.equal(fs.readFileSync(secret, 'utf8'), 'must-not-be-read');
+});
 
 test('serializes one conversation, limits one user, and runs two users in parallel', async (t) => {
   const fixture = createFixture(t);
@@ -315,6 +399,19 @@ test('marks a job failed when OpenCode session creation fails', async (t) => {
   assert.equal(fixture.store.getJob({ id: job.id }).errorCode, 'OPENCODE_API_ERROR');
 });
 
+test('fails an empty OpenCode response instead of marking a blank answer completed', async (t) => {
+  const fixture = createFixture(t, { automatic: true, emptyResponse: true });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1, 'empty-response');
+
+  const job = fixture.submit(conversation, 1, 'empty-response');
+  await fixture.service.waitForIdle();
+
+  const stored = fixture.store.getJob({ id: job.id });
+  assert.equal(stored.status, 'failed');
+  assert.equal(stored.errorCode, 'OPENCODE_EMPTY_RESPONSE');
+});
+
 test('a recovered worker wakes sticky queued conversations without new user input', async (t) => {
   const fixture = createFixture(t, { automatic: true });
   await fixture.service.start();
@@ -376,11 +473,13 @@ test('cancels queued and running jobs and marks a deadline as timed out', async 
   assert.equal((await fixture.service.cancel({ jobId: running.id, userId: 'user-1' })).status, 'cancelled');
   await fixture.service.waitForIdle();
 
+  const abortsBeforeTimeout = fixture.abortRequests.length;
   const timeoutConversation = fixture.conversation(2);
   const timedOut = fixture.submit(timeoutConversation, 2, 'timeout');
   await fixture.service.waitForIdle();
   assert.equal(fixture.store.getJob({ id: timedOut.id }).status, 'timed_out');
   assert.equal(fixture.store.getJob({ id: timedOut.id }).errorCode, 'GATEWAY_JOB_TIMEOUT');
+  assert.equal(fixture.abortRequests.length, abortsBeforeTimeout + 1);
 });
 
 test('interrupts only the job on a crashed worker while the other worker completes', async (t) => {
@@ -401,6 +500,28 @@ test('interrupts only the job on a crashed worker while the other worker complet
   assert.equal(fixture.store.getJob({ id: first.id }).status, 'interrupted');
   assert.equal(fixture.store.getJob({ id: first.id }).errorCode, 'WORKER_EXITED');
   assert.equal(fixture.store.getJob({ id: second.id }).status, 'completed');
+});
+
+test('classifies runtime connection loss as interrupted before the worker exit event arrives', async (t) => {
+  const fixture = createFixture(t);
+  await fixture.service.start();
+  const conversation = fixture.conversation(1, 'connection-loss');
+  const followUpConversation = fixture.conversation(1, 'after-connection-loss');
+  const job = fixture.submit(conversation, 1, 'connection-loss');
+  const followUp = fixture.submit(followUpConversation, 1, 'after-connection-loss');
+  await eventually(() => fixture.pending.has('user-1:connection-loss'));
+
+  const error = new Error('runtime connection closed');
+  error.code = 'OPENCODE_UNAVAILABLE';
+  fixture.pending.get('user-1:connection-loss').reject(error);
+  await eventually(() => fixture.store.getJob({ id: job.id }).status === 'interrupted');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(fixture.store.getJob({ id: job.id }).status, 'interrupted');
+  assert.equal(fixture.store.getJob({ id: job.id }).errorCode, 'OPENCODE_UNAVAILABLE');
+  assert.equal(fixture.pool.snapshot().workers.some((worker) => worker.status === 'unhealthy'), true);
+  assert.equal(fixture.store.getJob({ id: followUp.id }).status, 'queued');
+  assert.equal(fixture.pending.has('user-1:after-connection-loss'), false);
 });
 
 test('completes a deterministic 20-user simulation without starvation or limit breaches', async (t) => {

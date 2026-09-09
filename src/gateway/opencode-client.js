@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { parseSseStream } = require('./sse-parser');
 
@@ -52,6 +53,37 @@ function normalizeDirectory(value) {
   return directory;
 }
 
+function normalizeToolFlags(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw clientError('INVALID_OPENCODE_TOOLS', 'OpenCode tool flags are invalid');
+  }
+  const entries = Object.entries(value);
+  if (entries.length < 1 || entries.length > 64 || entries.some(([name, enabled]) =>
+    !/^[A-Za-z0-9_.:-]{1,100}$/.test(name) || typeof enabled !== 'boolean'
+  )) {
+    throw clientError('INVALID_OPENCODE_TOOLS', 'OpenCode tool flags are invalid');
+  }
+  return Object.fromEntries(entries);
+}
+
+function abortableDelay(milliseconds, signal) {
+  if (signal.aborted) {
+    return Promise.reject(clientError('OPENCODE_ABORTED', 'OpenCode request was cancelled'));
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(clientError('OPENCODE_ABORTED', 'OpenCode request was cancelled'));
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    timeout.unref();
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 function createOpenCodeClient({
   endpoint,
   username,
@@ -59,8 +91,10 @@ function createOpenCodeClient({
   expectedVersion = null,
   requestTimeoutMs = 10_000,
   promptTimeoutMs = requestTimeoutMs,
+  promptPollIntervalMs = 100,
   healthTimeoutMs = requestTimeoutMs,
   maxEventBytes = 256 * 1024,
+  messageIdFactory = () => `msg_${crypto.randomUUID().replaceAll('-', '')}`,
   fetchImpl = fetch
 }) {
   const origin = normalizeEndpoint(endpoint);
@@ -92,7 +126,11 @@ function createOpenCodeClient({
   }
 
   if (!Number.isInteger(promptTimeoutMs) || promptTimeoutMs < 1) throw new TypeError('OpenCode prompt timeout is invalid');
+  if (!Number.isInteger(promptPollIntervalMs) || promptPollIntervalMs < 1) {
+    throw new TypeError('OpenCode prompt poll interval is invalid');
+  }
   if (!Number.isInteger(healthTimeoutMs) || healthTimeoutMs < 1) throw new TypeError('OpenCode health timeout is invalid');
+  if (typeof messageIdFactory !== 'function') throw new TypeError('OpenCode message id factory is invalid');
 
   async function withDeadline(callerSignal, action, timeoutMs = requestTimeoutMs) {
     if (callerSignal?.aborted) {
@@ -155,6 +193,7 @@ function createOpenCodeClient({
           { status: response.status }
         );
       }
+      if (response.status === 204) return null;
       try {
         return await response.json();
       } catch (error) {
@@ -208,7 +247,7 @@ function createOpenCodeClient({
     return requestJson(`/session/${encodeURIComponent(id)}`, { directory, signal });
   }
 
-  async function prompt({ sessionId, directory, text, model, agent, signal } = {}) {
+  async function prompt({ sessionId, directory, text, model, agent, tools, signal } = {}) {
     const id = requiredString(
       sessionId,
       'INVALID_OPENCODE_SESSION',
@@ -221,18 +260,47 @@ function createOpenCodeClient({
       'OpenCode prompt is invalid',
       100000
     );
-    const body = { parts: [{ type: 'text', text: promptText }] };
+    const messageId = requiredString(
+      messageIdFactory(),
+      'INVALID_OPENCODE_MESSAGE_ID',
+      'OpenCode message id is invalid',
+      200
+    );
+    if (!/^msg[A-Za-z0-9_-]*$/.test(messageId)) {
+      throw clientError('INVALID_OPENCODE_MESSAGE_ID', 'OpenCode message id is invalid');
+    }
+    const body = {
+      messageID: messageId,
+      parts: [{ type: 'text', text: promptText }]
+    };
     if (model !== undefined) body.model = model;
     if (agent !== undefined) body.agent = agent;
-    const result = await requestJson(`/session/${encodeURIComponent(id)}/message`, {
-      timeoutMs: promptTimeoutMs,
-      method: 'POST',
-      body,
-      directory,
-      signal
-    });
-    if (result?.info?.error) throw clientError('OPENCODE_MODEL_ERROR', 'OpenCode model execution failed');
-    return result;
+    if (tools !== undefined) body.tools = normalizeToolFlags(tools);
+    return withDeadline(signal, async (deadlineSignal) => {
+      await requestJson(`/session/${encodeURIComponent(id)}/prompt_async`, {
+        method: 'POST',
+        body,
+        directory,
+        signal: deadlineSignal
+      });
+      while (true) {
+        const messages = await requestJson(
+          `/session/${encodeURIComponent(id)}/message?limit=100`,
+          { directory, signal: deadlineSignal }
+        );
+        if (!Array.isArray(messages)) {
+          throw clientError('OPENCODE_PROTOCOL_ERROR', 'OpenCode worker returned invalid session messages');
+        }
+        const result = messages.find((message) =>
+          message?.info?.role === 'assistant' && message.info.parentID === messageId
+        );
+        if (result?.info?.error) {
+          throw clientError('OPENCODE_MODEL_ERROR', 'OpenCode model execution failed');
+        }
+        if (result?.info?.time?.completed) return result;
+        await abortableDelay(promptPollIntervalMs, deadlineSignal);
+      }
+    }, promptTimeoutMs);
   }
 
   function abortSession({ sessionId, directory, signal } = {}) {

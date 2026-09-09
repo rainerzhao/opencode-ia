@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const net = require('node:net');
 const path = require('node:path');
 const { createWorkerProcess } = require('../../src/gateway/worker-process');
@@ -60,6 +61,43 @@ test('starts one authenticated loopback worker and stops it cleanly', async (t) 
 test('generates an in-memory password when none is supplied', async (t) => {
   const { worker } = await createFixture(t);
   assert.equal((await worker.start()).status, 'healthy');
+});
+
+test('starts in pure mode with forced workspace tool permissions', async (t) => {
+  const spawned = [];
+  const child = new EventEmitter();
+  child.pid = 43210;
+  child.kill = (signal) => {
+    setImmediate(() => child.emit('close', 0, signal));
+    return true;
+  };
+  const { worker } = await createFixture(t, {
+    env: {
+      OPENCODE_CONFIG_CONTENT: JSON.stringify({
+        model: 'internal/model',
+        permission: { bash: 'allow', external_directory: { '/tmp/**': 'allow' } }
+      })
+    },
+    spawnImpl(command, args, options) {
+      spawned.push({ command, args, options });
+      return child;
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({ healthy: true, version: '1.18.25' })
+    })
+  });
+
+  await worker.start();
+  assert.equal(spawned.length, 1);
+  assert.ok(spawned[0].args.includes('--pure'));
+  const config = JSON.parse(spawned[0].options.env.OPENCODE_CONFIG_CONTENT);
+  assert.equal(config.model, 'internal/model');
+  assert.equal(config.permission.external_directory, 'deny');
+  assert.equal(config.permission.bash, 'deny');
+  assert.equal(config.permission.webfetch, 'deny');
+  assert.equal(config.permission.websearch, 'deny');
+  assert.equal(config.permission.task, 'deny');
 });
 
 test('rejects a non-loopback worker configuration before spawning', async () => {

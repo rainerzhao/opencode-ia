@@ -1,5 +1,27 @@
 # Stage 2 Implementation Log
 
+## Stage 2E.7：工具、文件、产物隔离与可靠完成边界
+
+- Runtime 默认以 `--pure` 启动；全局配置、所有自定义 Agent 及受控 `build` Agent 都强制拒绝 `external_directory`、Bash、联网和子代理，Prompt 再次关闭同一组高风险工具。
+- 工作目录完全由账号和 Conversation 标识在服务端派生。根目录、用户目录和 Conversation 目录收紧为 `0700`，普通产物收紧为 `0600`；执行前后拒绝软链接、硬链接、特殊文件和过量目录条目。
+- 真实工具验收在所属 Conversation 成功创建产物，并确认无法读取兄弟 Conversation 的随机 canary；越界拒绝和未泄漏均有真实 OpenCode 1.18.25 证据。
+- 15 路同时推理复测暴露当前 Provider 会留下 2–3 个长期 busy 请求。容量模型据此修正为“15 个持久 Session 同时提交、5 个公平执行槽”，保留五人同时使用并让剩余任务可见排队；真实 5×3×3 以 45/45 通过，峰值运行 5、排队 10。
+- OpenCode Client 改用官方 `prompt_async`，以客户端 messageID 回查对应 assistant 结果；Runtime 连接丢失稳定归类为 interrupted，任务超时会主动调用 abort，避免结果归属不确定或后台继续执行。
+- 最终差异复核发现取消信号可能恰好发生在轮询等待监听器注册前；先用 50ms 失败测试复现，再让等待函数对已中止 signal 立即返回 `OPENCODE_ABORTED`，避免取消收尾滞后。
+- 真实崩溃复测进一步复现“HTTP 连接先断、进程退出事件稍后到达”的调度窗口；连接丢失现在立即把对应 Runtime 从池中摘除，后续任务保持排队，等待恢复后再执行。Provider 偶发空白响应也改为明确失败，不再显示空白的“已完成”。
+
+### TDD 与真实故障证据
+
+1. Agent 级 permission 覆盖全局 deny 的复核先得到 16/19，补齐所有 Agent 与 `build` Agent 强制策略后 19/19。
+2. 阻塞 `/message` 在并发下可能不返回；先增加异步提交与结果关联红测，再切换 `prompt_async` 并转绿。
+3. 异步轮询使 Runtime 崩溃先出现 `OPENCODE_UNAVAILABLE`；先复现 failed/interrupted 竞态，再统一为 interrupted，真实 SIGKILL 恢复演练重新通过。
+4. `npm run test:tool-isolation`：1/1；`npm run test:runtime-crash`：1/1；真实 5×3×3：45/45。
+5. `npm test`：216 项通过、2 项 opt-in 真实验收默认跳过、0 失败；构建 40 modules；语法 92 files；密钥扫描和 `git diff --check` 通过。
+
+### 边界
+
+Stage 2E 关闭的是 Mac 上 OpenCode 标准工具面的应用级隔离，不等于 Linux OS 进程沙箱。非 root 服务账号、系统调用限制、内部 Provider、长期容量、备份和生产回滚仍属于 Stage 5。
+
 ## Stage 2E.6：真实 Runtime 崩溃恢复演练
 
 ### Delivered

@@ -33,12 +33,14 @@
 8. 自动化测试覆盖状态机、持久化、公平调度、并发上限、身份隔离、取消、超时、断线、Worker 失败和 Gateway 重启。
 9. Mac 上用模拟 Worker 完成 20 用户并发验收，并以显式开关运行真实 OpenCode 1.18.25 冒烟测试；普通测试不调用真实模型。
 10. 每个 2A–2E 阶段完成后更新 README 和路线图，执行完整验证，创建中文提交，推送 GitHub `main` 并核对远端 SHA。
+11. Stage 2E 关闭前验证标准 OpenCode 工具不能越过当前 Conversation 工作目录，账号和 Conversation 的产物目录互不复用；默认关闭 Bash、联网、子代理与外部插件，避免绕过路径策略。
 
 ## Constraints
 
 - OpenCode 始终是模型、Agent、Skill 和工具的唯一执行引擎；工作台不直连模型 API。
 - 开发与首轮验收环境为 macOS、Node.js 24；Linux 只允许通过配置替换运行环境，不改变工作台业务协议。
 - 每个 Conversation 使用受控工作目录；不得接受浏览器提供任意宿主机路径。
+- Mac 阶段交付 OpenCode 标准工具面的应用级隔离；Linux 进程级文件系统沙箱、服务账号和系统调用限制属于 Stage 5，不能混为同一验收结论。
 - 日志和审计不得记录密码、Cookie、Token、Basic Auth 密码、Provider Key 或默认完整私人正文。
 - 新行为采用测试先行；每个阶段必须保持应用可启动、可回滚，并兼容无密钥 Demo。
 
