@@ -35,3 +35,7 @@ Gateway Service、恢复器、REST/WebSocket 路由仍依赖同步 SQLite Store�
 ## Task 3B.3 — Conversation REST async boundary
 
 Conversation 的创建、列表、读取、重命名、归档与管理员元数据接口都已等待 Store 返回值；错误仍经过原有状态映射。Promise Store RED 曾返回空 Conversation 并丢失审计 target ID，修复后私有会话、CSRF、审计和管理员最小元数据回归通过。该接口目前仍由 SQLite Gateway Store 提供数据，未将 MySQL Gateway 接入正式服务。
+
+## Task 3B.4 — Gateway WebSocket async boundary
+
+Gateway WebSocket 的订阅和提交现在等待 Gateway Service。回归先让 `subscribe()` 返回 Promise，确认旧代码在连接关闭时会把 Promise 当取消函数；修复后正确保存并调用异步返回的取消函数，既有事件重放、取消所有权和认证回归保持通过。

@@ -37,14 +37,15 @@ test('waits for asynchronous authentication before handling a Gateway message', 
   let releaseAuthentication;
   const authenticated = new Promise((resolve) => { releaseAuthentication = resolve; });
   let subscribedUserId = null;
+  let unsubscribed = 0;
   attachGatewaySocket({
     ws,
     req: { authToken: 'opaque-session-token' },
     authService: { authenticate: () => authenticated },
     gatewayService: {
-      subscribe({ userId }) {
+      async subscribe({ userId }) {
         subscribedUserId = userId;
-        return () => {};
+        return () => { unsubscribed += 1; };
       }
     },
     requestAuditor: { record() {} },
@@ -61,4 +62,6 @@ test('waits for asynchronous authentication before handling a Gateway message', 
   await eventually(() => subscribedUserId !== null);
   assert.equal(subscribedUserId, 'member-1');
   assert.equal(ws.closeArgs, null);
+  ws.emit('close');
+  assert.equal(unsubscribed, 1);
 });

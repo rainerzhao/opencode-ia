@@ -142,7 +142,7 @@ function attachGatewaySocket({
           throw routeError('INVALID_MESSAGE', 'Message fields are invalid', 400);
         }
         subscriptions.get(conversationId)?.();
-        const unsubscribe = gatewayService.subscribe({
+        const unsubscribe = await gatewayService.subscribe({
           conversationId,
           userId,
           afterSequence: message.afterSequence,
@@ -155,7 +155,7 @@ function attachGatewaySocket({
       if (message.type === 'prompt') {
         const text = requirePromptText(message.text);
         const idempotencyKey = requireIdentifier(message.idempotencyKey);
-        const job = gatewayService.submit({
+        const job = await gatewayService.submit({
           conversationId,
           userId,
           idempotencyKey,
