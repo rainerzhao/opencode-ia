@@ -828,13 +828,13 @@ function rejectWebSocketUpgrade(socket, status) {
   socket.destroy();
 }
 
-httpServer.on('upgrade', (req, socket, head) => {
+httpServer.on('upgrade', async (req, socket, head) => {
   try {
     req.requestId = crypto.randomUUID();
     requireSameOriginWebSocket(req);
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
     req.authToken = token;
-    req.auth = authService.authenticate(token);
+    req.auth = await authService.authenticate(token);
     if (!can(req.auth.user, 'workbench:use')) {
       throw apiError('FORBIDDEN', 'You do not have permission to perform this action', 403);
     }
@@ -903,7 +903,7 @@ wss.on('connection', (ws, req) => {
   ws.on('message', async (msg) => {
     try {
       try {
-        req.auth = authService.authenticate(req.authToken);
+        req.auth = await authService.authenticate(req.authToken);
       } catch {
         session.activeAbortController?.abort();
         ws.close(1008, 'AUTHENTICATION_REQUIRED');

@@ -115,9 +115,9 @@ function attachGatewaySocket({
     send({ type: 'error', code: safe.code, message: safe.message });
   }
 
-  function authenticate() {
+  async function authenticate() {
     try {
-      req.auth = authService.authenticate(req.authToken);
+      req.auth = await authService.authenticate(req.authToken);
       return req.auth;
     } catch {
       ws.close(1008, 'AUTHENTICATION_REQUIRED');
@@ -126,7 +126,7 @@ function attachGatewaySocket({
   }
 
   async function handleMessage(raw, isBinary) {
-    if (!authenticate()) return;
+    if (!await authenticate()) return;
     let message;
     try {
       if (isBinary) throw routeError('INVALID_MESSAGE', 'Message fields are invalid', 400);

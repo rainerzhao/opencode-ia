@@ -45,3 +45,9 @@
 - 同一 middleware 保持对既有同步 SQLite Auth Service 的兼容。
 
 命令：`WORKBENCH_TEST_MYSQL_URL=… node --test test/identity/mysql-auth-http.test.js`，结果 1 passed、0 failed；既有 HTTP/服务回归为 11 passed、0 failed，语法检查通过。
+
+## Task 2C — WebSocket async authentication compatibility
+
+WebSocket upgrade、旧协议每条消息和 Gateway 协议每条消息现在都会等待 `authenticate()`，再读取 `req.auth`。新增延迟 Promise 回归用例，先确认旧实现会把 Promise 当身份对象；修复后，Gateway 在身份结果返回前不处理订阅，随后以正确用户 ID 建立订阅。
+
+此项是为 MySQL Auth Service 预留的协议兼容，不代表 `createWorkbenchServer` 的 Gateway/Skill/内容仓储已经接入 MySQL；该应用组合仍使用历史 SQLite 业务仓储。相关 Gateway WebSocket 回归为 10 passed、0 failed，语法检查通过。
