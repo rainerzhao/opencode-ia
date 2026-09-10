@@ -31,6 +31,7 @@ const { createOpenCodeSkillRuntimeValidator } = require('./skills/opencode-skill
 const { createSkillInstallationFiles } = require('./skills/skill-installation-files');
 const { createSkillInstallationService } = require('./skills/skill-installation-service');
 const { createSkillWorkspaceSync } = require('./skills/skill-workspace-sync');
+const { createContentStore } = require('./content/content-store');
 
 function createWorkbenchServer({
   config,
@@ -78,6 +79,7 @@ const authMiddleware = createAuthMiddleware({ authService });
 const requestAuditor = createRequestAuditor({ db });
 const gatewayStore = createGatewayStore(db);
 const skillStore = createSkillStore(db);
+const contentStore = createContentStore(db);
 const skillInstallationFiles = createSkillInstallationFiles({
   root: config.skillInstallRoot || path.join(config.projectDir, 'data/skill-installations')
 });
@@ -1097,7 +1099,16 @@ function stop() {
   return stopping;
 }
 
-return { app, httpServer, start, stop, sessions, authService, gatewayService: activeGatewayService };
+return {
+  app,
+  httpServer,
+  start,
+  stop,
+  sessions,
+  authService,
+  gatewayService: activeGatewayService,
+  contentStore
+};
 }
 
 module.exports = { createWorkbenchServer };

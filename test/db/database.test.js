@@ -23,7 +23,7 @@ test('opens a WAL database, applies every known migration once, and persists dat
   });
 
   const first = migrateDatabase(db);
-  assert.deepEqual(first, { appliedVersions: [1, 2, 3, 4] });
+  assert.deepEqual(first, { appliedVersions: [1, 2, 3, 4, 5] });
   assert.equal(fs.statSync(filename).mode & 0o077, 0);
   assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');

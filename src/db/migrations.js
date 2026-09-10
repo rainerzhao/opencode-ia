@@ -214,6 +214,111 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX skill_files_version_path_idx
         ON skill_files(version_id, path);
     `
+  }),
+  Object.freeze({
+    version: 5,
+    sql: `
+      CREATE TABLE knowledge_documents (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        status TEXT NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'published', 'withdrawn', 'archived')),
+        visibility TEXT NOT NULL DEFAULT 'private'
+          CHECK (visibility IN ('private', 'team')),
+        current_version_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (id, current_version_id)
+          REFERENCES knowledge_versions(document_id, id)
+      ) STRICT;
+
+      CREATE INDEX knowledge_documents_owner_idx
+        ON knowledge_documents(owner_user_id, status, updated_at DESC);
+      CREATE INDEX knowledge_documents_visibility_idx
+        ON knowledge_documents(visibility, status, updated_at DESC);
+
+      CREATE TABLE knowledge_versions (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+        version_number INTEGER NOT NULL CHECK (version_number >= 1),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+        category TEXT NOT NULL DEFAULT '' CHECK (length(category) <= 100),
+        tags_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags_json)),
+        markdown TEXT NOT NULL CHECK (length(markdown) BETWEEN 1 AND 1048576),
+        is_current INTEGER NOT NULL DEFAULT 0 CHECK (is_current IN (0, 1)),
+        created_at TEXT NOT NULL,
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE (document_id, version_number),
+        UNIQUE (document_id, id)
+      ) STRICT;
+
+      CREATE UNIQUE INDEX knowledge_versions_current_idx
+        ON knowledge_versions(document_id) WHERE is_current = 1;
+      CREATE INDEX knowledge_versions_document_idx
+        ON knowledge_versions(document_id, version_number DESC);
+
+      CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+        document_id UNINDEXED,
+        version_id UNINDEXED,
+        title,
+        category,
+        tags,
+        markdown,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+
+      CREATE TABLE solutions (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        status TEXT NOT NULL DEFAULT 'draft'
+          CHECK (status IN ('draft', 'published', 'withdrawn', 'archived')),
+        visibility TEXT NOT NULL DEFAULT 'private'
+          CHECK (visibility IN ('private', 'team')),
+        current_version_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (id, current_version_id)
+          REFERENCES solution_versions(solution_id, id)
+      ) STRICT;
+
+      CREATE INDEX solutions_owner_idx
+        ON solutions(owner_user_id, status, updated_at DESC);
+      CREATE INDEX solutions_visibility_idx
+        ON solutions(visibility, status, updated_at DESC);
+
+      CREATE TABLE solution_versions (
+        id TEXT PRIMARY KEY,
+        solution_id TEXT NOT NULL REFERENCES solutions(id) ON DELETE CASCADE,
+        version_number INTEGER NOT NULL CHECK (version_number >= 1),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+        description TEXT NOT NULL DEFAULT '' CHECK (length(description) <= 10000),
+        solution_markdown TEXT NOT NULL DEFAULT '' CHECK (length(solution_markdown) <= 1048576),
+        is_current INTEGER NOT NULL DEFAULT 0 CHECK (is_current IN (0, 1)),
+        created_at TEXT NOT NULL,
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE (solution_id, version_number),
+        UNIQUE (solution_id, id)
+      ) STRICT;
+
+      CREATE UNIQUE INDEX solution_versions_current_idx
+        ON solution_versions(solution_id) WHERE is_current = 1;
+      CREATE INDEX solution_versions_solution_idx
+        ON solution_versions(solution_id, version_number DESC);
+
+      CREATE TABLE content_references (
+        id TEXT PRIMARY KEY,
+        source_type TEXT NOT NULL CHECK (source_type IN ('conversation', 'knowledge_version', 'skill_version', 'model')),
+        source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 200),
+        knowledge_version_id TEXT REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+        solution_version_id TEXT REFERENCES solution_versions(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        CHECK ((knowledge_version_id IS NOT NULL) != (solution_version_id IS NOT NULL)),
+        UNIQUE (source_type, source_id, knowledge_version_id, solution_version_id)
+      ) STRICT;
+
+      CREATE INDEX content_references_knowledge_idx ON content_references(knowledge_version_id);
+      CREATE INDEX content_references_solution_idx ON content_references(solution_version_id);
+    `
   })
 ]);
 
