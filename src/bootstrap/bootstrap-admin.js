@@ -7,6 +7,7 @@ const { createAuditStore } = require('../audit/audit-store');
 
 async function bootstrapAdmin({
   db,
+  repositoryFactory = null,
   username,
   displayName,
   password,
@@ -17,6 +18,27 @@ async function bootstrapAdmin({
   const normalizedUsername = normalizeUsername(username);
   const normalizedDisplayName = normalizeDisplayName(displayName);
   const passwordHash = await hashPassword(password);
+  if (repositoryFactory) {
+    if (typeof db.transaction !== 'function') throw new TypeError('database transaction is required');
+    const timestamp = now();
+    const id = idFactory();
+    return db.transaction(async (tx) => {
+      const { userStore, auditStore } = repositoryFactory(tx);
+      if (await userStore.countUsers() !== 0) {
+        const error = new Error('administrator bootstrap has already been completed');
+        error.code = 'BOOTSTRAP_ALREADY_COMPLETE';
+        throw error;
+      }
+      const user = await userStore.createUser({
+        id, username: normalizedUsername, displayName: normalizedDisplayName, passwordHash, role: 'admin', now: timestamp
+      });
+      await auditStore.append({
+        actorUserId: user.id, action: 'user.bootstrap_admin', targetType: 'user', targetId: user.id,
+        metadata: { role: user.role, username: user.username }, now: timestamp
+      });
+      return user;
+    });
+  }
   const userStore = createUserStore(db);
   const auditStore = createAuditStore(db);
   const timestamp = now();

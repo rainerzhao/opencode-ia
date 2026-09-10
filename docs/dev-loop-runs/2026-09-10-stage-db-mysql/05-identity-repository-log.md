@@ -18,3 +18,9 @@
 - 同一 MySQL connection 的事务回滚不留下用户记录。
 
 命令：`WORKBENCH_TEST_MYSQL_URL=… node --test test/identity/mysql-identity-stores.test.js`，结果 1 passed、0 failed。
+
+## MySQL Auth Service
+
+- 首位管理员初始化支持显式 MySQL Repository Factory，并在同一 MySQL transaction 内完成用户和审计写入。
+- 新增异步 MySQL Auth Service，覆盖登录、会话校验、登出、改密、成员治理与审计；不把 Promise 伪装成同步值。
+- 真库验收覆盖初始化、登录、改密、会话失效和审计。HTTP/WebSocket 调用点仍待下一子步骤切换，不能将该实现描述为已接管工作台认证。
