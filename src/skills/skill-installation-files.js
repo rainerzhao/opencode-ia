@@ -149,6 +149,46 @@ function createSkillInstallationFiles({ root }) {
     }
   }
 
+  function replacePackage({ userId, skill, previous }) {
+    const candidate = buildPackage({ userId, skill });
+    const expectedPrevious = buildPackage({ userId, skill: previous });
+    if (candidate.slug !== expectedPrevious.slug) throw packageError();
+    const destination = directoryFor(candidate);
+    if (!fs.existsSync(destination)) return writePackage({ userId, skill });
+    readPackage(expectedPrevious);
+    const parent = path.dirname(destination);
+    let temporary;
+    let backup;
+    try {
+      temporary = fs.mkdtempSync(path.join(parent, '.replace-'));
+      fs.chmodSync(temporary, 0o700);
+      fs.writeFileSync(path.join(temporary, 'SKILL.md'), candidate.skillMd, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      for (const file of candidate.files) {
+        const target = resolveWithinRoot(temporary, file.path);
+        fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(target, file.content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      }
+      fs.writeFileSync(path.join(temporary, '.workbench-install.json'), JSON.stringify({
+        schemaVersion: 1, userId: candidate.userId, skillId: candidate.skillId,
+        versionId: candidate.versionId, slug: candidate.slug, contentSha256: candidate.contentSha256
+      }), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      secureWorkspaceTree(temporary);
+      readPackageFromDirectory(temporary, candidate);
+      backup = path.join(parent, `.replace-prev-${Date.now()}-${process.pid}`);
+      fs.renameSync(destination, backup);
+      fs.renameSync(temporary, destination);
+      temporary = null;
+      try { fs.rmSync(backup, { recursive: true, force: true }); } catch {}
+      backup = null;
+      return destination;
+    } catch (error) {
+      if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+      if (backup && !fs.existsSync(destination) && fs.existsSync(backup)) fs.renameSync(backup, destination);
+      if (error?.code === 'SKILL_INSTALLATION_PACKAGE_INVALID') throw error;
+      throw packageError();
+    }
+  }
+
   function hasPackage({ userId, slug }) {
     const directory = directoryFor({ userId, slug });
     try {
@@ -188,7 +228,7 @@ function createSkillInstallationFiles({ root }) {
     return { ...manifest, skillMd, files: extras };
   }
 
-  return { directoryFor, hasPackage, readPackage, removePackage, writePackage };
+  return { directoryFor, hasPackage, readPackage, removePackage, replacePackage, writePackage };
 }
 
 module.exports = { createSkillInstallationFiles };

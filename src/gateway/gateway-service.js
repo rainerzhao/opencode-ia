@@ -115,7 +115,13 @@ function createGatewayService({
     const userDirectory = resolveWithinRoot(workspaceRoot, userSegment);
     fs.mkdirSync(userDirectory, { recursive: true, mode: 0o700 });
     fs.chmodSync(userDirectory, 0o700);
-    const relative = `${userSegment}/${conversationSegment}`;
+    const workspaceKey = workspacePreparer?.workspaceKey?.({ userId: item.userId });
+    if (workspaceKey !== undefined && (typeof workspaceKey !== 'string' || !/^[a-z0-9-]{1,100}$/.test(workspaceKey))) {
+      throw serviceError('GATEWAY_WORKSPACE_PREPARATION_FAILED', 'gateway workspace key is invalid');
+    }
+    const relative = workspaceKey
+      ? `${userSegment}/${conversationSegment}/${workspaceKey}`
+      : `${userSegment}/${conversationSegment}`;
     const directory = resolveWithinRoot(workspaceRoot, relative);
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     fs.chmodSync(directory, 0o700);
@@ -194,7 +200,7 @@ function createGatewayService({
       }, jobTimeoutMs);
       timeout.unref();
       let binding = store.getOpenCodeSession({ conversationId: item.conversationId });
-      if (binding?.recoveryStatus !== 'active') binding = null;
+      if (binding?.recoveryStatus !== 'active' || binding?.workspacePath !== directory) binding = null;
       if (!binding) {
         const conversation = store.getOwnedConversation({
           id: item.conversationId,

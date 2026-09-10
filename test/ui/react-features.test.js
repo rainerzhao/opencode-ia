@@ -188,6 +188,37 @@ test('Skill center separates private drafts from the team catalog and exposes pu
   });
 });
 
+test('Skill center exposes version governance without treating a disabled Skill as runnable', async () => {
+  await withViteModule('features/skills/SkillsPage.jsx', ({ SkillsPage }) => {
+    const active = {
+      id: 'governed-skill', ownerUserId: 'owner-ui', slug: 'governed-skill', displayName: 'Governed Skill',
+      description: 'Can evolve safely', status: 'published', visibility: 'team', version: '0.2.0', versionStatus: 'published'
+    };
+    const disabled = {
+      id: 'disabled-skill', ownerUserId: 'owner-ui', slug: 'disabled-skill', displayName: 'Disabled Skill',
+      status: 'disabled', visibility: 'team', version: '0.1.0', versionStatus: 'published'
+    };
+    const html = renderToStaticMarkup(React.createElement(SkillsPage, {
+      currentUser: { id: 'owner-ui', role: 'member' }, initialSkills: [], initialTeamSkills: [active, disabled],
+      initialInstallations: [{ skillId: active.id, versionId: 'version-1', status: 'enabled' }],
+      initialReleaseVersions: {
+        [active.id]: [
+          { id: 'version-2', version: '0.2.0', status: 'published' },
+          { id: 'version-1', version: '0.1.0', status: 'retired' }
+        ]
+      }
+    }));
+
+    assert.match(html, /创建新版本/);
+    assert.match(html, /可用版本/);
+    assert.match(html, /升级到 v0.2.0/);
+    assert.match(html, /v0.1.0 · retired/);
+    assert.match(html, /停用团队 Skill/);
+    assert.match(html, /团队已停用/);
+    assert.doesNotMatch(html, /Disabled Skill[\s\S]*>启用</);
+  });
+});
+
 test('editing an existing knowledge article keeps its title in submitted form data', async () => {
   await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
     const html = renderToStaticMarkup(React.createElement(KnowledgePage, {

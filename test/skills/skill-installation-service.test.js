@@ -113,3 +113,39 @@ test('does not enable an uninstalled or no-longer-published Skill', async (t) =>
     (error) => error.code === 'SKILL_INSTALLATION_NOT_FOUND'
   );
 });
+
+test('changes only the requesting member release, resets it to installed, and requires validation again', async (t) => {
+  const { store, installationFiles, published } = fixture(t);
+  let validationCount = 0;
+  const service = createSkillInstallationService({
+    store, installationFiles,
+    runtimeValidator: { async validate() { validationCount += 1; return { status: 'passed' }; } }
+  });
+  service.install({ actor: member, id: published.id });
+  await service.enable({ actor: member, id: published.id });
+  const successor = store.createSuccessorDraft({ actor: owner, id: published.id });
+  const edited = store.updateDraft({ actor: owner, id: published.id, skillMd: '# Installable 0.2.0' });
+  const validated = store.saveValidationReport({
+    actor: owner, id: published.id, expectedContentSha256: edited.version.contentSha256,
+    report: {
+      schemaVersion: 1, verdict: 'pass', contentSha256: edited.version.contentSha256,
+      checks: [], summary: { errors: 0, warnings: 0 }, runtime: { status: 'passed', provider: 'test' }
+    }
+  });
+  const latest = store.publishValidated({ actor: owner, id: validated.id });
+  assert.equal(successor.version.id, latest.version.id);
+
+  const upgraded = service.upgrade({ actor: member, id: published.id, versionId: latest.version.id });
+  assert.equal(upgraded.versionId, latest.version.id);
+  assert.equal(upgraded.status, 'installed');
+  assert.equal(installationFiles.readPackage({
+    userId: member.id, slug: latest.slug, skillId: latest.id,
+    versionId: latest.version.id, contentSha256: latest.version.contentSha256
+  }).skillMd, '# Installable 0.2.0');
+  await service.enable({ actor: member, id: published.id });
+  assert.equal(validationCount, 2);
+
+  const rolledBack = service.rollback({ actor: member, id: published.id, versionId: published.version.id });
+  assert.equal(rolledBack.versionId, published.version.id);
+  assert.equal(rolledBack.status, 'installed');
+});

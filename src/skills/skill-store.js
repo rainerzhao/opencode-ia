@@ -140,6 +140,35 @@ function toInstallation(row) {
   };
 }
 
+function toVersionSummary(row) {
+  if (!row) return null;
+  return {
+    id: row.version_id,
+    version: row.version,
+    status: row.version_status,
+    contentSha256: row.content_sha256,
+    createdAt: row.version_created_at,
+    updatedAt: row.version_updated_at,
+    publishedAt: row.published_at
+  };
+}
+
+function nextMinorVersion(rows) {
+  let greatest = null;
+  for (const row of rows) {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(row.version);
+    if (!match) throw skillError('INVALID_SKILL_VERSION', 'skill version is invalid');
+    const parsed = match.slice(1).map(Number);
+    if (!greatest || parsed[0] > greatest[0] ||
+        (parsed[0] === greatest[0] && parsed[1] > greatest[1]) ||
+        (parsed[0] === greatest[0] && parsed[1] === greatest[1] && parsed[2] > greatest[2])) {
+      greatest = parsed;
+    }
+  }
+  if (!greatest) throw skillError('SKILL_VERSION_NOT_FOUND', 'skill version was not found');
+  return `${greatest[0]}.${greatest[1] + 1}.0`;
+}
+
 function createSkillStore(db, {
   idFactory = crypto.randomUUID,
   clock = () => new Date().toISOString()
@@ -156,12 +185,21 @@ function createSkillStore(db, {
       v.published_at
     FROM skills s
     JOIN skill_versions v ON v.skill_id = s.id
-    WHERE s.id = ?
-    ORDER BY v.created_at DESC, v.id DESC
-    LIMIT 1
   `;
-  const byId = db.prepare(detailSql);
+  const byIdVersion = db.prepare(`${detailSql} WHERE s.id = ? AND v.id = ?`);
+  const latestById = db.prepare(`${detailSql}
+    WHERE s.id = ? ORDER BY v.created_at DESC, v.id DESC LIMIT 1
+  `);
+  const publishedById = db.prepare(`${detailSql}
+    WHERE s.id = ? AND v.status = 'published' ORDER BY v.published_at DESC, v.id DESC LIMIT 1
+  `);
   const bySlug = db.prepare('SELECT id FROM skills WHERE slug = ? COLLATE NOCASE');
+  const versionsBySkill = db.prepare(`
+    SELECT v.id AS version_id, v.version, v.status AS version_status, v.content_sha256,
+      v.created_at AS version_created_at, v.updated_at AS version_updated_at, v.published_at
+    FROM skill_versions v WHERE v.skill_id = ?
+    ORDER BY v.created_at DESC, v.id DESC
+  `);
   const filesByVersion = db.prepare(`
     SELECT id, path, content, size_bytes, content_sha256, created_at, updated_at
     FROM skill_files
@@ -186,6 +224,10 @@ function createSkillStore(db, {
     return toDetail(row, filesByVersion.all(row.version_id).map(toFile));
   }
 
+  function detailForVersion(skillId, versionId) {
+    return detail(byIdVersion.get(skillId, versionId));
+  }
+
   function transaction(action) {
     db.exec('BEGIN IMMEDIATE;');
     try {
@@ -200,10 +242,13 @@ function createSkillStore(db, {
 
   function visibleRow({ actor, id }) {
     const normalizedActor = normalizeActor(actor);
-    const row = byId.get(normalizeId(id));
-    if (!row) return null;
-    if (normalizedActor.role === 'admin' || row.owner_user_id === normalizedActor.id ||
-        (row.visibility === 'team' && ['published', 'disabled'].includes(row.status))) return row;
+    const normalizedId = normalizeId(id);
+    const latest = latestById.get(normalizedId);
+    if (!latest) return null;
+    if (normalizedActor.role === 'admin' || latest.owner_user_id === normalizedActor.id) return latest;
+    if (latest.visibility === 'team' && ['published', 'disabled'].includes(latest.status)) {
+      return publishedById.get(normalizedId);
+    }
     return null;
   }
 
@@ -261,7 +306,48 @@ function createSkillStore(db, {
       }
       throw error;
     }
-    return detail(byId.get(skillId));
+    return detail(latestById.get(skillId));
+  }
+
+  function createSuccessorDraft({ actor, id }) {
+    const normalizedActor = normalizeActor(actor);
+    const normalizedId = normalizeId(id);
+    return transaction(() => {
+      const latest = latestById.get(normalizedId);
+      if (!latest || (normalizedActor.role !== 'admin' && latest.owner_user_id !== normalizedActor.id)) {
+        throw skillError('SKILL_NOT_FOUND', 'skill was not found');
+      }
+      if (latest.status !== 'published' || latest.visibility !== 'team') {
+        throw skillError('SKILL_VERSION_NOT_CREATABLE', 'skill version cannot be created');
+      }
+      if (['draft', 'validated'].includes(latest.version_status)) {
+        throw skillError('SKILL_VERSION_DRAFT_EXISTS', 'skill already has an editable version');
+      }
+      const active = publishedById.get(normalizedId);
+      if (!active) throw skillError('SKILL_VERSION_NOT_CREATABLE', 'skill version cannot be created');
+      const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+      const versionId = normalizeId(idFactory(), 'INVALID_SKILL_VERSION_ID');
+      const version = nextMinorVersion(versionsBySkill.all(normalizedId));
+      db.prepare(`
+        INSERT INTO skill_versions (
+          id, skill_id, version, status, skill_md, validation_report_json,
+          content_sha256, created_by_user_id, created_at, updated_at
+        ) VALUES (?, ?, ?, 'draft', ?, '{}', ?, ?, ?, ?)
+      `).run(versionId, active.id, version, active.skill_md, active.content_sha256, normalizedActor.id, now, now);
+      const copyFile = db.prepare(`
+        INSERT INTO skill_files (
+          id, version_id, path, content, size_bytes, content_sha256, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const file of filesByVersion.all(active.version_id).map(toFile)) {
+        copyFile.run(
+          normalizeId(idFactory(), 'INVALID_SKILL_FILE_ID'), versionId, file.path, file.content,
+          file.sizeBytes, file.contentSha256, now, now
+        );
+      }
+      db.prepare('UPDATE skills SET updated_at = ? WHERE id = ?').run(now, active.id);
+      return detailForVersion(active.id, versionId);
+    });
   }
 
   function listVisible({ actor, status = 'draft', limit = 100, offset = 0 } = {}) {
@@ -273,16 +359,20 @@ function createSkillStore(db, {
         !Number.isInteger(offset) || offset < 0) {
       throw skillError('INVALID_SKILL_PAGE', 'skill page is invalid');
     }
+    const selectedVersionSql = status === 'published'
+      ? `SELECT selected.id FROM skill_versions selected
+          WHERE selected.skill_id = s.id AND selected.status = 'published'
+          ORDER BY selected.published_at DESC, selected.id DESC LIMIT 1`
+      : `SELECT selected.id FROM skill_versions selected
+          WHERE selected.skill_id = s.id
+            AND ((? = 'admin' OR s.owner_user_id = ?) OR selected.status = 'published')
+          ORDER BY CASE WHEN ? = 'admin' OR s.owner_user_id = ? THEN 0
+            WHEN selected.status = 'published' THEN 0 ELSE 1 END,
+            selected.created_at DESC, selected.id DESC LIMIT 1`;
     const rows = db.prepare(`
       SELECT s.*, v.version, v.status AS version_status
       FROM skills s
-      JOIN skill_versions v ON v.id = (
-        SELECT latest.id
-        FROM skill_versions latest
-        WHERE latest.skill_id = s.id
-        ORDER BY latest.created_at DESC, latest.id DESC
-        LIMIT 1
-      )
+      JOIN skill_versions v ON v.id = (${selectedVersionSql})
       WHERE (? = 'all' OR s.status = ?)
         AND (
           ? = 'admin'
@@ -291,7 +381,12 @@ function createSkillStore(db, {
         )
       ORDER BY s.updated_at DESC, s.id DESC
       LIMIT ? OFFSET ?
-    `).all(status, status, normalizedActor.role, normalizedActor.id, limit, offset);
+    `).all(...(status === 'published'
+      ? [status, status, normalizedActor.role, normalizedActor.id, limit, offset]
+      : [
+        normalizedActor.role, normalizedActor.id, normalizedActor.role, normalizedActor.id,
+        status, status, normalizedActor.role, normalizedActor.id, limit, offset
+      ]));
     return rows.map(toSummary);
   }
 
@@ -301,7 +396,7 @@ function createSkillStore(db, {
 
   function getValidationCandidate({ actor, id }) {
     const row = editableRow({ actor, id });
-    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+    if (!['draft', 'published'].includes(row.status) || !['draft', 'validated'].includes(row.version_status)) {
       throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be validated');
     }
     return detail(row);
@@ -309,7 +404,7 @@ function createSkillStore(db, {
 
   function updateDraft({ actor, id, displayName, description, skillMd }) {
     const row = editableRow({ actor, id });
-    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+    if (!['draft', 'published'].includes(row.status) || !['draft', 'validated'].includes(row.version_status)) {
       throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be changed');
     }
     if (displayName === undefined && description === undefined && skillMd === undefined) {
@@ -340,12 +435,12 @@ function createSkillStore(db, {
         WHERE id = ?
       `).run(nextSource, digest, now, row.version_id);
     });
-    return detail(byId.get(row.id));
+    return detail(latestById.get(row.id));
   }
 
   function replaceDraftFiles({ actor, id, files }) {
     const row = editableRow({ actor, id });
-    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+    if (!['draft', 'published'].includes(row.status) || !['draft', 'validated'].includes(row.version_status)) {
       throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be changed');
     }
     const normalizedFiles = normalizeSkillFiles(files, row.skill_md);
@@ -378,12 +473,12 @@ function createSkillStore(db, {
       `).run(digest, now, row.version_id);
       db.prepare('UPDATE skills SET updated_at = ? WHERE id = ?').run(now, row.id);
     });
-    return detail(byId.get(row.id));
+    return detail(latestById.get(row.id));
   }
 
   function saveValidationReport({ actor, id, expectedContentSha256, report }) {
     const row = editableRow({ actor, id });
-    if (row.status !== 'draft' || !['draft', 'validated'].includes(row.version_status)) {
+    if (!['draft', 'published'].includes(row.status) || !['draft', 'validated'].includes(row.version_status)) {
       throw skillError('SKILL_NOT_EDITABLE', 'skill draft cannot be validated');
     }
     if (typeof expectedContentSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expectedContentSha256) ||
@@ -397,7 +492,7 @@ function createSkillStore(db, {
     }
     const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
     transaction(() => {
-      const current = byId.get(row.id);
+      const current = latestById.get(row.id);
       if (!current || current.content_sha256 !== expectedContentSha256) {
         throw skillError('SKILL_VALIDATION_STALE', 'skill changed while validation was running');
       }
@@ -411,14 +506,14 @@ function createSkillStore(db, {
       `).run(status, serialized, now, current.version_id);
       db.prepare('UPDATE skills SET updated_at = ? WHERE id = ?').run(now, current.id);
     });
-    return detail(byId.get(row.id));
+    return detail(latestById.get(row.id));
   }
 
   function publishValidated({ actor, id }) {
     const normalizedActor = normalizeActor(actor);
     const normalizedId = normalizeId(id);
     return transaction(() => {
-      const row = byId.get(normalizedId);
+      const row = latestById.get(normalizedId);
       if (!row || (normalizedActor.role !== 'admin' && row.owner_user_id !== normalizedActor.id)) {
         throw skillError('SKILL_NOT_FOUND', 'skill was not found');
       }
@@ -426,34 +521,75 @@ function createSkillStore(db, {
         return detail(row);
       }
       const report = parseReport(row.validation_report_json);
-      if (row.status !== 'draft' || row.version_status !== 'validated' ||
+      if (!['draft', 'published'].includes(row.status) || row.version_status !== 'validated' ||
           report.verdict !== 'pass' || report.runtime?.status !== 'passed' ||
           report.contentSha256 !== row.content_sha256) {
         throw skillError('SKILL_NOT_PUBLISHABLE', 'skill has not passed current validation');
       }
       const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
-      db.prepare(`
-        UPDATE skills
-        SET status = 'published', visibility = 'team', updated_at = ?
-        WHERE id = ?
-      `).run(now, row.id);
+      db.prepare(`UPDATE skills SET status = 'published', visibility = 'team', updated_at = ? WHERE id = ?`)
+        .run(now, row.id);
+      if (row.status === 'published') {
+        db.prepare(`UPDATE skill_versions SET status = 'retired', updated_at = ?
+          WHERE skill_id = ? AND status = 'published'`).run(now, row.id);
+      }
       db.prepare(`
         UPDATE skill_versions
         SET status = 'published', published_at = ?, updated_at = ?
         WHERE id = ?
       `).run(now, now, row.version_id);
-      return detail(byId.get(row.id));
+      return detail(publishedById.get(row.id));
     });
   }
 
   function getPublishedInstallCandidate({ actor, id }) {
     normalizeActor(actor);
-    const row = byId.get(normalizeId(id));
+    const row = publishedById.get(normalizeId(id));
     if (!row || row.status !== 'published' || row.visibility !== 'team' ||
         row.version_status !== 'published') {
       throw skillError('SKILL_NOT_FOUND', 'skill was not found');
     }
     return detail(row);
+  }
+
+  function listReleaseVersions({ actor, id }) {
+    const normalizedActor = normalizeActor(actor);
+    const normalizedId = normalizeId(id);
+    const visible = visibleRow({ actor: normalizedActor, id: normalizedId });
+    if (!visible) throw skillError('SKILL_NOT_FOUND', 'skill was not found');
+    return versionsBySkill.all(normalizedId)
+      .filter((version) => normalizedActor.role === 'admin' || visible.owner_user_id === normalizedActor.id ||
+        ['published', 'retired'].includes(version.version_status))
+      .map(toVersionSummary);
+  }
+
+  function getInstalledEnableCandidate({ actor, id, versionId }) {
+    normalizeActor(actor);
+    const row = detailForVersion(
+      normalizeId(id),
+      normalizeId(versionId, 'INVALID_SKILL_VERSION_ID')
+    );
+    if (!row || row.status !== 'published' || row.visibility !== 'team' ||
+        !['published', 'retired'].includes(row.version.status)) {
+      throw skillError('SKILL_NOT_INSTALLABLE', 'skill version cannot be enabled');
+    }
+    return row;
+  }
+
+  function getVersionChangeCandidate({ actor, id, versionId, operation }) {
+    normalizeActor(actor);
+    if (!['upgrade', 'rollback'].includes(operation)) {
+      throw skillError('INVALID_SKILL_VERSION_OPERATION', 'skill version operation is invalid');
+    }
+    const row = detailForVersion(
+      normalizeId(id),
+      normalizeId(versionId, 'INVALID_SKILL_VERSION_ID')
+    );
+    const expectedStatus = operation === 'upgrade' ? 'published' : 'retired';
+    if (!row || row.status !== 'published' || row.visibility !== 'team' || row.version.status !== expectedStatus) {
+      throw skillError('SKILL_VERSION_NOT_SELECTABLE', 'skill version cannot be selected');
+    }
+    return row;
   }
 
   function recordInstallation({ actor, skillId, versionId }) {
@@ -514,6 +650,25 @@ function createSkillStore(db, {
     return toInstallation(installationByUserSkill.get(normalizedActor.id, normalizedSkillId));
   }
 
+  function selectInstallationVersion({ actor, skillId, versionId, operation }) {
+    const normalizedActor = normalizeActor(actor);
+    const normalizedSkillId = normalizeId(skillId);
+    const normalizedVersionId = normalizeId(versionId, 'INVALID_SKILL_VERSION_ID');
+    return transaction(() => {
+      const existing = installationByUserSkill.get(normalizedActor.id, normalizedSkillId);
+      if (!existing) throw skillError('SKILL_INSTALLATION_NOT_FOUND', 'skill installation was not found');
+      getVersionChangeCandidate({
+        actor: normalizedActor, id: normalizedSkillId, versionId: normalizedVersionId, operation
+      });
+      const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+      db.prepare(`UPDATE skill_installations SET version_id = ?, status = 'installed', updated_at = ?
+        WHERE user_id = ? AND skill_id = ?`).run(
+        normalizedVersionId, now, normalizedActor.id, normalizedSkillId
+      );
+      return toInstallation(installationByUserSkill.get(normalizedActor.id, normalizedSkillId));
+    });
+  }
+
   function listInstallations({ actor }) {
     const normalizedActor = normalizeActor(actor);
     return db.prepare(`${installationSql}
@@ -525,7 +680,7 @@ function createSkillStore(db, {
   function listEnabledInstallations({ userId }) {
     const normalizedUserId = normalizeId(userId, 'INVALID_SKILL_USER_ID');
     return db.prepare(`${installationSql}
-      WHERE i.user_id = ? AND i.status = 'enabled'
+      WHERE i.user_id = ? AND i.status = 'enabled' AND s.status = 'published'
       ORDER BY s.slug ASC
     `).all(normalizedUserId).map(toInstallation);
   }
@@ -538,22 +693,58 @@ function createSkillStore(db, {
     }
     db.prepare(`UPDATE skills SET status = 'archived', updated_at = ? WHERE id = ?`)
       .run(requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 }), row.id);
-    return detail(byId.get(row.id));
+    return detail(latestById.get(row.id));
+  }
+
+  function disableTeamSkill({ actor, id }) {
+    const row = editableRow({ actor, id });
+    if (row.status === 'disabled') return detail(row);
+    if (row.status !== 'published' || row.visibility !== 'team') {
+      throw skillError('SKILL_NOT_DISABLEABLE', 'skill cannot be disabled from its current status');
+    }
+    const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+    transaction(() => {
+      db.prepare(`UPDATE skills SET status = 'disabled', updated_at = ? WHERE id = ?`).run(now, row.id);
+      db.prepare(`UPDATE skill_installations SET status = 'disabled', updated_at = ?
+        WHERE skill_id = ? AND status = 'enabled'`).run(now, row.id);
+    });
+    return detail(latestById.get(row.id));
+  }
+
+  function archiveTeamSkill({ actor, id }) {
+    const row = editableRow({ actor, id });
+    if (row.status === 'archived') return detail(row);
+    if (row.status !== 'disabled') {
+      throw skillError('SKILL_NOT_ARCHIVABLE', 'skill cannot be archived from its current status');
+    }
+    const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+    transaction(() => {
+      db.prepare(`UPDATE skills SET status = 'archived', updated_at = ? WHERE id = ?`).run(now, row.id);
+      db.prepare(`UPDATE skill_installations SET status = 'disabled', updated_at = ? WHERE skill_id = ?`).run(now, row.id);
+    });
+    return detail(latestById.get(row.id));
   }
 
   return {
     archiveDraft,
+    archiveTeamSkill,
     createDraft,
+    createSuccessorDraft,
+    disableTeamSkill,
     getValidationCandidate,
+    getInstalledEnableCandidate,
     getPublishedInstallCandidate,
+    getVersionChangeCandidate,
     getVisible,
     listEnabledInstallations,
     listInstallations,
+    listReleaseVersions,
     listVisible,
     publishValidated,
     recordInstallation,
     replaceDraftFiles,
     saveValidationReport,
+    selectInstallationVersion,
     setInstallationStatus,
     updateDraft
   };

@@ -481,6 +481,28 @@ test('materializes enabled Skills for the job owner before the OpenCode session 
   ), 'utf8'), '# Member only');
 });
 
+test('rebinds a Conversation to a fresh workspace when the enabled Skill set changes', async (t) => {
+  let release = 'skills-01';
+  const fixture = createFixture(t, {
+    automatic: true,
+    workspacePreparer: {
+      workspaceKey() { return release; },
+      prepare({ directory }) { fs.mkdirSync(directory, { recursive: true, mode: 0o700 }); }
+    }
+  });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1, 'skill-release');
+  fixture.submit(conversation, 1, 'release-one');
+  await fixture.service.waitForIdle();
+  release = 'skills-02';
+  fixture.submit(conversation, 1, 'release-two');
+  await fixture.service.waitForIdle();
+
+  assert.match(fixture.promptRequests[0].directory, /skills-01$/);
+  assert.match(fixture.promptRequests[1].directory, /skills-02$/);
+  assert.equal(fixture.records.reduce((total, record) => total + record.sessions, 0), 2);
+});
+
 test('fails a job before OpenCode when enabled Skill workspace preparation fails', async (t) => {
   const fixture = createFixture(t, {
     automatic: true,

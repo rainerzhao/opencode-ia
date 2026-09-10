@@ -43,10 +43,16 @@ function createSkillInstallationService({ store, installationFiles, runtimeValid
     if (!installation) {
       throw installationError('SKILL_INSTALLATION_NOT_FOUND', 'skill installation was not found');
     }
-    const candidate = store.getPublishedInstallCandidate({ actor, id });
-    if (candidate.version.id !== installation.versionId ||
-        candidate.version.contentSha256 !== installation.contentSha256) {
-      throw installationError('SKILL_NOT_INSTALLABLE', 'installed skill version is no longer current');
+    let candidate;
+    try {
+      candidate = typeof store.getInstalledEnableCandidate === 'function'
+        ? store.getInstalledEnableCandidate({ actor, id, versionId: installation.versionId })
+        : store.getPublishedInstallCandidate({ actor, id });
+    } catch {
+      throw installationError('SKILL_NOT_INSTALLABLE', 'installed skill version is no longer available');
+    }
+    if (candidate.version.id !== installation.versionId || candidate.version.contentSha256 !== installation.contentSha256) {
+      throw installationError('SKILL_NOT_INSTALLABLE', 'installed skill version is no longer available');
     }
     const installed = installationFiles.readPackage({
       userId: actor?.id,
@@ -75,7 +81,43 @@ function createSkillInstallationService({ store, installationFiles, runtimeValid
     return store.setInstallationStatus({ actor, skillId: installation.skillId, status: 'enabled' });
   }
 
-  return { enable, install };
+  function changeVersion({ actor, id, versionId, operation }) {
+    if (!['upgrade', 'rollback'].includes(operation) ||
+        typeof store.getVersionChangeCandidate !== 'function' ||
+        typeof store.selectInstallationVersion !== 'function' ||
+        typeof store.getInstalledEnableCandidate !== 'function' ||
+        typeof installationFiles.replacePackage !== 'function') {
+      throw installationError('SKILL_VERSION_CHANGE_UNAVAILABLE', 'skill version change is unavailable');
+    }
+    const installation = store.listInstallations({ actor }).find((item) => item.skillId === id);
+    if (!installation) {
+      throw installationError('SKILL_INSTALLATION_NOT_FOUND', 'skill installation was not found');
+    }
+    const target = store.getVersionChangeCandidate({ actor, id, versionId, operation });
+    if (target.version.id === installation.versionId) return installation;
+    const previous = store.getInstalledEnableCandidate({
+      actor, id, versionId: installation.versionId
+    });
+    installationFiles.replacePackage({ userId: actor?.id, skill: target, previous });
+    try {
+      return store.selectInstallationVersion({
+        actor, skillId: id, versionId: target.version.id, operation
+      });
+    } catch (error) {
+      try { installationFiles.replacePackage({ userId: actor?.id, skill: previous, previous: target }); } catch {}
+      throw error;
+    }
+  }
+
+  function upgrade({ actor, id, versionId }) {
+    return changeVersion({ actor, id, versionId, operation: 'upgrade' });
+  }
+
+  function rollback({ actor, id, versionId }) {
+    return changeVersion({ actor, id, versionId, operation: 'rollback' });
+  }
+
+  return { enable, install, rollback, upgrade };
 }
 
 module.exports = { createSkillInstallationService };

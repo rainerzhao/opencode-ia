@@ -89,6 +89,11 @@ const workspacePreparer = Object.freeze({
       directory,
       installations: skillStore.listEnabledInstallations({ userId })
     });
+  },
+  workspaceKey({ userId }) {
+    const installations = skillStore.listEnabledInstallations({ userId })
+      .map((item) => [item.skillId, item.versionId, item.contentSha256]);
+    return `skills-${crypto.createHash('sha256').update(JSON.stringify(installations)).digest('hex').slice(0, 16)}`;
   }
 });
 const activeGatewayService = gatewayService || gatewayServiceFactory?.({

@@ -39,14 +39,21 @@ function mapStoreError(error) {
     SKILL_OWNER_NOT_FOUND: 404,
     SKILL_SLUG_CONFLICT: 409,
     SKILL_NOT_EDITABLE: 409,
+    INVALID_SKILL_VERSION: 400,
+    INVALID_SKILL_VERSION_OPERATION: 400,
     SKILL_VALIDATION_STALE: 409,
     SKILL_NOT_ARCHIVABLE: 409,
+    SKILL_NOT_DISABLEABLE: 409,
+    SKILL_VERSION_NOT_CREATABLE: 409,
+    SKILL_VERSION_DRAFT_EXISTS: 409,
+    SKILL_VERSION_NOT_SELECTABLE: 409,
     SKILL_NOT_PUBLISHABLE: 409,
     SKILL_NOT_INSTALLABLE: 409,
     SKILL_INSTALL_VERSION_CONFLICT: 409,
     SKILL_INSTALLATION_NOT_FOUND: 404,
     INVALID_SKILL_INSTALLATION_STATUS: 400,
     SKILL_ENABLE_VALIDATION_FAILED: 409,
+    SKILL_VERSION_CHANGE_UNAVAILABLE: 409,
     SKILL_INSTALLATION_PACKAGE_INVALID: 409,
     SKILL_WORKSPACE_SYNC_FAILED: 409
   };
@@ -91,6 +98,23 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
         targetType: 'skill',
         targetId: skill.id,
         metadata: { status: skill.status, visibility: skill.visibility, version: skill.version.version }
+      });
+      res.status(201).json({ skill });
+    } catch (error) { next(mapStoreError(error)); }
+  });
+
+  router.get('/:skillId/versions', (req, res, next) => {
+    try {
+      res.json({ versions: store.listReleaseVersions({ actor: req.auth.user, id: skillId(req.params.skillId) }) });
+    } catch (error) { next(mapStoreError(error)); }
+  });
+
+  router.post('/:skillId/versions', (req, res, next) => {
+    try {
+      const skill = store.createSuccessorDraft({ actor: req.auth.user, id: skillId(req.params.skillId) });
+      requestAuditor.record(req, {
+        action: 'skill.version.create', targetType: 'skill', targetId: skill.id,
+        metadata: { versionId: skill.version.id, version: skill.version.version, status: skill.version.status }
       });
       res.status(201).json({ skill });
     } catch (error) { next(mapStoreError(error)); }
@@ -204,6 +228,43 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
     });
     res.json({ installation });
   }));
+
+  for (const operation of ['upgrade', 'rollback']) {
+    router.post(`/:skillId/${operation}`, (req, res, next) => {
+      try {
+        const installation = installationService[operation]({
+          actor: req.auth.user, id: skillId(req.params.skillId), versionId: req.body?.versionId
+        });
+        requestAuditor.record(req, {
+          action: `skill.${operation}`, targetType: 'skill', targetId: installation.skillId,
+          metadata: { versionId: installation.versionId, status: installation.status, digest: installation.contentSha256 }
+        });
+        res.json({ installation });
+      } catch (error) { next(mapStoreError(error)); }
+    });
+  }
+
+  router.post('/:skillId/disable', (req, res, next) => {
+    try {
+      const skill = store.disableTeamSkill({ actor: req.auth.user, id: skillId(req.params.skillId) });
+      requestAuditor.record(req, {
+        action: 'skill.disable', targetType: 'skill', targetId: skill.id,
+        metadata: { status: skill.status }
+      });
+      res.json({ skill });
+    } catch (error) { next(mapStoreError(error)); }
+  });
+
+  router.post('/:skillId/archive', (req, res, next) => {
+    try {
+      const skill = store.archiveTeamSkill({ actor: req.auth.user, id: skillId(req.params.skillId) });
+      requestAuditor.record(req, {
+        action: 'skill.archive', targetType: 'skill', targetId: skill.id,
+        metadata: { status: skill.status }
+      });
+      res.json({ skill });
+    } catch (error) { next(mapStoreError(error)); }
+  });
 
   router.delete('/:skillId', (req, res, next) => {
     try {
