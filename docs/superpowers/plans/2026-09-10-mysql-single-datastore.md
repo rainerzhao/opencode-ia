@@ -26,6 +26,15 @@
 - [ ] 迁移 Conversation、jobs、events、workers、sessions、recovery 与 Gateway service；保持串行 Conversation、公平队列与重启边界。
 - [ ] 在真实 MySQL 测试多用户、多 Session、恢复、取消与事件重放。
 
+### Task 3 execution order
+
+1. **3A — durable Gateway Repository:** 新增 MySQL Conversation/Job/Event/Worker/OpenCode Session Repository；所有读写为 Promise，创建 Job、事件序号与状态迁移使用同一 MySQL transaction。先用真实 MySQL 验证所有权、幂等、事件重放、绑定和启动恢复。
+2. **3B — async scheduler and recovery:** 将 Gateway service、恢复器和 Gateway REST/WebSocket 路由全部改为等待 Repository；保留“同一 Conversation 串行、按用户公平、Worker/Session 粘性”的既有产品约束。
+3. **3C — application composition:** 仅当 3A/3B 真库通过后，让 `createWorkbenchServer` 以 MySQL 一次性构造身份与 Gateway 组合；此时不让 MySQL Gateway 与 SQLite Skill/内容仓储共享正式服务进程。
+4. **3D — acceptance:** 在独立 MySQL 数据库完成恢复、取消、事件补发、5 用户 × 3 Conversation 多轮调度；再决定 Skill/内容切片的接入顺序。
+
+**关键不变量：** MySQL 是本切片唯一持久事实源；OpenCode Worker Pool 仍只是运行时；Conversation、OpenCode Session、Worker、执行槽位继续分离。任何尚未完成全栈切换的 Adapter 不得作为生产组合启用。
+
 ## Task 4: Skill / content vertical slice
 
 - [ ] 迁移 Skill 包、安装状态、版本治理、知识/方案版本和 MySQL FULLTEXT ngram。
