@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { normalizeSkillFiles, skillPackageDigest } = require('./skill-package');
 
 const SKILL_STATUSES = new Set(['draft', 'published', 'disabled', 'archived']);
+const INSTALLATION_STATUSES = new Set(['installed', 'enabled', 'disabled']);
 
 function skillError(code, message) {
   const error = new Error(message);
@@ -121,6 +122,24 @@ function toDetail(row, files = []) {
   };
 }
 
+function toInstallation(row) {
+  if (!row) return null;
+  return {
+    id: row.installation_id,
+    userId: row.user_id,
+    skillId: row.skill_id,
+    versionId: row.version_id,
+    status: row.installation_status,
+    slug: row.slug,
+    displayName: row.display_name,
+    description: row.description,
+    version: row.version,
+    contentSha256: row.content_sha256,
+    createdAt: row.installation_created_at,
+    updatedAt: row.installation_updated_at
+  };
+}
+
 function createSkillStore(db, {
   idFactory = crypto.randomUUID,
   clock = () => new Date().toISOString()
@@ -148,6 +167,18 @@ function createSkillStore(db, {
     FROM skill_files
     WHERE version_id = ?
     ORDER BY path ASC
+  `);
+  const installationSql = `
+    SELECT i.id AS installation_id, i.user_id, i.skill_id, i.version_id,
+      i.status AS installation_status, i.created_at AS installation_created_at,
+      i.updated_at AS installation_updated_at, s.slug, s.display_name, s.description,
+      v.version, v.content_sha256
+    FROM skill_installations i
+    JOIN skills s ON s.id = i.skill_id
+    JOIN skill_versions v ON v.id = i.version_id AND v.skill_id = i.skill_id
+  `;
+  const installationByUserSkill = db.prepare(`${installationSql}
+    WHERE i.user_id = ? AND i.skill_id = ?
   `);
 
   function detail(row) {
@@ -383,6 +414,122 @@ function createSkillStore(db, {
     return detail(byId.get(row.id));
   }
 
+  function publishValidated({ actor, id }) {
+    const normalizedActor = normalizeActor(actor);
+    const normalizedId = normalizeId(id);
+    return transaction(() => {
+      const row = byId.get(normalizedId);
+      if (!row || (normalizedActor.role !== 'admin' && row.owner_user_id !== normalizedActor.id)) {
+        throw skillError('SKILL_NOT_FOUND', 'skill was not found');
+      }
+      if (row.status === 'published' && row.visibility === 'team' && row.version_status === 'published') {
+        return detail(row);
+      }
+      const report = parseReport(row.validation_report_json);
+      if (row.status !== 'draft' || row.version_status !== 'validated' ||
+          report.verdict !== 'pass' || report.runtime?.status !== 'passed' ||
+          report.contentSha256 !== row.content_sha256) {
+        throw skillError('SKILL_NOT_PUBLISHABLE', 'skill has not passed current validation');
+      }
+      const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+      db.prepare(`
+        UPDATE skills
+        SET status = 'published', visibility = 'team', updated_at = ?
+        WHERE id = ?
+      `).run(now, row.id);
+      db.prepare(`
+        UPDATE skill_versions
+        SET status = 'published', published_at = ?, updated_at = ?
+        WHERE id = ?
+      `).run(now, now, row.version_id);
+      return detail(byId.get(row.id));
+    });
+  }
+
+  function getPublishedInstallCandidate({ actor, id }) {
+    normalizeActor(actor);
+    const row = byId.get(normalizeId(id));
+    if (!row || row.status !== 'published' || row.visibility !== 'team' ||
+        row.version_status !== 'published') {
+      throw skillError('SKILL_NOT_FOUND', 'skill was not found');
+    }
+    return detail(row);
+  }
+
+  function recordInstallation({ actor, skillId, versionId }) {
+    const normalizedActor = normalizeActor(actor);
+    const normalizedSkillId = normalizeId(skillId);
+    const normalizedVersionId = normalizeId(versionId, 'INVALID_SKILL_VERSION_ID');
+    return transaction(() => {
+      const candidate = db.prepare(`
+        SELECT s.id
+        FROM skills s
+        JOIN skill_versions v ON v.skill_id = s.id
+        WHERE s.id = ? AND v.id = ? AND s.status = 'published'
+          AND s.visibility = 'team' AND v.status = 'published'
+      `).get(normalizedSkillId, normalizedVersionId);
+      if (!candidate) throw skillError('SKILL_NOT_INSTALLABLE', 'skill version cannot be installed');
+      const existing = installationByUserSkill.get(normalizedActor.id, normalizedSkillId);
+      if (existing) {
+        if (existing.version_id !== normalizedVersionId) {
+          throw skillError('SKILL_INSTALL_VERSION_CONFLICT', 'another skill version is already installed');
+        }
+        return toInstallation(existing);
+      }
+      const now = requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 });
+      db.prepare(`
+        INSERT INTO skill_installations (
+          id, user_id, skill_id, version_id, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'installed', ?, ?)
+      `).run(
+        normalizeId(idFactory(), 'INVALID_SKILL_INSTALLATION_ID'),
+        normalizedActor.id,
+        normalizedSkillId,
+        normalizedVersionId,
+        now,
+        now
+      );
+      return toInstallation(installationByUserSkill.get(normalizedActor.id, normalizedSkillId));
+    });
+  }
+
+  function setInstallationStatus({ actor, skillId, status }) {
+    const normalizedActor = normalizeActor(actor);
+    const normalizedSkillId = normalizeId(skillId);
+    if (!INSTALLATION_STATUSES.has(status)) {
+      throw skillError('INVALID_SKILL_INSTALLATION_STATUS', 'skill installation status is invalid');
+    }
+    const existing = installationByUserSkill.get(normalizedActor.id, normalizedSkillId);
+    if (!existing) throw skillError('SKILL_INSTALLATION_NOT_FOUND', 'skill installation was not found');
+    if (existing.installation_status === status) return toInstallation(existing);
+    db.prepare(`
+      UPDATE skill_installations SET status = ?, updated_at = ?
+      WHERE user_id = ? AND skill_id = ?
+    `).run(
+      status,
+      requiredText(clock(), 'INVALID_SKILL_TIMESTAMP', 'skill timestamp is invalid', { max: 100 }),
+      normalizedActor.id,
+      normalizedSkillId
+    );
+    return toInstallation(installationByUserSkill.get(normalizedActor.id, normalizedSkillId));
+  }
+
+  function listInstallations({ actor }) {
+    const normalizedActor = normalizeActor(actor);
+    return db.prepare(`${installationSql}
+      WHERE i.user_id = ?
+      ORDER BY i.updated_at DESC, i.id DESC
+    `).all(normalizedActor.id).map(toInstallation);
+  }
+
+  function listEnabledInstallations({ userId }) {
+    const normalizedUserId = normalizeId(userId, 'INVALID_SKILL_USER_ID');
+    return db.prepare(`${installationSql}
+      WHERE i.user_id = ? AND i.status = 'enabled'
+      ORDER BY s.slug ASC
+    `).all(normalizedUserId).map(toInstallation);
+  }
+
   function archiveDraft({ actor, id }) {
     const row = editableRow({ actor, id });
     if (row.status === 'archived') return detail(row);
@@ -398,10 +545,16 @@ function createSkillStore(db, {
     archiveDraft,
     createDraft,
     getValidationCandidate,
+    getPublishedInstallCandidate,
     getVisible,
+    listEnabledInstallations,
+    listInstallations,
     listVisible,
+    publishValidated,
+    recordInstallation,
     replaceDraftFiles,
     saveValidationReport,
+    setInstallationStatus,
     updateDraft
   };
 }

@@ -98,11 +98,11 @@ function getSetCookies(response) {
     : [response.headers.get('set-cookie')].filter(Boolean);
 }
 
-async function loginDemo(ready) {
+async function loginDemo(ready, credentials = ready.credentials) {
   const response = await fetch(`${ready.url}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(ready.credentials)
+    body: JSON.stringify(credentials)
   });
   assert.equal(response.status, 200);
   const setCookies = getSetCookies(response);
@@ -176,6 +176,38 @@ test('starts an isolated full-stack demo and removes its temporary data on shutd
   assert.equal(validatedSkill.version.status, 'validated');
   assert.equal(validatedSkill.version.validationReport.verdict, 'pass');
   assert.equal(validatedSkill.version.validationReport.runtime.status, 'passed');
+
+  const publishedSkillResponse = await fetch(`${ready.url}/api/skills/${createdSkill.id}/publish`, {
+    method: 'POST',
+    headers: { cookie: session.cookie, 'x-csrf-token': session.csrfToken }
+  });
+  assert.equal(publishedSkillResponse.status, 200);
+  assert.equal((await publishedSkillResponse.json()).skill.status, 'published');
+  const memberPassword = 'Demo member password 2026!';
+  const memberResponse = await fetch(`${ready.url}/api/admin/users`, {
+    method: 'POST',
+    headers: { cookie: session.cookie, 'x-csrf-token': session.csrfToken, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      username: 'demo-member', displayName: 'Demo Member', password: memberPassword, role: 'member'
+    })
+  });
+  assert.equal(memberResponse.status, 201);
+  const member = await loginDemo(ready, { username: 'demo-member', password: memberPassword });
+  const installedSkillResponse = await fetch(`${ready.url}/api/skills/${createdSkill.id}/install`, {
+    method: 'POST', headers: { cookie: member.cookie, 'x-csrf-token': member.csrfToken }
+  });
+  assert.equal(installedSkillResponse.status, 200);
+  assert.equal((await installedSkillResponse.json()).installation.status, 'installed');
+  const enabledSkillResponse = await fetch(`${ready.url}/api/skills/${createdSkill.id}/enable`, {
+    method: 'POST', headers: { cookie: member.cookie, 'x-csrf-token': member.csrfToken }
+  });
+  assert.equal(enabledSkillResponse.status, 200);
+  assert.equal((await enabledSkillResponse.json()).installation.status, 'enabled');
+  const installationsResponse = await fetch(`${ready.url}/api/skills/installations`, {
+    headers: { cookie: member.cookie }
+  });
+  assert.equal(installationsResponse.status, 200);
+  assert.equal((await installationsResponse.json()).installations[0].status, 'enabled');
 
   const ws = new WebSocket(ready.url.replace('http:', 'ws:'), {
     headers: { cookie: session.cookie }

@@ -43,8 +43,10 @@ function runtimeStatusLabel(status){
   })[status]||'未知';
 }
 
-export function SkillsPage({initialSkills=null,initialSelectedSkill=null}){
+export function SkillsPage({initialSkills=null,initialSelectedSkill=null,initialTeamSkills=null,initialInstallations=null}){
   const[items,setItems]=useState(initialSkills||[]);
+  const[teamItems,setTeamItems]=useState(initialTeamSkills||[]);
+  const[installations,setInstallations]=useState(initialInstallations||[]);
   const[selected,setSelected]=useState(initialSelectedSkill);
   const[form,setForm]=useState(formFor(initialSelectedSkill));
   const[files,setFiles]=useState(filesFor(initialSelectedSkill));
@@ -53,7 +55,15 @@ export function SkillsPage({initialSkills=null,initialSelectedSkill=null}){
 
   useEffect(()=>{
     if(initialSkills!==null)return;
-    request('/api/skills').then(body=>setItems(body.skills||[])).catch(error=>setNotice(error.message));
+    Promise.all([
+      request('/api/skills'),
+      request('/api/skills?status=published'),
+      request('/api/skills/installations')
+    ]).then(([privateBody,teamBody,installationBody])=>{
+      setItems(privateBody.skills||[]);
+      setTeamItems(teamBody.skills||[]);
+      setInstallations(installationBody.installations||[]);
+    }).catch(error=>setNotice(error.message));
   },[initialSkills]);
 
   function change(event){
@@ -154,17 +164,65 @@ export function SkillsPage({initialSkills=null,initialSelectedSkill=null}){
     }catch(error){setNotice(error.message)}finally{setBusy(false)}
   }
 
+  async function publish(){
+    if(!selected)return;
+    const confirmed=typeof window==='undefined'||window.confirm('发布后该版本不可修改，团队成员可自行安装。确认发布到团队？');
+    if(!confirmed)return;
+    setBusy(true);
+    setNotice('');
+    try{
+      const body=await request(`/api/skills/${encodeURIComponent(selected.id)}/publish`,{method:'POST'});
+      setItems(current=>current.filter(item=>item.id!==body.skill.id));
+      setTeamItems(current=>[summaryFor(body.skill),...current.filter(item=>item.id!==body.skill.id)]);
+      setSelected(null);
+      setForm({...emptyDraft});
+      setFiles([]);
+      setNotice('已发布到团队；成员仍需各自安装并启用。');
+    }catch(error){setNotice(error.message)}finally{setBusy(false)}
+  }
+
+  async function install(skill){
+    setBusy(true);
+    setNotice('');
+    try{
+      const body=await request(`/api/skills/${encodeURIComponent(skill.id)}/install`,{method:'POST'});
+      setInstallations(current=>[body.installation,...current.filter(item=>item.skillId!==body.installation.skillId)]);
+      setNotice(`已安装 ${skill.displayName}；启用后才会进入你的 OpenCode 会话。`);
+    }catch(error){setNotice(error.message)}finally{setBusy(false)}
+  }
+
+  async function enable(skill){
+    setBusy(true);
+    setNotice('');
+    try{
+      const body=await request(`/api/skills/${encodeURIComponent(skill.id)}/enable`,{method:'POST'});
+      setInstallations(current=>[body.installation,...current.filter(item=>item.skillId!==body.installation.skillId)]);
+      setNotice(`已启用 ${skill.displayName}；仅影响你的 OpenCode 会话。`);
+    }catch(error){setNotice(error.message)}finally{setBusy(false)}
+  }
+
   const report=selected?.version?.validationReport;
   const hasReport=report&&Object.keys(report).length>0;
+  const publishable=Boolean(selected&&selected.status==='draft'&&selected.version?.status==='validated'&&
+    report?.verdict==='pass'&&report?.runtime?.status==='passed');
+  const installationBySkill=new Map(installations.map(item=>[item.skillId,item]));
   return <section className="skills-workspace">
     <aside className="panel skill-rail">
-      <div className="section-head"><div><p className="eyebrow">Stage 4B</p><h3>私人草稿</h3></div><button onClick={startCreate}>新建 Skill</button></div>
+      <div className="section-head"><div><p className="eyebrow">Stage 4C</p><h3>私人草稿</h3></div><button onClick={startCreate}>新建 Skill</button></div>
       <p className="muted">草稿仅本人可见，校验并人工发布后才会成为团队资产。</p>
       <div className="skill-list">
         {items.length?items.map(item=><button className={`skill-item ${selected?.id===item.id?'active':''}`} onClick={()=>openDraft(item)} key={item.id} disabled={busy}>
           <strong>{item.displayName}</strong><span>{item.slug}</span><small>v{item.version} · 私人草稿</small>
         </button>):<div className="empty skill-empty">还没有私人 Skill 草稿</div>}
       </div>
+      <section className="team-catalog">
+        <div className="section-head"><div><p className="eyebrow">TEAM CATALOG</p><h4>团队已发布</h4></div></div>
+        <p className="muted">发布后不可修改。安装与启用只影响当前账号，不会影响其他成员。</p>
+        <div className="team-skill-list">{teamItems.length?teamItems.map(skill=>{
+          const installation=installationBySkill.get(skill.id);
+          return <article className="team-skill" key={skill.id}><div><strong>{skill.displayName}</strong><span>{skill.slug} · v{skill.version}</span><p>{skill.description||'团队可复用 Skill'}</p></div><div className="team-skill-actions">{!installation?<button type="button" onClick={()=>install(skill)} disabled={busy}>安装</button>:installation.status==='enabled'?<strong className="enabled-label">已启用</strong>:<><strong className="installed-label">已安装</strong><button type="button" onClick={()=>enable(skill)} disabled={busy}>启用</button></>}</div></article>;
+        }):<p className="empty compact">暂无团队已发布 Skill</p>}</div>
+      </section>
     </aside>
     <form className="panel skill-editor" onSubmit={save}>
       <div className="section-head"><div><p className="eyebrow">{selected?'EDIT DRAFT':'NEW DRAFT'}</p><h3>{selected?'编辑 Skill 草稿':'创建 Skill 草稿'}</h3></div>{selected&&<span className="skill-version">v{selected.version.version} · 私人草稿</span>}</div>
@@ -191,7 +249,7 @@ export function SkillsPage({initialSkills=null,initialSelectedSkill=null}){
         {hasReport&&<p className="runtime-state">OpenCode 运行门禁：{runtimeStatusLabel(report.runtime.status)}</p>}
       </section>
       <p className={`notice ${notice.includes('已')?'success':'error'}`}>{notice}</p>
-      <div className="form-actions">{selected&&<button className="ghost danger" type="button" onClick={archive} disabled={busy}>归档</button>}<button className="ghost" type="button" onClick={validateDraft} disabled={busy}>{busy?'处理中…':'开始校验'}</button><button type="submit" disabled={busy}>{busy?'处理中…':'保存草稿'}</button></div>
+      <div className="form-actions">{selected&&<button className="ghost danger" type="button" onClick={archive} disabled={busy}>归档</button>}{publishable&&<button className="publish" type="button" onClick={publish} disabled={busy}>发布到团队</button>}<button className="ghost" type="button" onClick={validateDraft} disabled={busy}>{busy?'处理中…':'开始校验'}</button><button type="submit" disabled={busy}>{busy?'处理中…':'保存草稿'}</button></div>
     </form>
   </section>;
 }

@@ -40,17 +40,31 @@ function mapStoreError(error) {
     SKILL_SLUG_CONFLICT: 409,
     SKILL_NOT_EDITABLE: 409,
     SKILL_VALIDATION_STALE: 409,
-    SKILL_NOT_ARCHIVABLE: 409
+    SKILL_NOT_ARCHIVABLE: 409,
+    SKILL_NOT_PUBLISHABLE: 409,
+    SKILL_NOT_INSTALLABLE: 409,
+    SKILL_INSTALL_VERSION_CONFLICT: 409,
+    SKILL_INSTALLATION_NOT_FOUND: 404,
+    INVALID_SKILL_INSTALLATION_STATUS: 400,
+    SKILL_ENABLE_VALIDATION_FAILED: 409,
+    SKILL_INSTALLATION_PACKAGE_INVALID: 409,
+    SKILL_WORKSPACE_SYNC_FAILED: 409
   };
   if (statuses[error.code]) error.status = statuses[error.code];
   return error;
 }
 
-function createSkillRouter({ store, requestAuditor, validationService }) {
-  if (!store || !requestAuditor || !validationService) {
+function createSkillRouter({ store, requestAuditor, validationService, installationService }) {
+  if (!store || !requestAuditor || !validationService || !installationService) {
     throw new TypeError('skill route dependencies are required');
   }
   const router = express.Router();
+
+  router.get('/installations', (req, res, next) => {
+    try {
+      res.json({ installations: store.listInstallations({ actor: req.auth.user }) });
+    } catch (error) { next(mapStoreError(error)); }
+  });
 
   router.get('/', (req, res, next) => {
     try {
@@ -158,6 +172,37 @@ function createSkillRouter({ store, requestAuditor, validationService }) {
       }
     });
     res.json({ skill });
+  }));
+
+  router.post('/:skillId/publish', (req, res, next) => {
+    try {
+      const skill = store.publishValidated({ actor: req.auth.user, id: skillId(req.params.skillId) });
+      requestAuditor.record(req, {
+        action: 'skill.publish', targetType: 'skill', targetId: skill.id,
+        metadata: { version: skill.version.version, status: skill.status, digest: skill.version.contentSha256 }
+      });
+      res.json({ skill });
+    } catch (error) { next(mapStoreError(error)); }
+  });
+
+  router.post('/:skillId/install', (req, res, next) => {
+    try {
+      const installation = installationService.install({ actor: req.auth.user, id: skillId(req.params.skillId) });
+      requestAuditor.record(req, {
+        action: 'skill.install', targetType: 'skill', targetId: installation.skillId,
+        metadata: { versionId: installation.versionId, status: installation.status, digest: installation.contentSha256 }
+      });
+      res.json({ installation });
+    } catch (error) { next(mapStoreError(error)); }
+  });
+
+  router.post('/:skillId/enable', asyncRoute(async (req, res) => {
+    const installation = await installationService.enable({ actor: req.auth.user, id: skillId(req.params.skillId) });
+    requestAuditor.record(req, {
+      action: 'skill.enable', targetType: 'skill', targetId: installation.skillId,
+      metadata: { versionId: installation.versionId, status: installation.status, digest: installation.contentSha256 }
+    });
+    res.json({ installation });
   }));
 
   router.delete('/:skillId', (req, res, next) => {

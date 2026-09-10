@@ -25,6 +25,7 @@ test('derives data paths from the injected project directory', () => {
   assert.equal(config.gatewayUserRunning, 1);
   assert.equal(config.gatewayUserQueued, 3);
   assert.equal(config.gatewayWorkspaceRoot, path.resolve('/srv/workbench/data/workspaces'));
+  assert.equal(config.skillInstallRoot, path.resolve('/srv/workbench/data/skill-installations'));
   assert.equal(config.opencodeWorkerStartupTimeoutMs, 10000);
   assert.equal(config.opencodeWorkerReadinessIntervalMs, 100);
   assert.equal(config.opencodeWorkerStopGraceMs, 2000);
@@ -66,6 +67,7 @@ test('loads bounded persistent OpenCode worker settings without a stored passwor
       GATEWAY_USER_RUNNING: '1',
       GATEWAY_USER_QUEUED: '4',
       GATEWAY_WORKSPACE_ROOT: '/var/lib/opencode-workbench/workspaces',
+      SKILL_INSTALL_ROOT: '/var/lib/opencode-workbench/skill-installations',
       OPENCODE_WORKER_STARTUP_TIMEOUT_MS: '15000',
       OPENCODE_WORKER_READINESS_INTERVAL_MS: '250',
       OPENCODE_WORKER_STOP_GRACE_MS: '3000',
@@ -84,6 +86,7 @@ test('loads bounded persistent OpenCode worker settings without a stored passwor
   assert.equal(config.gatewayUserRunning, 1);
   assert.equal(config.gatewayUserQueued, 4);
   assert.equal(config.gatewayWorkspaceRoot, '/var/lib/opencode-workbench/workspaces');
+  assert.equal(config.skillInstallRoot, '/var/lib/opencode-workbench/skill-installations');
   assert.equal(config.opencodeWorkerStartupTimeoutMs, 15000);
   assert.equal(config.opencodeWorkerReadinessIntervalMs, 250);
   assert.equal(config.opencodeWorkerStopGraceMs, 3000);

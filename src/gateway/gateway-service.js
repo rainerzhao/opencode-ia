@@ -75,6 +75,7 @@ function createGatewayService({
   pool,
   queue,
   workspaceRoot,
+  workspacePreparer = null,
   limits = {},
   idFactory = crypto.randomUUID,
   logger = { error() {} }
@@ -84,6 +85,9 @@ function createGatewayService({
   }
   if (typeof workspaceRoot !== 'string' || !path.isAbsolute(workspaceRoot)) {
     throw new TypeError('gateway workspace root must be absolute');
+  }
+  if (workspacePreparer !== null && typeof workspacePreparer?.prepare !== 'function') {
+    throw new TypeError('gateway workspace preparer is invalid');
   }
   const globalRunning = positiveInteger(limits.globalRunning ?? 2, 'global running limit');
   const userRunningLimit = positiveInteger(limits.userRunning ?? 1, 'user running limit');
@@ -183,6 +187,7 @@ function createGatewayService({
       publishConversation(item.conversationId, item.userId);
       directory = workspaceFor(item);
       context.directory = directory;
+      workspacePreparer?.prepare({ userId: item.userId, directory });
       timeout = setTimeout(() => {
         context.timedOut = true;
         context.controller.abort();

@@ -132,6 +132,9 @@ function loadConfig({ env = process.env, projectDir }) {
     gatewayWorkspaceRoot: path.resolve(
       env.GATEWAY_WORKSPACE_ROOT || path.join(root, 'data/workspaces')
     ),
+    skillInstallRoot: path.resolve(
+      env.SKILL_INSTALL_ROOT || path.join(root, 'data/skill-installations')
+    ),
     knowledgeDir: path.resolve(env.KNOWLEDGE_DIR || path.join(root, 'knowledge')),
     solutionsDir: path.resolve(env.SOLUTIONS_DIR || path.join(root, 'solutions')),
     skillsDir: path.resolve(env.SKILLS_DIR || path.join(root, '.opencode/skills')),

@@ -35,10 +35,11 @@ flowchart TB
 - 搜索、新建、编辑和上传个人知识；
 - 将确认过的对话保存为个人方案；
 - 创建、编辑和归档自己的私人 Skill 草稿，维护受控附加文件并查看校验报告；
+- 将已校验的私人 Skill 人工发布到团队目录；成员可各自安装、经 OpenCode 验证后启用；
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 4A–4B 已交付默认私有的 Skill 草稿、受控文件包、结构与安全报告，以及只经 OpenCode Gateway 的受限运行门禁。团队发布、安装启用、升级回滚，以及 Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 4A–4C 已完成默认私有草稿、受控文件包、校验、人工发布、按账号安装/启用和真实 OpenCode 发现验证。版本升级、回滚、停用、Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -87,7 +88,7 @@ DEMO_PORT=4321 npm run demo
 | 运行管理 | ✅ Mac 可体验 | 管理员在账号管理页查看健康、Worker 和任务状态，二次确认取消任务；私人内容不向管理员展示 |
 | 工具与产物边界 | ✅ Mac 应用级验收 | 每个账号和 Conversation 使用独立工作目录，默认关闭 Bash、联网、子代理和外部插件 |
 | 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
-| 团队 Skill 中心 | 🚧 4A–4B 已完成 | 私人草稿、文件包和 OpenCode 校验门禁已交付；发布、安装、启用、升级和回滚继续开发 |
+| 团队 Skill 中心 | 🚧 4A–4C 已完成 | 成员可发布已校验的私有 Skill；团队成员独立安装并通过 OpenCode 验证后启用；升级、回滚和停用待开发 |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
@@ -121,9 +122,9 @@ flowchart LR
 
 当前使用 React/Vite 前端 + 模块化 Express 后端。Stage 2A 建立持久状态，Stage 2B 验证受保护的常驻 OpenCode 进程与 HTTP/SSE 协议，Stage 2C 完成默认双 Worker 调度，Stage 2D 已将这些能力接入正式生产组合和成员界面：私人 Conversation、排队与停止状态、WebSocket 断线补发、恢复边界和历史重建均经过 Mac 浏览器验收。
 
-Stage 4A–4B 已把 Skill 从只读目录展示升级为受账号和权限约束的私人开发产品：成员拥有自己的草稿与初始版本，可以维护受控文本文件、运行确定性的结构与安全检查，并通过共享 OpenCode Gateway 验证 Skill 能否被真实发现和加载。草稿和校验产物仍保持私有；只有校验通过且后续经过人工确认的版本，才可以进入 Stage 4C 团队发布流程。
+Stage 4A–4C 已把 Skill 从私人开发产品推进到可控的团队共享闭环：成员先在默认私有空间创建和校验；只有当前内容、静态报告和 OpenCode Runtime 同时通过，创建者或管理员才能人工发布。每位成员随后独立安装；只有该成员安装目录经真实 OpenCode 发现验证，才可启用并在其 Conversation 工作区出现。发布、安装、启用是三个独立动作，启用不绑定 Runtime，也不会影响其他账号。
 
-![Stage 4B 私人 Skill 校验界面](docs/dev-loop-runs/2026-09-09-stage-4b-skill-validation/artifacts/screenshots/stage-4b-skill-desktop-final.png)
+![Stage 4C 团队 Skill 发布安装界面](docs/dev-loop-runs/2026-09-09-stage-4c-skill-publish-install/artifacts/screenshots/stage-4c-skill-desktop-final.png)
 
 ## 真实模式：Mac 开发启动
 
@@ -183,6 +184,7 @@ npm start
 | `GATEWAY_USER_RUNNING` | `1` | 单用户同时运行任务上限 |
 | `GATEWAY_USER_QUEUED` | `3` | 单用户排队任务上限 |
 | `GATEWAY_WORKSPACE_ROOT` | `<root>/data/workspaces` | 服务端生成的 Conversation 工作目录根 |
+| `SKILL_INSTALL_ROOT` | `<root>/data/skill-installations` | 服务端受管的按账号 Skill 安装包目录；不会自动成为全局 Skill |
 | `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
 | `SOLUTIONS_DIR` | `<root>/solutions` | 方案目录 |
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
@@ -240,6 +242,7 @@ npm run security:scan
 - `npm run test:runtime-crash` 会启动并强制终止它自己创建的真实 OpenCode Runtime，验证自动重启、任务中断和 Session 安全恢复；只在已配置可用模型的 Mac/Linux 验收环境显式运行。
 - `npm run test:tool-isolation` 会让真实 OpenCode 在所属 Conversation 写入产物并尝试跨目录读取随机 canary，验证越界拒绝和不泄漏；同样只在显式验收环境运行。
 - `npm run test:skill-validation` 会让真实 OpenCode 从一次性私人目录发现并加载待校验 Skill，验证受限工具策略和运行目录清理；只在已配置可用模型的验收环境显式运行。
+- `npm run test:skill-install-discovery` 会以两个账号验证已启用安装包只在所属成员 Conversation 工作区被 OpenCode 发现；只在已配置可用模型的验收环境显式运行。
 - 语法检查只检查仓库自有 JavaScript 文件。
 - 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
 - `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
@@ -253,12 +256,12 @@ npm run security:scan
 运行期间 Runtime 异常也会把关联会话置为恢复中：原 Session 可用时继续排队任务，不可用时中断相关任务并提示成员。确定性故障测试和真实 OpenCode 进程强制终止、自动重启、上下文恢复演练均已通过。
 
 - Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
-- Stage 4A–4B 已完成 Mac 端验收：普通成员可以创建、编辑和归档默认私有的 Skill 草稿，维护受控文件包并获得结构、安全与真实 OpenCode 运行报告；修改内容会使旧报告失效。
+- Stage 4A–4C 已完成 Mac 端验收：普通成员可以创建、校验并人工发布默认私有的 Skill 草稿；成员独立安装，安装包原子落盘、启用前再经真实 OpenCode 发现验证，并只物化到本账号 Conversation 工作区。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **Stage 4C Skill 发布、安装与启用**，随后完成版本升级与回滚。Stage 3 的知识与方案发布闭环仍在路线图中；Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚属于 Stage 5。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
+下一交付点是 **Stage 4D Skill 版本、升级、回滚、停用与归档**。Stage 3 的知识与方案发布闭环仍在路线图中；Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚属于 Stage 5。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 

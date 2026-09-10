@@ -28,6 +28,9 @@ const { createSkillRouter } = require('./modules/skills/routes');
 const { createSkillStore } = require('./skills/skill-store');
 const { createSkillValidationService } = require('./skills/skill-validation-service');
 const { createOpenCodeSkillRuntimeValidator } = require('./skills/opencode-skill-runtime-validator');
+const { createSkillInstallationFiles } = require('./skills/skill-installation-files');
+const { createSkillInstallationService } = require('./skills/skill-installation-service');
+const { createSkillWorkspaceSync } = require('./skills/skill-workspace-sync');
 
 function createWorkbenchServer({
   config,
@@ -75,7 +78,23 @@ const authMiddleware = createAuthMiddleware({ authService });
 const requestAuditor = createRequestAuditor({ db });
 const gatewayStore = createGatewayStore(db);
 const skillStore = createSkillStore(db);
-const activeGatewayService = gatewayService || gatewayServiceFactory?.({ store: gatewayStore });
+const skillInstallationFiles = createSkillInstallationFiles({
+  root: config.skillInstallRoot || path.join(config.projectDir, 'data/skill-installations')
+});
+const skillWorkspaceSync = createSkillWorkspaceSync({ installationFiles: skillInstallationFiles });
+const workspacePreparer = Object.freeze({
+  prepare({ userId, directory }) {
+    return skillWorkspaceSync.syncEnabledSkills({
+      userId,
+      directory,
+      installations: skillStore.listEnabledInstallations({ userId })
+    });
+  }
+});
+const activeGatewayService = gatewayService || gatewayServiceFactory?.({
+  store: gatewayStore,
+  workspacePreparer
+});
 const activeSkillRuntimeValidator = skillRuntimeValidator || (
   typeof activeGatewayService?.validateSkillPackage === 'function'
     ? createOpenCodeSkillRuntimeValidator({ gatewayService: activeGatewayService })
@@ -84,6 +103,13 @@ const activeSkillRuntimeValidator = skillRuntimeValidator || (
 const skillValidationService = createSkillValidationService({
   store: skillStore,
   runtimeValidator: activeSkillRuntimeValidator
+});
+const skillInstallationService = createSkillInstallationService({
+  store: skillStore,
+  installationFiles: skillInstallationFiles,
+  runtimeValidator: activeSkillRuntimeValidator || {
+    async validate() { return { status: 'failed', code: 'RUNTIME_VALIDATOR_UNAVAILABLE' }; }
+  }
 });
 
 const app = express();
@@ -158,7 +184,8 @@ app.use('/api/admin/conversations', createConversationAdminRouter({
 app.use('/api/skills', createSkillRouter({
   store: skillStore,
   requestAuditor,
-  validationService: skillValidationService
+  validationService: skillValidationService,
+  installationService: skillInstallationService
 }));
 
 function apiError(code, message, status = 400) {

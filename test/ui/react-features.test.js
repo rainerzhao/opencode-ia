@@ -154,6 +154,40 @@ test('Skill center exposes package files and a private validation report without
   });
 });
 
+test('Skill center separates private drafts from the team catalog and exposes publish, install and enable actions', async () => {
+  await withViteModule('features/skills/SkillsPage.jsx', ({ SkillsPage }) => {
+    const validated = {
+      id: 'private-validated', slug: 'private-validated', displayName: 'Private Validated',
+      status: 'draft', visibility: 'private', files: [],
+      version: {
+        id: 'version-private', version: '0.1.0', status: 'validated', skillMd: '# Private',
+        validationReport: {
+          verdict: 'pass', contentSha256: 'a'.repeat(64), checks: [],
+          summary: { errors: 0, warnings: 0 }, runtime: { status: 'passed' }
+        }
+      }
+    };
+    const published = {
+      id: 'team-published', slug: 'team-published', displayName: 'Team Published',
+      description: 'Shared team capability', status: 'published', visibility: 'team',
+      version: '0.1.0', versionStatus: 'published'
+    };
+    const html = renderToStaticMarkup(React.createElement(SkillsPage, {
+      initialSkills: [{ ...validated, version: '0.1.0', versionStatus: 'validated' }],
+      initialSelectedSkill: validated,
+      initialTeamSkills: [published],
+      initialInstallations: [{ skillId: published.id, status: 'installed' }]
+    }));
+
+    assert.match(html, /发布到团队/);
+    assert.match(html, /团队已发布/);
+    assert.match(html, /Team Published/);
+    assert.match(html, />已安装</);
+    assert.match(html, />启用</);
+    assert.match(html, /发布后不可修改/);
+  });
+});
+
 test('editing an existing knowledge article keeps its title in submitted form data', async () => {
   await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
     const html = renderToStaticMarkup(React.createElement(KnowledgePage, {

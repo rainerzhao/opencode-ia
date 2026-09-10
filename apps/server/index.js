@@ -45,7 +45,7 @@ function createProductionWorkbench({
     config,
     promptRunner,
     logger,
-    gatewayServiceFactory({ store }) {
+    gatewayServiceFactory({ store, workspacePreparer }) {
       const queue = createFairQueue({ maxQueuedPerUser: config.gatewayUserQueued });
       const pool = createWorkerPool({
         workerCount: config.opencodeWorkerCount,
@@ -60,6 +60,7 @@ function createProductionWorkbench({
         pool,
         queue,
         workspaceRoot: config.gatewayWorkspaceRoot,
+        workspacePreparer,
         limits: {
           globalRunning: config.gatewayGlobalRunning,
           userRunning: config.gatewayUserRunning,

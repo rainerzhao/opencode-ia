@@ -40,7 +40,8 @@ function createFixture(t, {
   validationDiscovery = true,
   validationMarkerMatches = true,
   validationToolResult = null,
-  validationGate = null
+  validationGate = null,
+  workspacePreparer = null
 } = {}) {
   const db = openDatabase({ filename: ':memory:' });
   migrateDatabase(db);
@@ -215,6 +216,7 @@ function createFixture(t, {
     pool,
     queue,
     workspaceRoot,
+    workspacePreparer,
     limits: { globalRunning: 2, userRunning: 1, jobTimeoutMs },
     idFactory: () => `binding-${++nextId}`
   });
@@ -451,6 +453,47 @@ test('derives private workspace directories and applies the restricted prompt to
     assert.equal(fs.readFileSync(artifact, 'utf8'), request.text);
     assert.equal(fs.statSync(artifact).mode & 0o777, 0o600);
   }
+});
+
+test('materializes enabled Skills for the job owner before the OpenCode session is created', async (t) => {
+  const prepared = [];
+  const fixture = createFixture(t, {
+    automatic: true,
+    workspacePreparer: {
+      prepare({ userId, directory }) {
+        prepared.push({ userId, directory });
+        const skillDirectory = path.join(directory, '.opencode', 'skills', 'member-only');
+        fs.mkdirSync(skillDirectory, { recursive: true, mode: 0o700 });
+        fs.writeFileSync(path.join(skillDirectory, 'SKILL.md'), '# Member only', { mode: 0o600 });
+      }
+    }
+  });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1, 'prepared-skill');
+  fixture.submit(conversation, 1, 'prepared-skill');
+  await fixture.service.waitForIdle();
+
+  assert.equal(prepared.length, 1);
+  assert.equal(prepared[0].userId, 'user-1');
+  assert.equal(fixture.promptRequests.length, 1);
+  assert.equal(fs.readFileSync(path.join(
+    fixture.promptRequests[0].directory, '.opencode', 'skills', 'member-only', 'SKILL.md'
+  ), 'utf8'), '# Member only');
+});
+
+test('fails a job before OpenCode when enabled Skill workspace preparation fails', async (t) => {
+  const fixture = createFixture(t, {
+    automatic: true,
+    workspacePreparer: { prepare() { throw Object.assign(new Error('skill package is invalid'), { code: 'SKILL_WORKSPACE_SYNC_FAILED' }); } }
+  });
+  await fixture.service.start();
+  const conversation = fixture.conversation(1, 'failed-skill-prepare');
+  const job = fixture.submit(conversation, 1, 'failed-skill-prepare');
+  await fixture.service.waitForIdle();
+
+  assert.equal(fixture.store.getJob({ id: job.id }).status, 'failed');
+  assert.equal(fixture.store.getJob({ id: job.id }).errorCode, 'SKILL_WORKSPACE_SYNC_FAILED');
+  assert.equal(fixture.promptRequests.length, 0);
 });
 
 test('fails a job before OpenCode when a user workspace symlink escapes the root', async (t) => {
