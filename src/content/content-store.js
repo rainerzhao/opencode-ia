@@ -320,6 +320,19 @@ function createContentStore(db, {
     return rows.map((row) => ({ ...toKnowledgeSummary(row), preview: row.preview }));
   }
 
+  function listKnowledge({ actorUserId, actorRole }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const rows = db.prepare(`
+      SELECT d.id AS document_id, d.owner_user_id, d.status, d.visibility, d.created_at, d.updated_at,
+        v.version_number, v.title, v.category, v.tags_json
+      FROM knowledge_documents d
+      JOIN knowledge_versions v ON v.id = d.current_version_id
+      WHERE d.owner_user_id = ? OR (d.visibility = 'team' AND d.status = 'published') OR ? = 'admin'
+      ORDER BY d.updated_at DESC, d.id DESC
+    `).all(actor.id, actor.role);
+    return rows.map(toKnowledgeSummary);
+  }
+
   function createSolutionDraft({ actorUserId, actorRole, title, description = '', solutionMarkdown = '', references = [], visibility = 'private', status = 'draft' }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const timestamp = now();
@@ -413,15 +426,60 @@ function createContentStore(db, {
     return rows.map(toSolutionSummary);
   }
 
+  function publishKnowledge({ actorUserId, actorRole, documentId }) {
+    return saveKnowledgeVersion({
+      actorUserId,
+      actorRole,
+      documentId,
+      status: 'published',
+      visibility: 'team'
+    });
+  }
+
+  function withdrawKnowledge({ actorUserId, actorRole, documentId }) {
+    return saveKnowledgeVersion({
+      actorUserId,
+      actorRole,
+      documentId,
+      status: 'withdrawn',
+      visibility: 'private'
+    });
+  }
+
+  function publishSolution({ actorUserId, actorRole, solutionId }) {
+    return saveSolutionVersion({
+      actorUserId,
+      actorRole,
+      solutionId,
+      status: 'published',
+      visibility: 'team'
+    });
+  }
+
+  function withdrawSolution({ actorUserId, actorRole, solutionId }) {
+    return saveSolutionVersion({
+      actorUserId,
+      actorRole,
+      solutionId,
+      status: 'withdrawn',
+      visibility: 'private'
+    });
+  }
+
   return {
     createKnowledgeDraft,
     saveKnowledgeVersion,
     getKnowledge,
     searchKnowledge,
+    listKnowledge,
     createSolutionDraft,
     saveSolutionVersion,
     getSolution,
-    listSolutions
+    listSolutions,
+    publishKnowledge,
+    withdrawKnowledge,
+    publishSolution,
+    withdrawSolution
   };
 }
 

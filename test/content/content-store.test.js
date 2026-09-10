@@ -94,3 +94,40 @@ test('creates immutable solution versions and preserves source identifiers witho
   ]);
   assert.equal(detail.versionHistory.length, 2);
 });
+
+test('publishes and withdraws content through immutable visibility transition versions', (t) => {
+  const { store } = fixture(t);
+  const knowledge = store.createKnowledgeDraft({
+    actorUserId: 'member-a', title: 'Private GPU review', markdown: '# GPU\nprivate draft'
+  });
+  const publishedKnowledge = store.publishKnowledge({ actorUserId: 'member-a', documentId: knowledge.id });
+  assert.deepEqual(
+    [publishedKnowledge.version, publishedKnowledge.status, publishedKnowledge.visibility], [2, 'published', 'team']
+  );
+  assert.equal(store.getKnowledge({ actorUserId: 'member-b', documentId: knowledge.id, includeContent: true }).markdown, '# GPU\nprivate draft');
+  const withdrawnKnowledge = store.withdrawKnowledge({ actorUserId: 'member-a', documentId: knowledge.id });
+  assert.deepEqual(
+    [withdrawnKnowledge.version, withdrawnKnowledge.status, withdrawnKnowledge.visibility], [3, 'withdrawn', 'private']
+  );
+  assert.throws(
+    () => store.getKnowledge({ actorUserId: 'member-b', documentId: knowledge.id }),
+    (error) => error.code === 'CONTENT_NOT_FOUND'
+  );
+
+  const solution = store.createSolutionDraft({
+    actorUserId: 'member-a', title: 'Private cluster solution', solutionMarkdown: '# Cluster\nprivate'
+  });
+  assert.equal(store.publishSolution({ actorUserId: 'member-a', solutionId: solution.id }).version, 2);
+  assert.equal(store.withdrawSolution({ actorUserId: 'member-a', solutionId: solution.id }).status, 'withdrawn');
+});
+
+test('lists an owner draft and a separately published team knowledge document without markdown', (t) => {
+  const { store } = fixture(t);
+  const own = store.createKnowledgeDraft({ actorUserId: 'member-a', title: 'Own draft', markdown: '# Own\nprivate' });
+  const team = store.createKnowledgeDraft({
+    actorUserId: 'member-b', title: 'Team baseline', markdown: '# Team\nshared', visibility: 'team', status: 'published'
+  });
+  const rows = store.listKnowledge({ actorUserId: 'member-a' });
+  assert.deepEqual(rows.map((item) => item.id), [team.id, own.id]);
+  assert.equal('markdown' in rows[0], false);
+});

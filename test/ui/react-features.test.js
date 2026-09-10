@@ -70,6 +70,23 @@ test('knowledge page exposes search, authoring, and upload workflows', async () 
   });
 });
 
+test('content pages show private state and explicit in-page publish or withdraw controls', async () => {
+  await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
+    const html = renderToStaticMarkup(React.createElement(KnowledgePage, {
+      initialItems: [{ id: 'knowledge-1', title: 'GPU 草稿', status: 'draft', visibility: 'private', version: 1 }]
+    }));
+    assert.match(html, /私有草稿/);
+    assert.match(html, />发布到团队</);
+  });
+  await withViteModule('features/solutions/SolutionsPage.jsx', ({ SolutionsPage }) => {
+    const html = renderToStaticMarkup(React.createElement(SolutionsPage, {
+      initialItems: [{ id: 'solution-1', title: '团队方案', status: 'published', visibility: 'team', version: 2 }]
+    }));
+    assert.match(html, /团队已发布/);
+    assert.match(html, />撤回团队</);
+  });
+});
+
 test('Skill center exposes private draft creation and editing controls', async () => {
   await withViteModule('features/skills/SkillsPage.jsx', ({ SkillsPage }) => {
     const skill = {

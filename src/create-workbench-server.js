@@ -32,6 +32,7 @@ const { createSkillInstallationFiles } = require('./skills/skill-installation-fi
 const { createSkillInstallationService } = require('./skills/skill-installation-service');
 const { createSkillWorkspaceSync } = require('./skills/skill-workspace-sync');
 const { createContentStore } = require('./content/content-store');
+const { createContentRouter } = require('./modules/content/routes');
 
 function createWorkbenchServer({
   config,
@@ -194,6 +195,7 @@ app.use('/api/skills', createSkillRouter({
   validationService: skillValidationService,
   installationService: skillInstallationService
 }));
+app.use('/api/content', createContentRouter({ store: contentStore, requestAuditor }));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);
