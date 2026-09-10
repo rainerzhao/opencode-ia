@@ -78,6 +78,31 @@ function createFairQueue({ maxQueuedPerUser }) {
     return null;
   }
 
+  async function nextEligibleAsync(predicate = async () => true) {
+    if (typeof predicate !== 'function') throw new TypeError('queue eligibility check is invalid');
+    const usersToInspect = ring.length;
+    for (let index = 0; index < usersToInspect; index += 1) {
+      const userId = ring.shift();
+      const userQueue = queues.get(userId);
+      if (!userQueue || userQueue.length === 0) {
+        queues.delete(userId);
+        continue;
+      }
+      const item = userQueue[0];
+      if (!await predicate(item)) {
+        ring.push(userId);
+        continue;
+      }
+      userQueue.shift();
+      jobIds.delete(item.id);
+      totalQueued -= 1;
+      if (userQueue.length > 0) ring.push(userId);
+      else queues.delete(userId);
+      return item;
+    }
+    return null;
+  }
+
   function remove(jobId) {
     const id = requiredString(jobId, 'queued job id');
     if (!jobIds.has(id)) return null;
@@ -104,7 +129,7 @@ function createFairQueue({ maxQueuedPerUser }) {
     };
   }
 
-  return { canEnqueue, enqueue, nextEligible, remove, snapshot };
+  return { canEnqueue, enqueue, nextEligible, nextEligibleAsync, remove, snapshot };
 }
 
 module.exports = { createFairQueue };

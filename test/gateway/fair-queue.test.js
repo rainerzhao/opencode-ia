@@ -35,6 +35,18 @@ test('skips temporarily ineligible users without starving eligible work', () => 
   assert.equal(queue.nextEligible().id, 'a-1');
 });
 
+test('awaits asynchronous eligibility without changing round-robin or FIFO order', async () => {
+  const queue = createFairQueue({ maxQueuedPerUser: 3 });
+  queue.enqueue(job('a-1', 'user-a'));
+  queue.enqueue(job('a-2', 'user-a'));
+  queue.enqueue(job('b-1', 'user-b'));
+
+  assert.equal((await queue.nextEligibleAsync(async (item) => item.userId !== 'user-a')).id, 'b-1');
+  assert.equal((await queue.nextEligibleAsync(async () => true)).id, 'a-1');
+  assert.equal((await queue.nextEligibleAsync(async () => true)).id, 'a-2');
+  assert.equal(await queue.nextEligibleAsync(async () => true), null);
+});
+
 test('rejects a fourth queued job for one user without affecting other users', () => {
   const queue = createFairQueue({ maxQueuedPerUser: 3 });
   for (const id of ['a-1', 'a-2', 'a-3']) queue.enqueue(job(id, 'user-a'));
