@@ -16,6 +16,7 @@ test('persists private Gateway conversations, jobs, ordered events, bindings, an
     DELETE FROM users
     WHERE id IN ('gateway-mysql-user-a', 'gateway-mysql-user-b')
   `);
+  await db.query("DELETE FROM gateway_workers WHERE id = 'gateway-mysql-worker-1'");
   const now = new Date('2026-09-10T12:00:00.000Z');
   const timestamp = () => new Date(now.getTime() + (now.setUTCSeconds(now.getUTCSeconds() + 1) - now.getTime())).toISOString();
   await db.query(`

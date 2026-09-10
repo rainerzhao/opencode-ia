@@ -70,6 +70,10 @@ function discoveredSkillNames(value) {
   return [];
 }
 
+function isPromise(value) {
+  return value !== null && typeof value === 'object' && typeof value.then === 'function';
+}
+
 function createGatewayService({
   store,
   pool,
@@ -104,10 +108,24 @@ function createGatewayService({
   let unsubscribeStatuses = null;
   let recoveryReport = null;
   const runtimeRecoveries = new Map();
+  const workerMetadataOperations = new Set();
   const validationOperations = new Set();
   const validationControllers = new Set();
   let activeValidations = 0;
   let validationTail = Promise.resolve();
+
+  function trackWorkerMetadata(operation) {
+    if (!isPromise(operation)) return operation;
+    workerMetadataOperations.add(operation);
+    operation.then(
+      () => workerMetadataOperations.delete(operation),
+      () => {
+        workerMetadataOperations.delete(operation);
+        logger.error('Gateway worker metadata persistence failed');
+      }
+    );
+    return operation;
+  }
 
   function workspaceFor(item) {
     const userSegment = safeSegment(item.userId, 'user id');
@@ -142,16 +160,16 @@ function createGatewayService({
     else runningConversations.delete(item.conversationId);
   }
 
-  function transitionIfRunning(context, event, errorCode) {
-    const job = store.getJob({ id: context.item.id });
+  async function transitionIfRunning(context, event, errorCode) {
+    const job = await store.getJob({ id: context.item.id });
     if (job?.status !== 'running') return job;
-    const transitioned = store.transitionJob({
+    const transitioned = await store.transitionJob({
       jobId: context.item.id,
       userId: context.item.userId,
       event,
       ...(errorCode ? { errorCode } : {})
     });
-    publishConversation(context.item.conversationId, context.item.userId);
+    await publishConversation(context.item.conversationId, context.item.userId);
     return transitioned;
   }
 
@@ -165,11 +183,11 @@ function createGatewayService({
     }
   }
 
-  function publishConversation(conversationId, userId) {
+  async function publishConversation(conversationId, userId) {
     const listeners = subscriptions.get(conversationId);
     if (!listeners?.size) return;
     const minimum = Math.min(...[...listeners].map((listener) => listener.cursor));
-    const events = store.listEventsAfter({
+    const events = await store.listEventsAfter({
       conversationId,
       ownerUserId: userId,
       afterSequence: minimum
@@ -184,13 +202,13 @@ function createGatewayService({
     let directory;
     let timeout;
     try {
-      store.transitionJob({
+      await store.transitionJob({
         jobId: item.id,
         userId: item.userId,
         event: 'start',
         workerId: lease.workerId
       });
-      publishConversation(item.conversationId, item.userId);
+      await publishConversation(item.conversationId, item.userId);
       directory = workspaceFor(item);
       context.directory = directory;
       workspacePreparer?.prepare({ userId: item.userId, directory });
@@ -199,10 +217,10 @@ function createGatewayService({
         context.controller.abort();
       }, jobTimeoutMs);
       timeout.unref();
-      let binding = store.getOpenCodeSession({ conversationId: item.conversationId });
+      let binding = await store.getOpenCodeSession({ conversationId: item.conversationId });
       if (binding?.recoveryStatus !== 'active' || binding?.workspacePath !== directory) binding = null;
       if (!binding) {
-        const conversation = store.getOwnedConversation({
+        const conversation = await store.getOwnedConversation({
           id: item.conversationId,
           ownerUserId: item.userId
         });
@@ -215,7 +233,7 @@ function createGatewayService({
         if (context.cancelled || context.interrupted || context.timedOut) {
           throw serviceError('GATEWAY_EXECUTION_STOPPED', 'gateway execution stopped');
         }
-        binding = store.bindOpenCodeSession({
+        binding = await store.bindOpenCodeSession({
           id: idFactory(),
           conversationId: item.conversationId,
           opencodeSessionId: session.id,
@@ -224,7 +242,7 @@ function createGatewayService({
         });
       }
       context.binding = binding;
-      store.attachJobBinding({
+      await store.attachJobBinding({
         jobId: item.id,
         workerId: lease.workerId,
         bindingId: binding.id
@@ -245,14 +263,14 @@ function createGatewayService({
       if (!text.trim()) {
         throw serviceError('OPENCODE_EMPTY_RESPONSE', 'OpenCode returned no assistant text');
       }
-      store.appendEvent({
+      await store.appendEvent({
         conversationId: item.conversationId,
         jobId: item.id,
         type: GATEWAY_EVENT_TYPES.MESSAGE_DELTA,
         payload: { text }
       });
-      publishConversation(item.conversationId, item.userId);
-      transitionIfRunning(context, 'complete');
+      await publishConversation(item.conversationId, item.userId);
+      await transitionIfRunning(context, 'complete');
     } catch (error) {
       if (context.cancelled || context.interrupted) return;
       if (context.timedOut) {
@@ -262,14 +280,14 @@ function createGatewayService({
             directory: context.directory
           }).catch(() => {});
         }
-        transitionIfRunning(context, 'timeout', 'GATEWAY_JOB_TIMEOUT');
+        await transitionIfRunning(context, 'timeout', 'GATEWAY_JOB_TIMEOUT');
         return;
       }
       if (error?.code === 'OPENCODE_UNAVAILABLE') {
-        handleWorkerExit(pool.markUnhealthy(context.lease.workerId, error.code));
+        await handleWorkerExit(pool.markUnhealthy(context.lease.workerId, error.code));
         return;
       }
-      transitionIfRunning(context, 'fail', error.code || 'GATEWAY_EXECUTION_FAILED');
+      await transitionIfRunning(context, 'fail', error.code || 'GATEWAY_EXECUTION_FAILED');
       logger.error('Gateway job failed');
     } finally {
       if (timeout) clearTimeout(timeout);
@@ -298,12 +316,12 @@ function createGatewayService({
     });
   }
 
-  function dispatch() {
+  async function dispatch() {
     while (state === 'running' && active.size + activeValidations < globalRunning) {
       let selectedLease = null;
-      const item = queue.nextEligible((candidate) => {
+      const item = await queue.nextEligibleAsync(async (candidate) => {
         if (!canRun(candidate)) return false;
-        const binding = store.getOpenCodeSession({ conversationId: candidate.conversationId });
+        const binding = await store.getOpenCodeSession({ conversationId: candidate.conversationId });
         if (binding?.recoveryStatus === 'recovering') return false;
         selectedLease = pool.acquire({
           conversationId: candidate.conversationId,
@@ -323,22 +341,22 @@ function createGatewayService({
     return scheduling;
   }
 
-  function handleWorkerExit(event) {
+  async function handleWorkerExit(event) {
     for (const lease of event.leases || []) {
       const context = [...active.values()].find((item) => item.lease.token === lease.token);
       if (!context || context.interrupted) continue;
       context.interrupted = true;
       context.controller.abort();
-      transitionIfRunning(context, 'interrupt', event.reason || 'WORKER_EXITED');
+      await transitionIfRunning(context, 'interrupt', event.reason || 'WORKER_EXITED');
     }
     schedule();
   }
 
-  function interruptQueuedConversation(binding) {
+  async function interruptQueuedConversation(binding) {
     let interrupted = 0;
-    for (const job of store.listQueuedJobs()) {
+    for (const job of await store.listQueuedJobs()) {
       if (job.conversationId !== binding.conversationId || !queue.remove(job.id)) continue;
-      store.transitionJob({
+      await store.transitionJob({
         jobId: job.id,
         userId: job.userId,
         event: 'interrupt',
@@ -355,7 +373,7 @@ function createGatewayService({
     // before any pool operation so that status callbacks cannot re-enter recovery.
     runtimeRecoveries.set(workerId, Promise.resolve());
     const recovery = (async () => {
-      for (const binding of store.listRecoveringSessions({ workerId })) {
+      for (const binding of await store.listRecoveringSessions({ workerId })) {
         if (state !== 'running') break;
         let lease;
         try {
@@ -370,24 +388,24 @@ function createGatewayService({
           if (session?.id !== binding.opencodeSessionId) {
             throw serviceError('OPENCODE_PROTOCOL_ERROR', 'restored session identity does not match');
           }
-          store.setSessionRecoveryStatus({
+          await store.setSessionRecoveryStatus({
             conversationId: binding.conversationId,
             recoveryStatus: 'active',
             workerId
           });
         } catch (error) {
-          store.setSessionRecoveryStatus({
+          await store.setSessionRecoveryStatus({
             conversationId: binding.conversationId,
             recoveryStatus: 'unavailable',
             workerId: null
           });
-          store.appendEvent({
+          await store.appendEvent({
             conversationId: binding.conversationId,
             type: GATEWAY_EVENT_TYPES.CONVERSATION_RECOVERY_BOUNDARY,
             payload: { reason: error?.code || 'OPENCODE_SESSION_UNAVAILABLE' }
           });
-          interruptQueuedConversation(binding);
-          publishConversation(binding.conversationId, binding.ownerUserId);
+          await interruptQueuedConversation(binding);
+          await publishConversation(binding.conversationId, binding.ownerUserId);
         } finally {
           if (lease) pool.release(lease);
         }
@@ -403,7 +421,7 @@ function createGatewayService({
   }
 
   function handleWorkerStatus(worker) {
-    store.upsertWorker({
+    const persisted = store.upsertWorker({
       id: worker.id,
       instanceId: worker.instanceId,
       status: worker.status,
@@ -412,12 +430,14 @@ function createGatewayService({
       version: worker.version,
       capacity: worker.capacity
     });
-    if (state !== 'running') return;
-    if (worker.status === 'unhealthy') {
-      store.markWorkerSessionsRecovering({ workerId: worker.id });
-      return;
-    }
-    if (worker.status === 'healthy') recoverRuntimeSessions(worker.id);
+    const continueAfterPersistence = () => {
+      if (state !== 'running') return null;
+      if (worker.status === 'unhealthy') return store.markWorkerSessionsRecovering({ workerId: worker.id });
+      if (worker.status === 'healthy') return recoverRuntimeSessions(worker.id);
+      return null;
+    };
+    if (!isPromise(persisted)) return continueAfterPersistence();
+    return trackWorkerMetadata(persisted.then(continueAfterPersistence));
   }
 
   async function start() {
@@ -430,6 +450,7 @@ function createGatewayService({
       fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
       fs.chmodSync(workspaceRoot, 0o700);
       recoveryReport = await recoverGateway({ store, pool, queue, workspaceRoot });
+      await Promise.all([...workerMetadataOperations]);
       state = 'running';
       await schedule();
       return snapshot();
@@ -472,14 +493,14 @@ function createGatewayService({
   }
 
   async function cancel({ conversationId, jobId, userId }) {
-    const job = store.getJob({ id: jobId, userId });
+    const job = await store.getJob({ id: jobId, userId });
     if (!job || (conversationId && job.conversationId !== conversationId)) {
       throw serviceError('JOB_NOT_FOUND', 'job was not found');
     }
     if (job.status === 'queued') {
       queue.remove(job.id);
-      const cancelled = store.transitionJob({ jobId, userId, event: 'cancel' });
-      publishConversation(job.conversationId, userId);
+      const cancelled = await store.transitionJob({ jobId, userId, event: 'cancel' });
+      await publishConversation(job.conversationId, userId);
       return cancelled;
     }
     if (job.status !== 'running') return job;
@@ -661,7 +682,7 @@ function createGatewayService({
     for (const context of active.values()) {
       context.interrupted = true;
       context.controller.abort();
-      transitionIfRunning(context, 'interrupt', 'GATEWAY_STOPPED');
+      await transitionIfRunning(context, 'interrupt', 'GATEWAY_STOPPED');
     }
     for (const controller of validationControllers) controller.abort();
     await Promise.allSettled([...active.values()].map((context) => context.promise));
@@ -678,23 +699,7 @@ function createGatewayService({
     return { queuedJobs: queue.snapshot().totalQueued };
   }
 
-  function subscribe({ conversationId, userId, afterSequence = 0, onEvent }) {
-    if (typeof onEvent !== 'function') throw new TypeError('gateway event listener is required');
-    const conversation = store.getOwnedConversation({ id: conversationId, ownerUserId: userId });
-    if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', 'conversation was not found');
-    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-      throw serviceError('INVALID_EVENT_SEQUENCE', 'event sequence is invalid');
-    }
-    const latestSequence = store.getLatestEventSequence({
-      conversationId,
-      ownerUserId: userId
-    });
-    const replayEvents = store.listEventsAfter({
-      conversationId,
-      ownerUserId: userId,
-      afterSequence,
-      limit: 1000
-    }) || [];
+  function createSubscription({ conversationId, userId, afterSequence, onEvent }, conversation, latestSequence, replayEvents) {
     const subscription = { cursor: afterSequence, onEvent, userId };
     const replayTruncated = replayEvents.length === 1000 && replayEvents.at(-1).sequence < latestSequence;
     if (afterSequence === 0 || afterSequence > latestSequence || replayTruncated) {
@@ -726,6 +731,26 @@ function createGatewayService({
       listeners.delete(subscription);
       if (listeners.size === 0) subscriptions.delete(conversationId);
     };
+  }
+
+  function subscribe({ conversationId, userId, afterSequence = 0, onEvent }) {
+    if (typeof onEvent !== 'function') throw new TypeError('gateway event listener is required');
+    if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+      throw serviceError('INVALID_EVENT_SEQUENCE', 'event sequence is invalid');
+    }
+    const afterConversation = (conversation) => {
+      if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', 'conversation was not found');
+      const latest = store.getLatestEventSequence({ conversationId, ownerUserId: userId });
+      const events = store.listEventsAfter({ conversationId, ownerUserId: userId, afterSequence, limit: 1000 });
+      if (isPromise(latest) || isPromise(events)) {
+        return Promise.all([latest, events]).then(([latestSequence, replayEvents]) =>
+          createSubscription({ conversationId, userId, afterSequence, onEvent }, conversation, latestSequence, replayEvents || [])
+        );
+      }
+      return createSubscription({ conversationId, userId, afterSequence, onEvent }, conversation, latest, events || []);
+    };
+    const conversation = store.getOwnedConversation({ id: conversationId, ownerUserId: userId });
+    return isPromise(conversation) ? conversation.then(afterConversation) : afterConversation(conversation);
   }
 
   function snapshot() {

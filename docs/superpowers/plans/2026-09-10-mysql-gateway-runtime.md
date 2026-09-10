@@ -47,11 +47,11 @@
 - Consumes: Task 1 Store contract.
 - Produces: a Service whose dispatch, execution, cancellation, subscription and runtime recovery await either Store type safely.
 
-- [ ] **Step 1: Add one failing behavior test at a time for async dispatch and execution.**
-- [ ] **Step 2: Verify each test fails for the missing await path.**
-- [ ] **Step 3: Implement the smallest compatible async path.**
-- [ ] **Step 4: Run targeted Gateway regressions.**
-- [ ] **Step 5: Update product status, verify, commit and push.**
+- [x] **Step 1: Add one failing behavior test at a time for async dispatch, execution and event replay.**
+- [x] **Step 2: Verify failures for the missing await path and a delayed Worker-metadata startup race.**
+- [x] **Step 3: Implement compatible async dispatch, execution, cancellation, recovery and subscription paths.**
+- [x] **Step 4: Run targeted Gateway regressions and a real MySQL durable Conversation.**
+- [x] **Step 5: Update product status, verify, commit and push follows this accepted evidence.**
 
 ### Task 3: Complete HTTP/WebSocket administration and safe composition
 
