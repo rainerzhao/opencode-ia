@@ -10,7 +10,7 @@ function routeError(code, message, status) {
 }
 
 function asyncRoute(handler) {
-  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch((error) => next(mapStoreError(error)));
 }
 
 function conversationId(value) {
@@ -39,20 +39,14 @@ function createConversationRouter({ store, requestAuditor }) {
   if (!store || !requestAuditor) throw new TypeError('conversation route dependencies are required');
   const router = express.Router();
 
-  router.get('/', (req, res, next) => {
-    try {
-      const status = req.query.status || 'active';
-      const conversations = store.listConversations({
-        ownerUserId: req.auth.user.id,
-        status
-      });
-      res.json({ conversations });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  router.get('/', asyncRoute(async (req, res) => {
+    const status = req.query.status || 'active';
+    const conversations = await store.listConversations({ ownerUserId: req.auth.user.id, status });
+    res.json({ conversations });
+  }));
 
-  router.post('/', (req, res, next) => {
-    try {
-      const conversation = store.createConversation({
+  router.post('/', asyncRoute(async (req, res) => {
+      const conversation = await store.createConversation({
         ownerUserId: req.auth.user.id,
         title: req.body?.title,
         defaultModel: req.body?.defaultModel
@@ -64,23 +58,19 @@ function createConversationRouter({ store, requestAuditor }) {
         metadata: { visibility: 'private' }
       });
       res.status(201).json({ conversation });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.get('/:conversationId', (req, res, next) => {
-    try {
-      const conversation = store.getOwnedConversation({
+  router.get('/:conversationId', asyncRoute(async (req, res) => {
+      const conversation = await store.getOwnedConversation({
         id: conversationId(req.params.conversationId),
         ownerUserId: req.auth.user.id
       });
       if (!conversation) throw routeError('CONVERSATION_NOT_FOUND', 'conversation was not found', 404);
       res.json({ conversation });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.patch('/:conversationId', (req, res, next) => {
-    try {
-      const conversation = store.updateConversation({
+  router.patch('/:conversationId', asyncRoute(async (req, res) => {
+      const conversation = await store.updateConversation({
         id: conversationId(req.params.conversationId),
         ownerUserId: req.auth.user.id,
         title: req.body?.title
@@ -92,12 +82,10 @@ function createConversationRouter({ store, requestAuditor }) {
         metadata: {}
       });
       res.json({ conversation });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.delete('/:conversationId', (req, res, next) => {
-    try {
-      const conversation = store.archiveConversation({
+  router.delete('/:conversationId', asyncRoute(async (req, res) => {
+      const conversation = await store.archiveConversation({
         id: conversationId(req.params.conversationId),
         ownerUserId: req.auth.user.id
       });
@@ -108,8 +96,7 @@ function createConversationRouter({ store, requestAuditor }) {
         metadata: {}
       });
       res.status(204).end();
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
   return router;
 }
@@ -121,7 +108,7 @@ function createConversationAdminRouter({ store, requireAdmin }) {
   const router = express.Router();
   router.use(requireAdmin);
   router.get('/', asyncRoute(async (_req, res) => {
-    res.json({ conversations: store.listConversationMetadata() });
+    res.json({ conversations: await store.listConversationMetadata() });
   }));
   return router;
 }
