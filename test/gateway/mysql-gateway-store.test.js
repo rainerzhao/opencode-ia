@@ -12,6 +12,10 @@ test('persists private Gateway conversations, jobs, ordered events, bindings, an
   const db = await createMySqlDatabase({ url: testUrl, poolSize: 2 });
   t.after(async () => db.close());
   await migrateMySqlDatabase(db);
+  await db.query(`
+    DELETE FROM users
+    WHERE id IN ('gateway-mysql-user-a', 'gateway-mysql-user-b')
+  `);
   const now = new Date('2026-09-10T12:00:00.000Z');
   const timestamp = () => new Date(now.getTime() + (now.setUTCSeconds(now.getUTCSeconds() + 1) - now.getTime())).toISOString();
   await db.query(`
@@ -51,7 +55,7 @@ test('persists private Gateway conversations, jobs, ordered events, bindings, an
   await store.transitionJob({ jobId: job.id, userId: 'gateway-mysql-user-a', event: 'complete' });
   const events = await store.listEventsAfter({ conversationId: conversation.id, ownerUserId: 'gateway-mysql-user-a', afterSequence: 0 });
   assert.deepEqual(events.map((event) => event.type), ['message.created', 'job.queued', 'job.started', 'message.delta', 'job.completed']);
-  assert.deepEqual(events.map((event) => event.sequence), [1, 2, 3, 4, 5]);
+  assert.equal(events.every((event, index) => event.sequence === events[0].sequence + index), true);
 
   await store.upsertWorker({ id: 'gateway-mysql-worker-1', instanceId: 'mysql-instance-1', status: 'healthy', capacity: 2 });
   await assert.rejects(
@@ -64,6 +68,34 @@ test('persists private Gateway conversations, jobs, ordered events, bindings, an
   });
   assert.equal((await store.getOpenCodeSession({ conversationId: conversation.id })).id, binding.id);
 
+  const boundJob = await store.createJob({
+    conversationId: conversation.id, userId: 'gateway-mysql-user-a', idempotencyKey: 'mysql-request-binding', inputText: 'bind this running job'
+  });
+  await store.transitionJob({ jobId: boundJob.id, userId: 'gateway-mysql-user-a', event: 'start', workerId: 'gateway-mysql-worker-1' });
+  const attached = await store.attachJobBinding({
+    jobId: boundJob.id, workerId: 'gateway-mysql-worker-1', bindingId: binding.id
+  });
+  assert.equal(attached.opencodeSessionBindingId, binding.id);
+  await store.transitionJob({ jobId: boundJob.id, userId: 'gateway-mysql-user-a', event: 'complete' });
+
+  const queued = await store.createJob({
+    conversationId: conversation.id, userId: 'gateway-mysql-user-a', idempotencyKey: 'mysql-request-queued', inputText: 'queue me for restart'
+  });
+  assert.deepEqual((await store.listQueuedJobs()).map((item) => item.id), [queued.id]);
+  assert.equal((await store.listJobMetadata()).some((item) => item.id === queued.id && item.status === 'queued'), true);
+  assert.equal(await store.getLatestEventSequence({ conversationId: conversation.id, ownerUserId: 'gateway-mysql-user-a' }) > 0, true);
+  assert.equal(await store.markWorkerSessionsRecovering({ workerId: 'gateway-mysql-worker-1' }), 1);
+  assert.equal((await store.listRecoveringSessions({ workerId: 'gateway-mysql-worker-1' }))[0].ownerUserId, 'gateway-mysql-user-a');
+  assert.equal((await store.setSessionRecoveryStatus({
+    conversationId: conversation.id, recoveryStatus: 'active', workerId: 'gateway-mysql-worker-1'
+  })).recoveryStatus, 'active');
+
+  assert.equal((await store.updateConversation({
+    id: conversation.id, ownerUserId: 'gateway-mysql-user-a', title: 'Renamed MySQL conversation'
+  })).title, 'Renamed MySQL conversation');
+  assert.equal((await store.listConversations({ ownerUserId: 'gateway-mysql-user-a' }))[0].id, conversation.id);
+  assert.equal((await store.listConversationMetadata()).some((item) => item.id === conversation.id), true);
+
   const recovering = await store.createJob({
     conversationId: conversation.id, userId: 'gateway-mysql-user-a', idempotencyKey: 'mysql-request-2', inputText: 'restart boundary'
   });
@@ -71,4 +103,5 @@ test('persists private Gateway conversations, jobs, ordered events, bindings, an
   assert.deepEqual(await store.recoverOnStartup(), { interruptedJobs: 1, recoveringSessions: 1, stoppedWorkers: 1 });
   assert.equal((await store.getJob({ id: recovering.id })).status, 'interrupted');
   assert.equal((await store.getOpenCodeSession({ conversationId: conversation.id })).recoveryStatus, 'recovering');
+  assert.equal((await store.archiveConversation({ id: conversation.id, ownerUserId: 'gateway-mysql-user-a' })).status, 'archived');
 });

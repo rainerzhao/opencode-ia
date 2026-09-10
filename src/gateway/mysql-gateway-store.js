@@ -56,7 +56,33 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     catch (cause) { if (cause?.code === 'ER_NO_REFERENCED_ROW_2') throw error('USER_NOT_FOUND', 'user was not found'); throw cause; }
     return conversation(await db.one('SELECT * FROM conversations WHERE id = ?', [id]));
   }
+  async function listConversations({ ownerUserId, status = 'active', limit = 50, offset = 0 }) {
+    const owner = required(ownerUserId, 'INVALID_USER_ID', 'user id is invalid');
+    if (status !== 'active' && status !== 'archived') throw error('INVALID_CONVERSATION_STATUS', 'conversation status is invalid');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw error('INVALID_LIMIT', 'conversation limit is invalid');
+    if (!Number.isInteger(offset) || offset < 0) throw error('INVALID_OFFSET', 'conversation offset is invalid');
+    return (await db.many('SELECT * FROM conversations WHERE owner_user_id = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?', [owner, status, limit, offset])).map(conversation);
+  }
   async function getOwnedConversation({ id, ownerUserId }) { return conversation(await owned(db, id, ownerUserId)); }
+  async function updateConversation({ id, ownerUserId, title }) {
+    const target = await owned(db, id, ownerUserId);
+    if (!target) throw error('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (target.status !== 'active') throw error('CONVERSATION_ARCHIVED', 'archived conversation cannot be changed');
+    const normalizedTitle = required(title, 'INVALID_CONVERSATION_TITLE', 'conversation title is invalid', { max: 200 });
+    await db.query('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?', [normalizedTitle, timestamp(clock), id]);
+    return conversation(await db.one('SELECT * FROM conversations WHERE id = ?', [id]));
+  }
+  async function archiveConversation({ id, ownerUserId }) {
+    const target = await owned(db, id, ownerUserId);
+    if (!target) throw error('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (target.status !== 'archived') await db.query("UPDATE conversations SET status = 'archived', updated_at = ? WHERE id = ?", [timestamp(clock), id]);
+    return conversation(await db.one('SELECT * FROM conversations WHERE id = ?', [id]));
+  }
+  async function listConversationMetadata({ limit = 200, offset = 0 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw error('INVALID_LIMIT', 'conversation limit is invalid');
+    if (!Number.isInteger(offset) || offset < 0) throw error('INVALID_OFFSET', 'conversation offset is invalid');
+    return (await db.many('SELECT id, owner_user_id, status, created_at, updated_at FROM conversations ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?', [limit, offset])).map((row) => ({ id: row.id, ownerUserId: row.owner_user_id, status: row.status, createdAt: date(row, 'created_at'), updatedAt: date(row, 'updated_at') }));
+  }
   async function createJob({ conversationId, userId, idempotencyKey, inputText }) {
     const conversationIdValue = required(conversationId, 'INVALID_CONVERSATION_ID', 'conversation id is invalid'); const userIdValue = required(userId, 'INVALID_USER_ID', 'user id is invalid');
     const key = required(idempotencyKey, 'INVALID_IDEMPOTENCY_KEY', 'idempotency key is invalid', { max: 200 }); const input = required(inputText, 'INVALID_JOB_INPUT', 'job input is invalid', { max: 100000, lines: true });
@@ -72,6 +98,10 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     });
   }
   async function getJob({ id, userId } = {}) { const row = await db.one(`SELECT * FROM gateway_jobs WHERE id = ?${userId ? ' AND user_id = ?' : ''}`, userId ? [id, userId] : [id]); return job(row); }
+  async function listQueuedJobs() { return (await db.many("SELECT * FROM gateway_jobs WHERE status = 'queued' ORDER BY created_at, id")).map(job); }
+  async function listJobMetadata() {
+    return (await db.many('SELECT id, conversation_id AS conversationId, user_id AS userId, worker_id AS workerId, status, created_at AS createdAt, started_at AS startedAt, finished_at AS finishedAt FROM gateway_jobs ORDER BY created_at DESC, id DESC LIMIT 200')).map((row) => ({ ...row, createdAt: date(row, 'createdAt'), startedAt: date(row, 'startedAt'), finishedAt: date(row, 'finishedAt') }));
+  }
   async function transition({ jobId, userId, event: action, errorCode = null, workerId, bindingId }) {
     return db.transaction(async (tx) => {
       const row = await tx.one(`SELECT * FROM gateway_jobs WHERE id = ?${userId ? ' AND user_id = ?' : ''}`, userId ? [jobId, userId] : [jobId]); if (!row) throw error('JOB_NOT_FOUND', 'job was not found');
@@ -81,6 +111,11 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     });
   }
   async function listEventsAfter({ conversationId, ownerUserId, afterSequence = 0, limit = 500 }) { if (!await owned(db, conversationId, ownerUserId)) return null; if (!Number.isInteger(afterSequence) || afterSequence < 0) throw error('INVALID_EVENT_SEQUENCE', 'event sequence is invalid'); if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw error('INVALID_LIMIT', 'event limit is invalid'); return (await db.many('SELECT * FROM gateway_events WHERE conversation_id = ? AND sequence > ? ORDER BY sequence LIMIT ?', [conversationId, afterSequence, limit])).map(event); }
+  async function getLatestEventSequence({ conversationId, ownerUserId }) {
+    if (!await owned(db, conversationId, ownerUserId)) return null;
+    const row = await db.one('SELECT MAX(sequence) AS latest_sequence FROM gateway_events WHERE conversation_id = ?', [conversationId]);
+    return Number(row?.latest_sequence || 0);
+  }
   async function upsertWorker({ id, instanceId, status, endpoint = null, processId = null, version = null, capacity = 1, lastHeartbeatAt = null }) {
     const workerId = required(id, 'INVALID_WORKER_ID', 'worker id is invalid'); const instance = required(instanceId, 'INVALID_WORKER_INSTANCE', 'worker instance is invalid'); if (!WORKER_STATUSES.has(status)) throw error('INVALID_WORKER_STATUS', 'worker status is invalid'); if (!Number.isInteger(capacity) || capacity < 1 || capacity > 16) throw error('INVALID_WORKER_CAPACITY', 'worker capacity is invalid'); if (processId !== null && (!Number.isInteger(processId) || processId < 1)) throw error('INVALID_WORKER_PROCESS', 'worker process id is invalid'); const now = timestamp(clock);
     await db.query('INSERT INTO gateway_workers (id, instance_id, status, endpoint, process_id, version, capacity, last_heartbeat_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE instance_id = VALUES(instance_id), status = VALUES(status), endpoint = VALUES(endpoint), process_id = VALUES(process_id), version = VALUES(version), capacity = VALUES(capacity), last_heartbeat_at = VALUES(last_heartbeat_at), updated_at = VALUES(updated_at)', [workerId, instance, status, optional(endpoint, 'INVALID_WORKER_ENDPOINT', 'worker endpoint is invalid', { max: 500 }), processId, optional(version, 'INVALID_WORKER_VERSION', 'worker version is invalid', { max: 100 }), capacity, toMySqlTimestamp(lastHeartbeatAt), now, now]); return worker(await db.one('SELECT * FROM gateway_workers WHERE id = ?', [workerId]));
@@ -89,11 +124,38 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     const bindingId = required(id, 'INVALID_SESSION_BINDING_ID', 'session binding id is invalid'); if (!await db.one('SELECT id FROM conversations WHERE id = ?', [conversationId])) throw error('CONVERSATION_NOT_FOUND', 'conversation was not found'); const openCodeId = required(opencodeSessionId, 'INVALID_OPENCODE_SESSION_ID', 'OpenCode session id is invalid', { max: 200 }); const path = required(workspacePath, 'INVALID_WORKSPACE_PATH', 'workspace path is invalid', { max: 4096, trim: false }); if (!RECOVERY_STATUSES.has(recoveryStatus)) throw error('INVALID_RECOVERY_STATUS', 'recovery status is invalid'); const now = timestamp(clock);
     await db.query('INSERT INTO opencode_sessions (id, conversation_id, opencode_session_id, worker_id, workspace_path, workspace_path_sha256, recovery_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, SHA2(?, 256), ?, ?, ?) ON DUPLICATE KEY UPDATE opencode_session_id = VALUES(opencode_session_id), worker_id = VALUES(worker_id), workspace_path = VALUES(workspace_path), workspace_path_sha256 = VALUES(workspace_path_sha256), recovery_status = VALUES(recovery_status), updated_at = VALUES(updated_at)', [bindingId, conversationId, openCodeId, workerId, path, path, recoveryStatus, now, now]); return session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId]));
   }
+  async function listRecoveringSessions({ workerId } = {}) {
+    const workerIdValue = workerId === undefined ? null : required(workerId, 'INVALID_WORKER_ID', 'worker id is invalid');
+    return (await db.many("SELECT s.*, c.owner_user_id FROM opencode_sessions s JOIN conversations c ON c.id = s.conversation_id WHERE s.recovery_status = 'recovering' AND (? IS NULL OR s.worker_id = ?) ORDER BY s.created_at, s.id", [workerIdValue, workerIdValue])).map((row) => ({ ...session(row), ownerUserId: row.owner_user_id }));
+  }
+  async function markWorkerSessionsRecovering({ workerId }) {
+    const worker = required(workerId, 'INVALID_WORKER_ID', 'worker id is invalid');
+    const result = await db.query("UPDATE opencode_sessions SET recovery_status = 'recovering', updated_at = ? WHERE worker_id = ? AND recovery_status = 'active'", [timestamp(clock), worker]);
+    return Number(result.affectedRows);
+  }
+  async function setSessionRecoveryStatus({ conversationId, recoveryStatus, workerId = null }) {
+    if (!RECOVERY_STATUSES.has(recoveryStatus)) throw error('INVALID_RECOVERY_STATUS', 'recovery status is invalid');
+    const result = await db.query('UPDATE opencode_sessions SET recovery_status = ?, worker_id = ?, updated_at = ? WHERE conversation_id = ?', [recoveryStatus, workerId, timestamp(clock), conversationId]);
+    if (Number(result.affectedRows) !== 1) throw error('SESSION_BINDING_NOT_FOUND', 'session binding was not found');
+    return session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId]));
+  }
+  async function attachJobBinding({ jobId, workerId, bindingId }) {
+    return db.transaction(async (tx) => {
+      const target = await tx.one('SELECT * FROM gateway_jobs WHERE id = ?', [jobId]);
+      const binding = await tx.one('SELECT * FROM opencode_sessions WHERE id = ?', [bindingId]);
+      if (!target) throw error('JOB_NOT_FOUND', 'job was not found');
+      if (target.status !== 'running') throw error('INVALID_JOB_STATUS', 'job is not running');
+      if (!binding || binding.conversation_id !== target.conversation_id || binding.worker_id !== workerId) throw error('INVALID_SESSION_BINDING', 'session binding does not match the job');
+      const result = await tx.query("UPDATE gateway_jobs SET worker_id = ?, opencode_session_binding_id = ?, updated_at = ? WHERE id = ? AND status = 'running'", [workerId, bindingId, timestamp(clock), jobId]);
+      if (Number(result.affectedRows) !== 1) throw error('INVALID_JOB_STATUS', 'job is not running');
+      return job(await tx.one('SELECT * FROM gateway_jobs WHERE id = ?', [jobId]));
+    });
+  }
   async function recoverOnStartup() { return db.transaction(async (tx) => { const now = timestamp(clock); const running = await tx.many("SELECT * FROM gateway_jobs WHERE status = 'running' ORDER BY created_at, id"); for (const row of running) { await tx.query("UPDATE gateway_jobs SET status = 'interrupted', error_code = 'GATEWAY_RESTARTED', updated_at = ?, finished_at = ? WHERE id = ?", [now, now, row.id]); await insertEvent(tx, { conversationId: row.conversation_id, jobId: row.id, type: GATEWAY_EVENT_TYPES.JOB_INTERRUPTED, payload: { status: 'interrupted', errorCode: 'GATEWAY_RESTARTED' }, now }); } const sessions = await tx.query("UPDATE opencode_sessions SET recovery_status = 'recovering', updated_at = ? WHERE recovery_status = 'active'", [now]); const workers = await tx.query("UPDATE gateway_workers SET status = 'stopped', process_id = NULL, updated_at = ? WHERE status != 'stopped'", [now]); return { interruptedJobs: running.length, recoveringSessions: Number(sessions.affectedRows), stoppedWorkers: Number(workers.affectedRows) }; }); }
   async function getJobByIdempotency({ userId, idempotencyKey }) {
     return job(await db.one('SELECT * FROM gateway_jobs WHERE user_id = ? AND idempotency_key = ?', [userId, idempotencyKey]));
   }
-  return Object.freeze({ appendEvent: (input) => db.transaction((tx) => insertEvent(tx, input)), bindOpenCodeSession, createConversation, createJob, getJob, getJobByIdempotency, getOpenCodeSession: async ({ conversationId }) => session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId])), getOwnedConversation, listEventsAfter, recoverOnStartup, transitionJob: transition, upsertWorker });
+  return Object.freeze({ appendEvent: (input) => db.transaction((tx) => insertEvent(tx, input)), archiveConversation, attachJobBinding, bindOpenCodeSession, createConversation, createJob, getJob, getJobByIdempotency, getLatestEventSequence, getOpenCodeSession: async ({ conversationId }) => session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId])), getOwnedConversation, listConversationMetadata, listConversations, listEventsAfter, listJobMetadata, listQueuedJobs, listRecoveringSessions, markWorkerSessionsRecovering, recoverOnStartup, setSessionRecoveryStatus, transitionJob: transition, updateConversation, upsertWorker });
 }
 
 module.exports = { createMySqlGatewayStore };
