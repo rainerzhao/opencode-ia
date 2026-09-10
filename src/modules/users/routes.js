@@ -21,9 +21,9 @@ function createUserAdminRouter({ authService, authMiddleware }) {
   });
   router.use(requireAuth, adminOnly);
 
-  router.get('/', (req, res) => {
-    res.json({ users: authService.listUsers({ actor: req.auth }) });
-  });
+  router.get('/', asyncRoute(async (req, res) => {
+    res.json({ users: await authService.listUsers({ actor: req.auth }) });
+  }));
 
   router.post('/', requireCsrf, asyncRoute(async (req, res) => {
     const user = await authService.createUser({
@@ -47,24 +47,24 @@ function createUserAdminRouter({ authService, authMiddleware }) {
     res.status(204).end();
   }));
 
-  router.put('/:userId/status', requireCsrf, (req, res) => {
-    const user = authService.setUserStatus({
+  router.put('/:userId/status', requireCsrf, asyncRoute(async (req, res) => {
+    const user = await authService.setUserStatus({
       actor: req.auth,
       targetUserId: req.params.userId,
       status: req.body?.status,
       sourceIp: sourceIp(req)
     });
     res.json({ user });
-  });
+  }));
 
-  router.post('/:userId/sessions/revoke', requireCsrf, (req, res) => {
-    authService.revokeUserSessions({
+  router.post('/:userId/sessions/revoke', requireCsrf, asyncRoute(async (req, res) => {
+    await authService.revokeUserSessions({
       actor: req.auth,
       targetUserId: req.params.userId,
       sourceIp: sourceIp(req)
     });
     res.status(204).end();
-  });
+  }));
 
   return router;
 }

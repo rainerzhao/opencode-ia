@@ -21,11 +21,11 @@ function equalDigest(left, right) {
 function createAuthMiddleware({ authService }) {
   if (!authService) throw new TypeError('auth service is required');
 
-  function requireAuth(req, _res, next) {
+  async function requireAuth(req, _res, next) {
     try {
       const token = readCookie(req.headers.cookie, SESSION_COOKIE);
       req.authToken = token;
-      req.auth = authService.authenticate(token);
+      req.auth = await authService.authenticate(token);
       next();
     } catch (error) {
       next(error);
