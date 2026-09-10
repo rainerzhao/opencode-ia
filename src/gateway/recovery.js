@@ -24,8 +24,8 @@ async function recoverGateway({ store, pool, queue, workspaceRoot }) {
   if (typeof workspaceRoot !== 'string' || !path.isAbsolute(workspaceRoot)) {
     throw new TypeError('gateway recovery workspace root must be absolute');
   }
-  const report = store.recoverOnStartup();
-  const queuedJobs = store.listQueuedJobs();
+  const report = await store.recoverOnStartup();
+  const queuedJobs = await store.listQueuedJobs();
   // Rebuild from durable truth, including retries on the same service instance.
   while (queue.nextEligible()) {}
   try {
@@ -43,7 +43,7 @@ async function recoverGateway({ store, pool, queue, workspaceRoot }) {
   let restoredSessions = 0;
   let unavailableSessions = 0;
   const unavailableConversations = new Set();
-  for (const binding of store.listRecoveringSessions()) {
+  for (const binding of await store.listRecoveringSessions()) {
     let lease;
     try {
       const directory = assertWorkspace(workspaceRoot, binding.workspacePath);
@@ -61,19 +61,19 @@ async function recoverGateway({ store, pool, queue, workspaceRoot }) {
       if (session?.id !== binding.opencodeSessionId) {
         throw recoveryError('OPENCODE_PROTOCOL_ERROR', 'restored session identity does not match');
       }
-      store.setSessionRecoveryStatus({
+      await store.setSessionRecoveryStatus({
         conversationId: binding.conversationId,
         recoveryStatus: 'active',
         workerId: lease.workerId
       });
       restoredSessions += 1;
     } catch (error) {
-      store.setSessionRecoveryStatus({
+      await store.setSessionRecoveryStatus({
         conversationId: binding.conversationId,
         recoveryStatus: 'unavailable',
         workerId: null
       });
-      store.appendEvent({
+      await store.appendEvent({
         conversationId: binding.conversationId,
         type: GATEWAY_EVENT_TYPES.CONVERSATION_RECOVERY_BOUNDARY,
         payload: { reason: error?.code || 'OPENCODE_SESSION_UNAVAILABLE' }
@@ -88,7 +88,7 @@ async function recoverGateway({ store, pool, queue, workspaceRoot }) {
   let interruptedQueuedJobs = 0;
   for (const job of queuedJobs) {
     if (!unavailableConversations.has(job.conversationId) || !queue.remove(job.id)) continue;
-    store.transitionJob({
+    await store.transitionJob({
       jobId: job.id,
       userId: job.userId,
       event: 'interrupt',

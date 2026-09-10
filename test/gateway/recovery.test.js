@@ -142,6 +142,30 @@ test('keeps new conversations queued when no previous OpenCode session exists', 
   assert.equal(store.getJob({ id: job.id }).status, 'queued');
 });
 
+test('waits for an asynchronous durable store during recovery', async () => {
+  const queue = createFairQueue({ maxQueuedPerUser: 1 });
+  const calls = [];
+  const store = {
+    async recoverOnStartup() { calls.push('recover'); return { interruptedJobs: 0, recoveringSessions: 0, stoppedWorkers: 0 }; },
+    async listQueuedJobs() { calls.push('queued'); return []; },
+    async listRecoveringSessions() { calls.push('sessions'); return []; }
+  };
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-async-recovery-'));
+  try {
+    const report = await recoverGateway({
+      store, queue, workspaceRoot: root,
+      pool: { async start() { calls.push('start'); } }
+    });
+    assert.deepEqual(report, {
+      interruptedJobs: 0, recoveringSessions: 0, stoppedWorkers: 0,
+      requeuedJobs: 0, interruptedQueuedJobs: 0, restoredSessions: 0, unavailableSessions: 0
+    });
+    assert.deepEqual(calls, ['recover', 'queued', 'start', 'sessions']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('fails startup instead of silently dropping persisted jobs above the configured queue limit', async (t) => {
   const fixture = createFixture(t);
   const conversations = [];

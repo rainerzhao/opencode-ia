@@ -23,3 +23,7 @@
 ## Remaining boundary
 
 Gateway Service、恢复器、REST/WebSocket 路由仍依赖同步 SQLite Store，尚未调用本仓储。下一步必须先将这些调用链整体异步化，再进行 MySQL 应用组合验收。
+
+## Task 3B.1 — recovery async protocol
+
+恢复器的 Store 调用已全部改为等待：启动恢复报告、排队 Job、Session 恢复状态、边界事件和中断状态更新均按顺序完成。新增延迟 Promise Store 回归先验证旧实现会把 Promise 当可迭代队列，再确认修复后恢复报告与 Worker 启动顺序正确。此项保留同步 SQLite Store 兼容，但尚未将 MySQL Gateway Repository 接入运行时。
