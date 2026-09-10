@@ -16,3 +16,9 @@
 - GREEN: startup now treats initial Worker metadata persistence as a Gateway readiness condition before it begins scheduling.
 - Evidence: the real MySQL acceptance executes one private Conversation through one persistent OpenCode Session and verifies durable Job completion and ordered events.
 - Final verification uses serial real-MySQL tests because restart recovery intentionally affects every running Job and active Session in the configured database. The two test fixtures clean only their explicit test users and Worker IDs, so repeated serial runs remain isolated.
+
+## Task 3.1: Asynchronous Gateway administration
+
+- RED: an asynchronous metadata Repository serialized as `{}` in the administrator Job list.
+- GREEN: the route awaits metadata and Job reads, returns a safe 503 for unavailable metadata, and continues to sanitize cancellation failures.
+- Verification: `npm test` reported 290 passed, 0 failed, 11 skipped; build, syntax and secret scans passed.

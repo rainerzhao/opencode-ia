@@ -1,10 +1,28 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
+const express = require('express');
 const { createAuthenticatedWorkbench, authHeaders } = require('../fixtures/authenticated-workbench');
+const { createGatewayAdminRouter } = require('../../src/modules/admin/gateway-routes');
 const { createGatewayStore } = require('../../src/gateway/gateway-store');
 const { createGatewayService } = require('../../src/gateway/gateway-service');
 const { createFairQueue } = require('../../src/gateway/fair-queue');
+
+test('administrator job metadata waits for an asynchronous durable Store', async (t) => {
+  const app = express();
+  app.use(createGatewayAdminRouter({
+    store: { async listJobMetadata() { return [{ id: 'job-async-1', conversationId: 'conversation-1', userId: 'member-1', workerId: 'worker-1', status: 'queued' }]; } },
+    gatewayService: { snapshot: () => ({ status: 'running', running: 0, queue: { totalQueued: 1 }, pool: { workers: [] } }) },
+    requireAdmin: (_req, _res, next) => next(), requestAuditor: { record() {} }
+  }));
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const { port } = server.address();
+  const response = await fetch(`http://127.0.0.1:${port}/jobs`);
+  assert.deepEqual(await response.json(), { jobs: [{ id: 'job-async-1', conversationId: 'conversation-1', userId: 'member-1', workerId: 'worker-1', status: 'queued' }] });
+});
 
 test('administrator sees only operational metadata and cancellation requires role and CSRF', async (t) => {
   const fixture = await createAuthenticatedWorkbench(t, {

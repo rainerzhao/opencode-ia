@@ -12,6 +12,10 @@ Fresh verification completed before the phase commit:
 - `npm run check` — 139 JavaScript files passed syntax checking.
 - `npm run security:scan` — no findings.
 
+## Task 3.1: Asynchronous Gateway administration
+
+**PASS — HTTP contract.** The administrator Job view now waits for durable asynchronous metadata rather than serializing a Promise, without exposing private prompt contents.
+
 ## Production boundary
 
 This phase does not validate Linux deployment, real-provider capacity, long-run stability, OS process sandboxing, or a MySQL-only application composition.

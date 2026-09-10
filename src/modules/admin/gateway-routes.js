@@ -14,11 +14,17 @@ function createGatewayAdminRouter({ store, gatewayService, requireAdmin, request
     res.json({ status: state.status === 'running' && healthy === currentWorkers.length && healthy > 0 ? 'healthy' : 'degraded', running: state.running, queued: state.queue.totalQueued, healthyWorkers: healthy });
   });
   router.get('/workers', (_req, res) => res.json({ workers: workers() }));
-  router.get('/jobs', (_req, res) => res.json({ jobs: store.listJobMetadata() }));
+  router.get('/jobs', async (_req, res) => {
+    try {
+      res.json({ jobs: await store.listJobMetadata() });
+    } catch {
+      res.status(503).json({ error: { code: 'GATEWAY_METADATA_UNAVAILABLE', message: 'Gateway metadata is temporarily unavailable' } });
+    }
+  });
   router.post('/jobs/:id/cancel', async (req, res) => {
     try {
       const id = req.params.id;
-      const job = /^[A-Za-z0-9_-]{1,200}$/.test(id) ? store.getJob({ id }) : null;
+      const job = /^[A-Za-z0-9_-]{1,200}$/.test(id) ? await store.getJob({ id }) : null;
       if (!job) return res.status(404).json({ error: { code: 'JOB_NOT_FOUND', message: 'Job was not found' } });
       const result = await gatewayService.cancel({ jobId: id, conversationId: job.conversationId, userId: job.userId });
       requestAuditor.record(req, { action: 'gateway.admin.cancel', targetType: 'gateway_job', targetId: id, metadata: { ownerUserId: job.userId } });
