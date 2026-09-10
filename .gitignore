@@ -8,6 +8,7 @@ data/
 .env
 .env.*
 !.env.example
+config/mysql.env
 PROJECT_HANDOFF.md
 
 # Runtime databases, logs, reports, and generated output.

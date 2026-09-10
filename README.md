@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已决定迁移至 MySQL 8.4 单一数据层，并已在 Mac Docker 完成数据库基础、迁移锁和中文全文检索能力验证；应用运行时尚未切换，当前 SQLite 仅是待替换的历史实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -112,7 +112,7 @@ flowchart LR
     W --> A[Express REST API]
     W --> S[WebSocket 会话层]
     A --> F[Markdown / 文件资产]
-    A --> D[(SQLite WAL<br/>Stage 1)]
+    A --> D[(业务数据库<br/>MySQL 迁移中)]
     S --> G[Gateway 控制面<br/>Stage 2D 产品链路已验证]
     G --> Q[公平队列与会话映射]
     Q --> W1[OpenCode Worker 1]
@@ -124,6 +124,8 @@ flowchart LR
 ```
 
 当前使用 React/Vite 前端 + 模块化 Express 后端。Stage 2A 建立持久状态，Stage 2B 验证受保护的常驻 OpenCode 进程与 HTTP/SSE 协议，Stage 2C 完成默认双 Worker 调度，Stage 2D 已将这些能力接入正式生产组合和成员界面：私人 Conversation、排队与停止状态、WebSocket 断线补发、恢复边界和历史重建均经过 Mac 浏览器验收。
+
+关于为什么产品同时需要 MySQL 与 OpenCode Runtime，以及 Conversation、Session、Worker 和执行槽位如何分工，见[数据层与 Agent Runtime 架构](docs/architecture/data-and-runtime-architecture.md)。
 
 Stage 4 已把 Skill 从私人开发产品推进到可控的团队共享闭环：成员先在默认私有空间创建和校验；只有当前内容、静态报告和 OpenCode Runtime 同时通过，创建者或管理员才能人工发布。每位成员随后独立安装；只有该成员安装目录经真实 OpenCode 发现验证，才可启用并在其 Conversation 工作区出现。发布、安装、启用是三个独立动作，启用不绑定 Runtime，也不会影响其他账号。后继版本保持私有直到再次发布；升级/回滚是成员自主选择，都会回到“已安装”并重新验证。为避免常驻 Runtime 缓存旧 Skill，版本集变化会让该 Conversation 绑定新的受管工作区与 OpenCode Session；停用后不会在新工作区被发现，归档保留历史而不做永久删除。
 
@@ -191,7 +193,7 @@ npm start
 | `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
 | `SOLUTIONS_DIR` | `<root>/solutions` | 方案目录 |
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
-| `DATABASE_PATH` | `<root>/data/workbench.db` | SQLite 运行数据库；被 Git 忽略 |
+| `DATABASE_PATH` | `<root>/data/workbench.db` | 当前历史 SQLite 运行库；MySQL 单一数据层迁移期间保留，切换完成后删除 |
 | `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
 | `COOKIE_SECURE` | 生产环境为 `true` | HTTPS 下为认证 Cookie 增加 `Secure` |
 | `SESSION_TTL_SECONDS` | `28800` | 登录 Session 有效期，单位秒 |
@@ -285,7 +287,7 @@ server.js     兼容的生产模式薄启动入口
 
 生产目标是公司内网单台 Linux 服务器。迁移时保持工作台与模型配置分离，由非 root 进程运行，使用 Nginx 提供 HTTPS、反向代理和可选内网网段限制。
 
-在账号、权限、SQLite 审计、备份恢复、内部模型联调和并发验收完成前，本项目只能用于开发和演示，不能宣称已生产上线。
+在账号、权限、MySQL 应用切换与审计、备份恢复、内部模型联调和并发验收完成前，本项目只能用于开发和演示，不能宣称已生产上线。
 
 ## 参与开发
 
