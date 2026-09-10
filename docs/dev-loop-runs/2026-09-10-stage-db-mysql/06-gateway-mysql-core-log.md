@@ -39,3 +39,7 @@ Conversation 的创建、列表、读取、重命名、归档与管理员元数�
 ## Task 3B.4 — Gateway WebSocket async boundary
 
 Gateway WebSocket 的订阅和提交现在等待 Gateway Service。回归先让 `subscribe()` 返回 Promise，确认旧代码在连接关闭时会把 Promise 当取消函数；修复后正确保存并调用异步返回的取消函数，既有事件重放、取消所有权和认证回归保持通过。
+
+## Task 3B.5 — async idempotent submission
+
+Gateway Service 的提交路径现识别 Promise Store：先等待幂等查询，再创建 Job、入公平队列、发布事件并请求调度。同步 SQLite Store 仍保持原返回形态，避免尚未迁移的调用者被强制改造。真库 RED 发现 MySQL Repository 缺少幂等 Job 查询；补齐后验证 MySQL Job 正确进入队列。Worker 选择和执行路径仍待整体异步化，不能将此写成 MySQL Gateway 已上线。

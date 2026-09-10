@@ -447,6 +447,17 @@ function createGatewayService({
   function submit({ conversationId, userId, idempotencyKey, inputText }) {
     if (state !== 'running') throw serviceError('GATEWAY_UNAVAILABLE', 'gateway is not running');
     const existing = store.getJobByIdempotency({ userId, idempotencyKey });
+    if (existing && typeof existing.then === 'function') {
+      return existing.then(async (resolvedExisting) => {
+        if (resolvedExisting) return store.createJob({ conversationId, userId, idempotencyKey, inputText });
+        if (!queue.canEnqueue(userId)) throw serviceError('USER_QUEUE_LIMIT', 'user queue limit reached');
+        const job = await store.createJob({ conversationId, userId, idempotencyKey, inputText });
+        queue.enqueue(job);
+        await publishConversation(conversationId, userId);
+        await schedule();
+        return job;
+      });
+    }
     if (existing) {
       return store.createJob({ conversationId, userId, idempotencyKey, inputText });
     }

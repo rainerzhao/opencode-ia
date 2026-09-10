@@ -36,6 +36,9 @@ test('persists private Gateway conversations, jobs, ordered events, bindings, an
   assert.equal((await store.createJob({
     conversationId: conversation.id, userId: 'gateway-mysql-user-a', idempotencyKey: 'mysql-request-1', inputText: '持续方案讨论'
   })).deduplicated, true);
+  assert.equal((await store.getJobByIdempotency({
+    userId: 'gateway-mysql-user-a', idempotencyKey: 'mysql-request-1'
+  })).id, job.id);
   await assert.rejects(
     () => store.createJob({
       conversationId: conversation.id, userId: 'gateway-mysql-user-a', idempotencyKey: 'mysql-request-1', inputText: 'different input'
