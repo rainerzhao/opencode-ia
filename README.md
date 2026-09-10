@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已决定迁移至 MySQL 8.4 单一数据层，并已在 Mac Docker 完成数据库基础、迁移锁和中文全文检索能力验证；应用运行时尚未切换，当前 SQLite 仅是待替换的历史实现。Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已决定迁移至 MySQL 8.4 单一数据层：数据库基础与用户、登录 Session、审计 Repository 已在 Mac Docker 真库验证；认证 HTTP 链路及其他运行时模块尚未切换，当前 SQLite 仍是待替换的历史实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
