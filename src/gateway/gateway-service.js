@@ -127,13 +127,13 @@ function createGatewayService({
     return operation;
   }
 
-  function workspaceFor(item) {
+  async function workspaceFor(item) {
     const userSegment = safeSegment(item.userId, 'user id');
     const conversationSegment = safeSegment(item.conversationId, 'conversation id');
     const userDirectory = resolveWithinRoot(workspaceRoot, userSegment);
     fs.mkdirSync(userDirectory, { recursive: true, mode: 0o700 });
     fs.chmodSync(userDirectory, 0o700);
-    const workspaceKey = workspacePreparer?.workspaceKey?.({ userId: item.userId });
+    const workspaceKey = await workspacePreparer?.workspaceKey?.({ userId: item.userId });
     if (workspaceKey !== undefined && (typeof workspaceKey !== 'string' || !/^[a-z0-9-]{1,100}$/.test(workspaceKey))) {
       throw serviceError('GATEWAY_WORKSPACE_PREPARATION_FAILED', 'gateway workspace key is invalid');
     }
@@ -209,9 +209,9 @@ function createGatewayService({
         workerId: lease.workerId
       });
       await publishConversation(item.conversationId, item.userId);
-      directory = workspaceFor(item);
+      directory = await workspaceFor(item);
       context.directory = directory;
-      workspacePreparer?.prepare({ userId: item.userId, directory });
+      await workspacePreparer?.prepare({ userId: item.userId, directory });
       timeout = setTimeout(() => {
         context.timedOut = true;
         context.controller.abort();

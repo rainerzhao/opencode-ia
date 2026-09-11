@@ -86,15 +86,15 @@ const skillInstallationFiles = createSkillInstallationFiles({
 });
 const skillWorkspaceSync = createSkillWorkspaceSync({ installationFiles: skillInstallationFiles });
 const workspacePreparer = Object.freeze({
-  prepare({ userId, directory }) {
+  async prepare({ userId, directory }) {
     return skillWorkspaceSync.syncEnabledSkills({
       userId,
       directory,
-      installations: skillStore.listEnabledInstallations({ userId })
+      installations: await skillStore.listEnabledInstallations({ userId })
     });
   },
-  workspaceKey({ userId }) {
-    const installations = skillStore.listEnabledInstallations({ userId })
+  async workspaceKey({ userId }) {
+    const installations = (await skillStore.listEnabledInstallations({ userId }))
       .map((item) => [item.skillId, item.versionId, item.contentSha256]);
     return `skills-${crypto.createHash('sha256').update(JSON.stringify(installations)).digest('hex').slice(0, 16)}`;
   }

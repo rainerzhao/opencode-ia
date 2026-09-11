@@ -29,7 +29,7 @@ function createSkillValidationService({
   }
 
   async function validate({ actor, id }) {
-    const candidate = store.getValidationCandidate({ actor, id });
+    const candidate = await store.getValidationCandidate({ actor, id });
     const staticReport = validator({
       slug: candidate.slug,
       skillMd: candidate.version.skillMd,
@@ -68,7 +68,7 @@ function createSkillValidationService({
       verdict: staticReport.verdict === 'pass' && runtime.status === 'passed' ? 'pass' : 'fail',
       runtime
     };
-    return store.saveValidationReport({
+    return await store.saveValidationReport({
       actor,
       id,
       expectedContentSha256: candidate.version.contentSha256,

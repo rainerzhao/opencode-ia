@@ -67,26 +67,16 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
   }
   const router = express.Router();
 
-  router.get('/installations', (req, res, next) => {
-    try {
-      res.json({ installations: store.listInstallations({ actor: req.auth.user }) });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  router.get('/installations', asyncRoute(async (req, res) => {
+    res.json({ installations: await store.listInstallations({ actor: req.auth.user }) });
+  }));
 
-  router.get('/', (req, res, next) => {
-    try {
-      res.json({
-        skills: store.listVisible({
-          actor: req.auth.user,
-          status: req.query.status || 'draft'
-        })
-      });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  router.get('/', asyncRoute(async (req, res) => {
+    res.json({ skills: await store.listVisible({ actor: req.auth.user, status: req.query.status || 'draft' }) });
+  }));
 
-  router.post('/', (req, res, next) => {
-    try {
-      const skill = store.createDraft({
+  router.post('/', asyncRoute(async (req, res) => {
+      const skill = await store.createDraft({
         actor: req.auth.user,
         slug: req.body?.slug,
         displayName: req.body?.displayName,
@@ -100,43 +90,35 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
         metadata: { status: skill.status, visibility: skill.visibility, version: skill.version.version }
       });
       res.status(201).json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.get('/:skillId/versions', (req, res, next) => {
-    try {
-      res.json({ versions: store.listReleaseVersions({ actor: req.auth.user, id: skillId(req.params.skillId) }) });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  router.get('/:skillId/versions', asyncRoute(async (req, res) => {
+    res.json({ versions: await store.listReleaseVersions({ actor: req.auth.user, id: skillId(req.params.skillId) }) });
+  }));
 
-  router.post('/:skillId/versions', (req, res, next) => {
-    try {
-      const skill = store.createSuccessorDraft({ actor: req.auth.user, id: skillId(req.params.skillId) });
+  router.post('/:skillId/versions', asyncRoute(async (req, res) => {
+      const skill = await store.createSuccessorDraft({ actor: req.auth.user, id: skillId(req.params.skillId) });
       requestAuditor.record(req, {
         action: 'skill.version.create', targetType: 'skill', targetId: skill.id,
         metadata: { versionId: skill.version.id, version: skill.version.version, status: skill.version.status }
       });
       res.status(201).json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.get('/:skillId', (req, res, next) => {
-    try {
-      const skill = store.getVisible({
+  router.get('/:skillId', asyncRoute(async (req, res) => {
+      const skill = await store.getVisible({
         actor: req.auth.user,
         id: skillId(req.params.skillId)
       });
       if (!skill) throw routeError('SKILL_NOT_FOUND', 'skill was not found', 404);
       res.json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.patch('/:skillId', (req, res, next) => {
-    try {
+  router.patch('/:skillId', asyncRoute(async (req, res) => {
       if (req.body && Object.hasOwn(req.body, 'slug')) {
         throw routeError('SKILL_SLUG_IMMUTABLE', 'skill slug cannot be changed', 400);
       }
-      const skill = store.updateDraft({
+      const skill = await store.updateDraft({
         actor: req.auth.user,
         id: skillId(req.params.skillId),
         displayName: req.body?.displayName,
@@ -150,12 +132,10 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
         metadata: { status: skill.status, version: skill.version.version }
       });
       res.json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.put('/:skillId/files', (req, res, next) => {
-    try {
-      const skill = store.replaceDraftFiles({
+  router.put('/:skillId/files', asyncRoute(async (req, res) => {
+      const skill = await store.replaceDraftFiles({
         actor: req.auth.user,
         id: skillId(req.params.skillId),
         files: req.body?.files
@@ -171,8 +151,7 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
         }
       });
       res.json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
   router.post('/:skillId/validate', asyncRoute(async (req, res) => {
     const skill = await validationService.validate({
@@ -198,27 +177,23 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
     res.json({ skill });
   }));
 
-  router.post('/:skillId/publish', (req, res, next) => {
-    try {
-      const skill = store.publishValidated({ actor: req.auth.user, id: skillId(req.params.skillId) });
+  router.post('/:skillId/publish', asyncRoute(async (req, res) => {
+      const skill = await store.publishValidated({ actor: req.auth.user, id: skillId(req.params.skillId) });
       requestAuditor.record(req, {
         action: 'skill.publish', targetType: 'skill', targetId: skill.id,
         metadata: { version: skill.version.version, status: skill.status, digest: skill.version.contentSha256 }
       });
       res.json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.post('/:skillId/install', (req, res, next) => {
-    try {
-      const installation = installationService.install({ actor: req.auth.user, id: skillId(req.params.skillId) });
-      requestAuditor.record(req, {
-        action: 'skill.install', targetType: 'skill', targetId: installation.skillId,
-        metadata: { versionId: installation.versionId, status: installation.status, digest: installation.contentSha256 }
-      });
-      res.json({ installation });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  router.post('/:skillId/install', asyncRoute(async (req, res) => {
+    const installation = await installationService.install({ actor: req.auth.user, id: skillId(req.params.skillId) });
+    requestAuditor.record(req, {
+      action: 'skill.install', targetType: 'skill', targetId: installation.skillId,
+      metadata: { versionId: installation.versionId, status: installation.status, digest: installation.contentSha256 }
+    });
+    res.json({ installation });
+  }));
 
   router.post('/:skillId/enable', asyncRoute(async (req, res) => {
     const installation = await installationService.enable({ actor: req.auth.user, id: skillId(req.params.skillId) });
@@ -230,9 +205,8 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
   }));
 
   for (const operation of ['upgrade', 'rollback']) {
-    router.post(`/:skillId/${operation}`, (req, res, next) => {
-      try {
-        const installation = installationService[operation]({
+    router.post(`/:skillId/${operation}`, asyncRoute(async (req, res) => {
+        const installation = await installationService[operation]({
           actor: req.auth.user, id: skillId(req.params.skillId), versionId: req.body?.versionId
         });
         requestAuditor.record(req, {
@@ -240,35 +214,29 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
           metadata: { versionId: installation.versionId, status: installation.status, digest: installation.contentSha256 }
         });
         res.json({ installation });
-      } catch (error) { next(mapStoreError(error)); }
-    });
+    }));
   }
 
-  router.post('/:skillId/disable', (req, res, next) => {
-    try {
-      const skill = store.disableTeamSkill({ actor: req.auth.user, id: skillId(req.params.skillId) });
+  router.post('/:skillId/disable', asyncRoute(async (req, res) => {
+      const skill = await store.disableTeamSkill({ actor: req.auth.user, id: skillId(req.params.skillId) });
       requestAuditor.record(req, {
         action: 'skill.disable', targetType: 'skill', targetId: skill.id,
         metadata: { status: skill.status }
       });
       res.json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.post('/:skillId/archive', (req, res, next) => {
-    try {
-      const skill = store.archiveTeamSkill({ actor: req.auth.user, id: skillId(req.params.skillId) });
+  router.post('/:skillId/archive', asyncRoute(async (req, res) => {
+      const skill = await store.archiveTeamSkill({ actor: req.auth.user, id: skillId(req.params.skillId) });
       requestAuditor.record(req, {
         action: 'skill.archive', targetType: 'skill', targetId: skill.id,
         metadata: { status: skill.status }
       });
       res.json({ skill });
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
-  router.delete('/:skillId', (req, res, next) => {
-    try {
-      const skill = store.archiveDraft({
+  router.delete('/:skillId', asyncRoute(async (req, res) => {
+      const skill = await store.archiveDraft({
         actor: req.auth.user,
         id: skillId(req.params.skillId)
       });
@@ -279,8 +247,7 @@ function createSkillRouter({ store, requestAuditor, validationService, installat
         metadata: { status: skill.status }
       });
       res.status(204).end();
-    } catch (error) { next(mapStoreError(error)); }
-  });
+  }));
 
   return router;
 }

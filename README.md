@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路和运行管理视图已在 Mac Docker 真库或异步契约中验证；知识与方案的 MySQL 仓储和 HTTP 闭环也已在 Mac Docker 真库验证。MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。Skill 仓储和完整业务服务组合仍未完成，SQLite 仍是历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路、知识/方案仓储和 Skill 仓储，均已在 Mac Docker 真库或异步 HTTP 契约中分阶段验证；MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。完整 MySQL-only 服务组合仍未完成，SQLite 仍是当前历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -91,6 +91,7 @@ DEMO_PORT=4321 npm run demo
 | 工具与产物边界 | ✅ Mac 应用级验收 | 每个账号和 Conversation 使用独立工作目录，默认关闭 Bash、联网、子代理和外部插件 |
 | 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
+| MySQL 单一数据层 | 🚧 迁移中 | Skill、知识/方案、账号、审计和 Gateway 正在逐项切换；最终服务组合尚未切换 |
 | 知识与方案闭环 | 🚧 Stage 3A–3B 已完成 | 成员可维护私有草稿，人工确认后发布或撤回团队知识/方案；来源转换和备份仍在研发 |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
 
@@ -263,11 +264,12 @@ npm run security:scan
 
 - Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
 - Stage 4 已完成 Mac 端验收：普通成员可以创建、校验并人工发布默认私有的 Skill 草稿；成员独立安装，安装包原子落盘、启用前再经真实 OpenCode 发现验证。后继草稿不改变团队当前版本；升级、回滚与停用会刷新受管工作区，避免常驻 Runtime 沿用已缓存版本。
+- MySQL Skill Phase A 已完成真库验收：异步 Skill 仓储、校验/安装/启用服务和 HTTP 生命周期已覆盖私人草稿隔离、人工发布、按账号安装、OpenCode 门禁前的文件落盘与启用状态；最终 MySQL-only 服务组合仍待完成。
 - 当前知识与方案使用文件系统作为 Stage 1 过渡层，尚未具备审核发布、版本和回滚闭环。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **Stage 3 知识与方案发布闭环**。Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚属于 Stage 5。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
+下一交付点是 **MySQL-only 业务服务组合**，完成后再进入 Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚验收。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 

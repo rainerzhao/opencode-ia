@@ -1,10 +1,10 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-10
+更新时间：2026-09-11
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3A–3B 已完成，Stage 3C–3D 待开发** 的状态。
+项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3A–3B 已完成，Stage 3C–3D 待开发；MySQL 单一数据层迁移正在进行** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -111,6 +111,8 @@ Stage 3A–3B 让 SQLite 成为内容元数据、版本和检索的稳定真源�
 
 Stage 4 已完成 Mac 应用级验收。私人草稿只对创建者和治理管理员可见，团队可见性不能暴露 draft/archived 内容；列表按调用者解析当前公开版本，绝不以最新私有草稿替换团队版本。校验支持受控多文件包，报告不复制疑似秘密原文，静态检查与真实 OpenCode 受限加载必须同时通过；内容变化会使旧报告失效，过期异步结果不能覆盖新版本。发布、安装和启用是三个人工动作：不可变包原子写入每用户受管目录，启用前必须通过 OpenCode 发现验证，随后才在该账号 Conversation 工作区物化；不会自动全员启用或按用户绑定独占 Runtime。4D 保留历史发布版本，升级/回滚重置为已安装并强制重新验证；版本集变化会重绑新受管工作区和 OpenCode Session，避免常驻 Runtime 缓存旧 Skill。停用立即撤销 enabled 状态，归档保留版本与审计而不做永久删除。
 
+MySQL 迁移 Phase A 已完成：Skill 异步仓储、校验/安装/启用服务和 HTTP 路由已接入同一异步契约，真实 MySQL 生命周期覆盖私人草稿隔离、人工发布、成员独立安装/启用和受控文件包。该阶段只证明仓储与调用链可用，不代表应用已经切换到 MySQL-only 组合；最终服务装配、知识/方案组合和 Linux 部署仍未完成。
+
 出口标准：创建、校验、发布、安装、使用到回滚的完整流程通过端到端验收。
 
 ## Stage 5：Linux 内网生产化
@@ -123,7 +125,7 @@ Stage 4 已完成 Mac 应用级验收。私人草稿只对创建者和治理管�
 
 ## 数据层迁移：MySQL 8.4 单一事实源
 
-已决定以 MySQL 8.4 替代 SQLite：Mac 开发、测试与 Demo 使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL。数据库基础已在真实容器验证字符集、UTC、中文 `ngram`、迁移版本记录、并发迁移锁和来源引用去重；用户、登录 Session、审计 Repository 与认证 HTTP 链路也已完成真库验收。Gateway 已有 MySQL Conversation/Job/Event/Worker/Session/启动恢复持久核心，调度服务、WebSocket 和管理读取已适配异步仓储；知识与方案已具有等价 MySQL 仓储，并经真实 HTTP 生命周期验证。Skill 仓储及最终 MySQL-only 应用组合仍待完成。迁移未结束前，SQLite 的既有章节只描述历史实现，不能将 MySQL 或 Linux 写成已完成上线。
+已决定以 MySQL 8.4 替代 SQLite：Mac 开发、测试与 Demo 使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL。数据库基础已在真实容器验证字符集、UTC、中文 `ngram`、迁移版本记录、并发迁移锁和来源引用去重；用户、登录 Session、审计 Repository 与认证 HTTP 链路也已完成真库验收。Gateway 已有 MySQL Conversation/Job/Event/Worker/Session/启动恢复持久核心，调度服务、WebSocket 和管理读取已适配异步仓储；知识、方案与 Skill 已具有等价 MySQL 仓储，并经真实 HTTP 或服务生命周期验证。最终 MySQL-only 应用组合仍待完成：当前 `create-workbench-server` 默认仍装配历史 SQLite 组合，不能把本阶段的真库测试误写成生产切换。迁移未结束前，SQLite 的既有章节只描述历史实现，不能将 MySQL 或 Linux 写成已完成上线。
 
 ## 不变的边界
 
