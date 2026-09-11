@@ -267,6 +267,8 @@ test('knowledge editor exposes attachment preview controls for supported text fi
     }));
     assert.match(html, /guide\.md/);
     assert.match(html, />预览</);
+    assert.match(html, /导出知识包/);
+    assert.match(html, /\/api\/content\/knowledge\/knowledge-preview\/export/);
     assert.match(html, /input type="file"/);
   });
 });

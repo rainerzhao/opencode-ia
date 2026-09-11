@@ -20,17 +20,19 @@ function mapAttachmentError(error) {
     else if (error.code === 'INVALID_ATTACHMENT') error.status = 400;
     else if (error.code === 'ATTACHMENT_PARSE_UNSUPPORTED') error.status = 415;
     else if (error.code === 'ATTACHMENT_PARSE_INVALID') error.status = 422;
+    else if (error.code === 'ATTACHMENT_EXPORT_TOO_LARGE') error.status = 413;
   }
   return error;
 }
 
-function createContentAttachmentRouter({ store, uploadMiddleware, attachmentRoot, safeFileName, ensurePrivateDirectory }) {
+function createContentAttachmentRouter({ store, uploadMiddleware, attachmentRoot, safeFileName, ensurePrivateDirectory, requestAuditor = null }) {
   if (!store || typeof store.createKnowledgeAttachment !== 'function' || typeof uploadMiddleware !== 'function' ||
     !attachmentRoot || typeof safeFileName !== 'function' || typeof ensurePrivateDirectory !== 'function') {
     throw new TypeError('content attachment route dependencies are required');
   }
   const router = express.Router();
   const allowedExtensions = new Set(['.md', '.txt', '.docx', '.pdf', '.json', '.csv']);
+  const maxExportBytes = 20 * 1024 * 1024;
 
   router.post('/knowledge/:contentId/attachments', uploadMiddleware, async (req, res, next) => {
     const temporary = req.file?.path;
@@ -90,6 +92,51 @@ function createContentAttachmentRouter({ store, uploadMiddleware, attachmentRoot
       if (!fs.existsSync(target)) throw attachmentError('CONTENT_NOT_FOUND', 'content was not found', 404);
       const parsed = extractAttachmentText({ originalName: attachment.originalName, content: fs.readFileSync(target) });
       res.json({ attachmentId: attachment.id, format: parsed.format, truncated: parsed.truncated, text: parsed.text });
+    } catch (error) { next(mapAttachmentError(error)); }
+  });
+
+  router.get('/knowledge/:contentId/export', async (req, res, next) => {
+    try {
+      const knowledge = await Promise.resolve(store.getKnowledge({
+        actorUserId: req.auth.user.id, actorRole: req.auth.user.role,
+        documentId: req.params.contentId, includeContent: true
+      }));
+      const attachments = [];
+      let totalBytes = Buffer.byteLength(knowledge.markdown || '', 'utf8');
+      for (const listedAttachment of knowledge.attachments || []) {
+        const attachment = await Promise.resolve(store.getKnowledgeAttachment({
+          actorUserId: req.auth.user.id, actorRole: req.auth.user.role,
+          documentId: req.params.contentId, attachmentId: listedAttachment.id
+        }));
+        const root = path.resolve(attachmentRoot);
+        const target = path.resolve(root, ...String(attachment.storageKey || '').split('/'));
+        if (target === root || !target.startsWith(`${root}${path.sep}`)) throw attachmentError('UNSAFE_PATH', 'attachment path is not allowed', 400);
+        if (!fs.existsSync(target)) throw attachmentError('CONTENT_NOT_FOUND', 'content was not found', 404);
+        const content = fs.readFileSync(target);
+        totalBytes += content.length;
+        if (totalBytes > maxExportBytes) throw attachmentError('ATTACHMENT_EXPORT_TOO_LARGE', 'knowledge export is too large', 413);
+        attachments.push({
+          id: attachment.id, originalName: attachment.originalName, mediaType: attachment.mediaType,
+          sizeBytes: attachment.sizeBytes, contentSha256: attachment.contentSha256,
+          createdAt: attachment.createdAt, contentBase64: content.toString('base64')
+        });
+      }
+      const bundle = {
+        type: 'knowledge-bundle', schemaVersion: 1,
+        knowledge: {
+          id: knowledge.id, title: knowledge.title, category: knowledge.category, tags: knowledge.tags,
+          status: knowledge.status, visibility: knowledge.visibility, version: knowledge.version,
+          markdown: knowledge.markdown, references: knowledge.references || [], versionHistory: knowledge.versionHistory || []
+        },
+        attachments
+      };
+      if (requestAuditor) requestAuditor.record(req, {
+        action: 'content.knowledge.export', targetType: 'knowledge_document', targetId: knowledge.id,
+        metadata: { version: knowledge.version, attachmentCount: attachments.length }
+      });
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('content-disposition', `attachment; filename="${safeFileName(`knowledge-${knowledge.id}.json`)}"`);
+      res.json(bundle);
     } catch (error) { next(mapAttachmentError(error)); }
   });
 

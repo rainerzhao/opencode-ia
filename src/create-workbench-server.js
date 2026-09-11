@@ -348,7 +348,8 @@ app.use('/api/content', createContentAttachmentRouter({
   uploadMiddleware: upload.single('file'),
   attachmentRoot: contentAttachmentRoot,
   safeFileName,
-  ensurePrivateDirectory
+  ensurePrivateDirectory,
+  requestAuditor
 }));
 
 // 会话管理

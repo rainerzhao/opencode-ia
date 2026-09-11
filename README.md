@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3C 已完成知识/方案版本化、FTS5、私有草稿、人工发布/撤回和来源追溯，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载、文本/JSON/CSV 安全预览，以及 SQLite 一致性快照和带附件摘要清单的恢复；导入导出、版本差异、MySQL 附件备份和完整真库验收仍在后续阶段。Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已完成 MySQL 8.4 生产组合的代码级装配与 Mac 真库分域回归，当前正在补齐 MySQL-only HTTP/WebSocket 全栈验收；Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3C 已完成知识/方案版本化、FTS5、私有草稿、人工发布/撤回和来源追溯，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载、文本/JSON/CSV 安全预览、受控知识包导出，以及 SQLite 一致性快照和带附件摘要清单的恢复；知识包导入、版本差异、MySQL 附件备份和完整真库验收仍在后续阶段。Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已完成 MySQL 8.4 生产组合的代码级装配与 Mac 真库分域回归，当前正在补齐 MySQL-only HTTP/WebSocket 全栈验收；Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看内网部署手册](docs/operations/intranet-deployment.md)
 
@@ -92,7 +92,7 @@ DEMO_PORT=4321 npm run demo
 | 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
 | MySQL 单一数据层 | 🚧 全栈验收中 | MySQL-only 生产组合、真实 MySQL 账号/内容/Skill/Gateway 分域回归已通过；完整 HTTP/WebSocket 验收和 Linux 切换仍在进行 |
-| 知识与方案闭环 | 🚧 Stage 3D 收尾 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件、文本/JSON/CSV 预览和 SQLite 快照恢复，导入导出、版本差异与 MySQL 附件备份仍在研发 |
+| 知识与方案闭环 | 🚧 Stage 3D 收尾 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件、文本/JSON/CSV 预览和受控知识包导出，导入、版本差异与 MySQL 附件备份仍在研发 |
 | 内网生产服务 | 🚧 预发布模板 | 已提供 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
@@ -209,7 +209,7 @@ URL 导入默认禁用。启用后不支持通配符，非默认端口必须写�
 
 服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
 
-MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：备份生成 SHA-256 清单，恢复必须显式传入 `--confirm`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，DOCX/PDF 当前明确返回“不支持预览”。
+MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：备份生成 SHA-256 清单，恢复必须显式传入 `--confirm`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，并通过 `/export` 下载带摘要清单的私有知识包；DOCX/PDF 当前明确返回“不支持预览”。
 
 ### MySQL 生产组合（内网部署前置）
 

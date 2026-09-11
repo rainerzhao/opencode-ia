@@ -143,4 +143,16 @@ test('stores a bounded private attachment against the current knowledge version'
   const preview = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/attachments/${attachment.id}/preview`, { headers: { cookie: author.cookie } });
   assert.equal(preview.status, 200);
   assert.deepEqual(await preview.json(), { attachmentId: attachment.id, format: 'md', truncated: false, text: '# 附件内容' });
+
+  const exported = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/export`, { headers: { cookie: author.cookie } });
+  assert.equal(exported.status, 200);
+  assert.match(exported.headers.get('content-disposition'), /attachment/);
+  const bundle = await exported.json();
+  assert.equal(bundle.type, 'knowledge-bundle');
+  assert.equal(bundle.schemaVersion, 1);
+  assert.equal(bundle.knowledge.title, '带附件知识');
+  assert.equal(bundle.attachments.length, 1);
+  assert.equal(Buffer.from(bundle.attachments[0].contentBase64, 'base64').toString(), '# 附件内容');
+  assert.equal(Object.hasOwn(bundle.attachments[0], 'storageKey'), false);
+  assert.equal(createAuditStore(fixture.db).list({ limit: 100 }).some((item) => item.action === 'content.knowledge.export' && item.targetId === knowledge.id), true);
 });
