@@ -20,6 +20,7 @@
 ## 升级、回滚和恢复
 
 - 发布前保存镜像版本、Git SHA、迁移版本和配置摘要（不含秘密）。
-- 先执行数据库备份并验证恢复到新实例，再执行应用升级；迁移失败保持旧版本，不手工修改 `schema_migrations`。
+- 先执行 `npm run backup:mysql -- --url "$WORKBENCH_DATABASE_URL" --output /var/backups/opencode-workbench-<timestamp>.sql`，并使用 `npm run restore:mysql -- --url "$RESTORE_DATABASE_URL" --input <backup>.sql --confirm` 恢复到隔离新实例验证，再执行应用升级；迁移失败保持旧版本，不手工修改 `schema_migrations`。
+- MySQL 备份脚本通过 `MYSQL_PWD` 传递密码，不会把密码放入进程参数；备份旁边的 `.manifest.json` 用于恢复前摘要校验。
 - SQLite `backup:sqlite/restore:sqlite` 仅用于 Mac Demo 过渡，不作为 MySQL 生产备份方案。
 - MySQL 生产备份、恢复演练、日志轮转、容量和故障注入仍需在公司 Linux 预发布环境完成后，才能开放团队访问。

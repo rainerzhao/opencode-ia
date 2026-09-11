@@ -121,7 +121,7 @@ MySQL 迁移 Phase A 已完成：Skill 异步仓储、校验/安装/启用服务
 
 主要工作：非 root 服务账号；Nginx HTTPS 与 WebSocket；内部兼容 OpenAI 协议模型；备份恢复；日志和监控；容量、重启恢复和故障演练。
 
-已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理和 `/healthz` 探活。模板不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
+已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。模板不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 出口标准：生产检查表全部通过，残余风险和回滚方案由人工确认后再开放访问。
 

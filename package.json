@@ -21,7 +21,9 @@
     "check": "node scripts/check-js.js",
     "security:scan": "node scripts/scan-secrets.js",
     "backup:sqlite": "node scripts/backup-sqlite.js",
-    "restore:sqlite": "node scripts/restore-sqlite.js"
+    "restore:sqlite": "node scripts/restore-sqlite.js",
+    "backup:mysql": "node scripts/backup-mysql.js",
+    "restore:mysql": "node scripts/restore-mysql.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "5.0.2",

@@ -209,6 +209,8 @@ URL 导入默认禁用。启用后不支持通配符，非默认端口必须写�
 
 服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
 
+MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：备份生成 SHA-256 清单，恢复必须显式传入 `--confirm`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。
+
 ### MySQL 生产组合（内网部署前置）
 
 设置 `WORKBENCH_DATABASE_URL` 后，生产启动器会选择 MySQL 8.4 组合：启动前检查版本、字符集、UTC 时区和中文 `ngram` 能力，执行受锁保护的迁移，并将账号、审计、Conversation/Gateway、知识/方案和 Skill 全部装配到同一个 MySQL Repository。未配置该变量时仍使用历史 SQLite 组合，便于 Mac Demo；两种组合不会混用业务 Store。该组合已完成代码级装配，真实 MySQL 与 Linux 生产验收仍在后续阶段。

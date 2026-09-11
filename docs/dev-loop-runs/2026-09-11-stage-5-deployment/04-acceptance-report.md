@@ -8,6 +8,7 @@
 
 - 健康端点、部署契约和 MySQL 组合冒烟测试通过。
 - Compose 模板配置解析通过；Dockerfile、systemd、Nginx 的非 root、MySQL、OpenCode 和 WebSocket 边界有自动断言。
+- MySQL 备份/恢复脚本的原子落盘、摘要校验、显式确认和密码参数隔离测试通过。
 - JavaScript 语法检查、密钥扫描和 React/Vite 构建通过。
 
 ## Notes
