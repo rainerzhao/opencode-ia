@@ -135,4 +135,19 @@ test('starts the MySQL production composition and serves authenticated private C
   assert.equal(delta.data.text, 'unused');
   const completed = await waitForMessage(socket, (message) => message.type === 'job.completed' && message.jobId === delta.jobId);
   assert.equal(typeof completed.jobId, 'string');
+
+  const knowledgeResponse = await fetch(`${origin}/api/content/knowledge`, {
+    method: 'POST', headers: { 'content-type': 'application/json', cookie, 'x-csrf-token': csrfToken },
+    body: JSON.stringify({ title: 'MySQL version diff', markdown: '# MySQL\nold' })
+  });
+  assert.equal(knowledgeResponse.status, 201);
+  const knowledge = (await knowledgeResponse.json()).knowledge;
+  const knowledgeUpdate = await fetch(`${origin}/api/content/knowledge/${knowledge.id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json', cookie, 'x-csrf-token': csrfToken },
+    body: JSON.stringify({ markdown: '# MySQL\nnew\nextra' })
+  });
+  assert.equal(knowledgeUpdate.status, 200);
+  const knowledgeDiff = await fetch(`${origin}/api/content/knowledge/${knowledge.id}/diff?from=1&to=2`, { headers: { cookie } });
+  assert.equal(knowledgeDiff.status, 200);
+  assert.deepEqual((await knowledgeDiff.json()).diff.summary, { additions: 2, removals: 1, unchanged: 1 });
 });
