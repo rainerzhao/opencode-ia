@@ -12,3 +12,5 @@
 - 新增 Solution → 私有 Knowledge 原子创建及 `POST /api/content/solutions/:id/to-knowledge`；方案页显示安全来源卡并提供转换表单。
 - 新增来源类型迁移 v7（SQLite 重建约束、MySQL ENUM 扩展），支持 `solution_version` 引用。
 - 聚焦验证：45 tests，43 pass，2 skip（MySQL 环境未配置）；语法 151 文件、密钥扫描、React 构建均通过。
+- 历史文件型 `/api/solutions` 已抽为 `src/modules/legacy/solutions-routes.js`；保留兼容读写和原有权限/CSRF 行为，React 正式路径不再调用。
+- 兼容收口后复验：14 API tests 全部通过；语法 152 文件、密钥扫描通过。

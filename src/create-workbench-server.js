@@ -34,6 +34,7 @@ const { createSkillWorkspaceSync } = require('./skills/skill-workspace-sync');
 const { createContentStore } = require('./content/content-store');
 const { createConversationContentService } = require('./content/conversation-content-service');
 const { createContentRouter } = require('./modules/content/routes');
+const { createLegacySolutionsRouter } = require('./modules/legacy/solutions-routes');
 
 function createWorkbenchServer({
   config,
@@ -354,61 +355,10 @@ app.get('/api/sessions', authMiddleware.requireRole('admin'), (req, res) => {
   res.json(list);
 });
 
-// API: 保存需求记录
-app.post('/api/solutions', (req, res) => {
-  const { title, description, solution, platforms, skills, chatHistory } = req.body;
-
-  const record = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    title,
-    description,
-    solution,
-    platforms: platforms || [],
-    skills: skills || [],
-    chatHistory: chatHistory || [],
-    createdAt: new Date().toISOString(),
-    createdBy: req.auth.user.id,
-    visibility: 'private'
-  };
-
-  if (!fs.existsSync(config.solutionsDir)) {
-    ensurePrivateDirectory(config.solutionsDir);
-  }
-
-  const filePath = safePath(config.solutionsDir, `${safeFileName(record.id)}.json`, { extensions: ['.json'] });
-  writePrivateFile(filePath, JSON.stringify(record, null, 2));
-  requestAuditor.record(req, {
-    action: 'solution.create',
-    targetType: 'solution',
-    targetId: record.id,
-    metadata: { visibility: record.visibility }
-  });
-
-  res.json({ success: true, id: record.id });
-});
-
-// API: 获取需求记录列表
-app.get('/api/solutions', (req, res) => {
-  try {
-    if (!fs.existsSync(config.solutionsDir)) {
-      return res.json([]);
-    }
-    const files = fs.readdirSync(config.solutionsDir)
-      .filter(f => f.endsWith('.json'))
-      .map(f => {
-        const content = fs.readFileSync(safePath(config.solutionsDir, safeFileName(f), { extensions: ['.json'] }), 'utf-8');
-        return JSON.parse(content);
-      })
-      .filter((record) => can(req.auth.user, 'resource:read', {
-        ownerUserId: record.createdBy,
-        visibility: record.visibility === 'shared' ? 'shared' : 'private'
-      }))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(files);
-  } catch (err) {
-    res.json([]);
-  }
-});
+// 历史文件型接口：仅为旧数据兼容，React 正式路径使用 /api/content/solutions。
+app.use('/api/solutions', createLegacySolutionsRouter({
+  solutionsDir: config.solutionsDir, safePath, safeFileName, ensurePrivateDirectory, writePrivateFile, can, requestAuditor
+}));
 
 // API: 获取知识库目录结构
 app.get('/api/knowledge/tree', (req, res) => {

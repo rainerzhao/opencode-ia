@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案版本化、FTS5、私有草稿和人工发布/撤回，Stage 3C 已完成 Conversation → 私有 Solution → 私有 Knowledge 的来源追溯核心链路与隐私裁剪，本阶段剩余全量 MySQL 真库验收、旧文件接口收敛和备份恢复；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路、知识/方案仓储和 Skill 仓储，均已在 Mac Docker 真库或异步 HTTP 契约中分阶段验证；MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。完整 MySQL-only 服务组合仍未完成，SQLite 仍是当前历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案版本化、FTS5、私有草稿和人工发布/撤回，Stage 3C 已完成 Conversation → 私有 Solution → 私有 Knowledge 的来源追溯核心链路、隐私裁剪与旧文件接口适配层拆分，本阶段剩余全量 MySQL 真库验收和备份恢复；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路、知识/方案仓储和 Skill 仓储，均已在 Mac Docker 真库或异步 HTTP 契约中分阶段验证；MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。完整 MySQL-only 服务组合仍未完成，SQLite 仍是当前历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -265,7 +265,7 @@ npm run security:scan
 - Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
 - Stage 4 已完成 Mac 端验收：普通成员可以创建、校验并人工发布默认私有的 Skill 草稿；成员独立安装，安装包原子落盘、启用前再经真实 OpenCode 发现验证。后继草稿不改变团队当前版本；升级、回滚与停用会刷新受管工作区，避免常驻 Runtime 沿用已缓存版本。
 - MySQL Skill Phase A 已完成真库验收：异步 Skill 仓储、校验/安装/启用服务和 HTTP 生命周期已覆盖私人草稿隔离、人工发布、按账号安装、OpenCode 门禁前的文件落盘与启用状态；最终 MySQL-only 服务组合仍待完成。
-- 历史 `/api/solutions` 文件接口仍保留为兼容适配层，React 已不再调用；后续导入/导出与备份完成后再安排退役。
+- 历史 `/api/solutions` 文件接口已抽为独立兼容适配层，React 已不再调用；后续导入/导出与备份完成后再安排退役。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
