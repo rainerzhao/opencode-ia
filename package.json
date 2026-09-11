@@ -19,7 +19,9 @@
     "test:skill-install-discovery": "WORKBENCH_SKILL_INSTALL_DISCOVERY_ACCEPTANCE=1 node --test test/integration/skill-install-discovery.test.js",
     "test:skill-version-discovery": "WORKBENCH_SKILL_VERSION_DISCOVERY_ACCEPTANCE=1 node --test test/integration/skill-version-discovery.test.js",
     "check": "node scripts/check-js.js",
-    "security:scan": "node scripts/scan-secrets.js"
+    "security:scan": "node scripts/scan-secrets.js",
+    "backup:sqlite": "node scripts/backup-sqlite.js",
+    "restore:sqlite": "node scripts/restore-sqlite.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "5.0.2",
