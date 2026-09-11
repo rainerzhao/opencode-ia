@@ -209,6 +209,22 @@ const MYSQL_MIGRATIONS = Object.freeze([
   ] }),
   Object.freeze({ version: 7, statements: [
     `ALTER TABLE content_references MODIFY source_type ENUM('conversation','knowledge_version','solution_version','skill_version','model') NOT NULL`
+  ] }),
+  Object.freeze({ version: 8, statements: [
+    `CREATE TABLE content_attachments (
+      id VARCHAR(200) PRIMARY KEY, owner_user_id VARCHAR(200) NOT NULL,
+      knowledge_version_id VARCHAR(200) NULL, solution_version_id VARCHAR(200) NULL,
+      original_name VARCHAR(200) NOT NULL, media_type VARCHAR(200) NOT NULL,
+      size_bytes BIGINT UNSIGNED NOT NULL, content_sha256 CHAR(64) NOT NULL,
+      storage_key VARCHAR(500) NOT NULL UNIQUE, created_at DATETIME(3) NOT NULL,
+      CONSTRAINT content_attachments_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT content_attachments_knowledge_fk FOREIGN KEY (knowledge_version_id) REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+      CONSTRAINT content_attachments_solution_fk FOREIGN KEY (solution_version_id) REFERENCES solution_versions(id) ON DELETE CASCADE,
+      CONSTRAINT content_attachments_one_target_ck CHECK ((knowledge_version_id IS NOT NULL) <> (solution_version_id IS NOT NULL)),
+      INDEX content_attachments_knowledge_idx (knowledge_version_id, created_at),
+      INDEX content_attachments_solution_idx (solution_version_id, created_at),
+      INDEX content_attachments_owner_idx (owner_user_id, created_at)
+    ) ENGINE=InnoDB`
   ] })
 ]);
 

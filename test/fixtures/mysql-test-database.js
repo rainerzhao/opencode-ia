@@ -4,6 +4,7 @@ const { parseMySqlUrl } = require('../../src/db/mysql-database');
 
 const TABLES_IN_DROP_ORDER = Object.freeze([
   'conversation_reference_details',
+  'content_attachments',
   'content_references',
   'skill_files',
   'skill_installations',
@@ -54,6 +55,7 @@ async function clearMySqlBusinessData(db, { url } = {}) {
       await client.query(`DELETE FROM \`${table}\``);
     }
     await client.query('DELETE FROM conversation_reference_details');
+    await client.query('DELETE FROM content_attachments');
     await client.query('DELETE FROM content_references');
     await client.query('UPDATE knowledge_documents SET current_version_id = NULL');
     await client.query('UPDATE solutions SET current_version_id = NULL');

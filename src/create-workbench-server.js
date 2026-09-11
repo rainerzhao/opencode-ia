@@ -34,6 +34,7 @@ const { createSkillWorkspaceSync } = require('./skills/skill-workspace-sync');
 const { createContentStore } = require('./content/content-store');
 const { createConversationContentService } = require('./content/conversation-content-service');
 const { createContentRouter } = require('./modules/content/routes');
+const { createContentAttachmentRouter } = require('./modules/content/attachment-routes');
 const { createLegacySolutionsRouter } = require('./modules/legacy/solutions-routes');
 
 function createWorkbenchServer({
@@ -316,6 +317,15 @@ const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }
 });
+const contentAttachmentRoot = config.contentAttachmentRoot || path.join(config.projectDir, 'data/content-attachments');
+ensurePrivateDirectory(contentAttachmentRoot);
+app.use('/api/content', createContentAttachmentRouter({
+  store: contentStore,
+  uploadMiddleware: upload.single('file'),
+  attachmentRoot: contentAttachmentRoot,
+  safeFileName,
+  ensurePrivateDirectory
+}));
 
 // 会话管理
 const sessions = new Map();

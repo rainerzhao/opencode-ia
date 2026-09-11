@@ -72,6 +72,7 @@ async function createAuthenticatedWorkbench(t, options = {}) {
     solutionsDir: path.join(root, 'solutions'),
     skillsDir: path.join(root, 'skills'),
     skillInstallRoot: path.join(root, 'skill-installations'),
+    contentAttachmentRoot: path.join(root, 'content-attachments'),
     uploadTempDir: path.join(root, 'uploads'),
     fetchAllowedHosts: options.fetchAllowedHosts || [],
     databasePath,
@@ -86,6 +87,7 @@ async function createAuthenticatedWorkbench(t, options = {}) {
     config.solutionsDir,
     config.skillsDir,
     config.skillInstallRoot,
+    config.contentAttachmentRoot,
     config.uploadTempDir
   ]) fs.mkdirSync(directory, { recursive: true });
 

@@ -388,6 +388,27 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX conversation_reference_details_conversation_idx
         ON conversation_reference_details(conversation_id, last_sequence);
     `
+  }),
+  Object.freeze({
+    version: 8,
+    sql: `
+      CREATE TABLE content_attachments (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        knowledge_version_id TEXT REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+        solution_version_id TEXT REFERENCES solution_versions(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL CHECK (length(original_name) BETWEEN 1 AND 200),
+        media_type TEXT NOT NULL CHECK (length(media_type) BETWEEN 1 AND 200),
+        size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0 AND size_bytes <= 52428800),
+        content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+        storage_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        CHECK ((knowledge_version_id IS NOT NULL) != (solution_version_id IS NOT NULL))
+      ) STRICT;
+      CREATE INDEX content_attachments_knowledge_idx ON content_attachments(knowledge_version_id, created_at);
+      CREATE INDEX content_attachments_solution_idx ON content_attachments(solution_version_id, created_at);
+      CREATE INDEX content_attachments_owner_idx ON content_attachments(owner_user_id, created_at);
+    `
   })
 ]);
 

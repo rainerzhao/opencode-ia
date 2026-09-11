@@ -116,3 +116,28 @@ test('converts an owned solution into a private knowledge draft', async (t) => {
   const blocked = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}`, { headers: { cookie: viewer.cookie } });
   assert.equal(blocked.status, 404);
 });
+
+test('stores a bounded private attachment against the current knowledge version', async (t) => {
+  const fixture = await createAuthenticatedWorkbench(t);
+  const author = await fixture.createMember({ username: 'attachment.author' });
+  const created = await fetch(`${fixture.origin}/api/content/knowledge`, {
+    method: 'POST', headers: authHeaders(author, { json: true }),
+    body: JSON.stringify({ title: '带附件知识', markdown: '# 正文' })
+  });
+  const knowledge = (await readJson(created)).knowledge;
+  const form = new FormData();
+  form.append('file', new Blob(['# 附件内容'], { type: 'text/markdown' }), 'guide.md');
+  const uploaded = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/attachments`, {
+    method: 'POST', headers: authHeaders(author), body: form
+  });
+  assert.equal(uploaded.status, 201);
+  const attachment = (await readJson(uploaded)).attachment;
+  assert.equal(attachment.originalName, 'guide.md');
+  assert.equal(attachment.sizeBytes, Buffer.byteLength('# 附件内容'));
+  const detail = (await readJson(await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}`, { headers: { cookie: author.cookie } }))).knowledge;
+  assert.equal(detail.attachments.length, 1);
+  assert.equal(detail.attachments[0].contentSha256.length, 64);
+  const downloaded = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/attachments/${attachment.id}`, { headers: { cookie: author.cookie } });
+  assert.equal(downloaded.status, 200);
+  assert.equal(await downloaded.text(), '# 附件内容');
+});

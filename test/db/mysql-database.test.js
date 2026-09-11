@@ -23,7 +23,7 @@ test('uses a real MySQL 8.4 database with utf8mb4 UTC, ngram and repeatable vers
   await assert.doesNotReject(() => db.assertCapabilities());
 
   const first = await migrateMySqlDatabase(db);
-  assert.deepEqual(first.appliedVersions, [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(first.appliedVersions, [1, 2, 3, 4, 5, 6, 7, 8]);
   assert.deepEqual(await migrateMySqlDatabase(db), { appliedVersions: [] });
 
   const secondDb = await createMySqlDatabase({ url: testUrl, poolSize: 1 });
@@ -52,11 +52,11 @@ test('uses a real MySQL 8.4 database with utf8mb4 UTC, ngram and repeatable vers
       'users', 'login_sessions', 'audit_logs', 'conversations', 'gateway_workers',
       'opencode_sessions', 'gateway_jobs', 'gateway_events', 'skills', 'skill_versions',
       'skill_installations', 'skill_files', 'knowledge_documents', 'knowledge_versions',
-    'solutions', 'solution_versions', 'content_references', 'conversation_reference_details', 'schema_migrations'
+    'solutions', 'solution_versions', 'content_references', 'conversation_reference_details', 'content_attachments', 'schema_migrations'
     ) ORDER BY table_name
   `);
   assert.deepEqual(tables.map((row) => row.name), [
-    'audit_logs', 'content_references', 'conversation_reference_details', 'conversations', 'gateway_events', 'gateway_jobs',
+    'audit_logs', 'content_attachments', 'content_references', 'conversation_reference_details', 'conversations', 'gateway_events', 'gateway_jobs',
     'gateway_workers', 'knowledge_documents', 'knowledge_versions', 'login_sessions',
     'opencode_sessions', 'schema_migrations', 'skill_files', 'skill_installations',
     'skill_versions', 'skills', 'solution_versions', 'solutions', 'users'

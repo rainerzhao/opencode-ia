@@ -198,6 +198,20 @@ function createMySqlContentStore(db, {
       .map((row) => ({ sourceType: row.source_type, sourceId: row.source_id, createdAt: date(row.created_at) }));
   }
 
+  async function attachmentsByKnowledgeVersion(executor, versionId) {
+    return (await executor.many(`SELECT id, original_name, media_type, size_bytes, content_sha256, created_at
+      FROM content_attachments WHERE knowledge_version_id = ? ORDER BY created_at, id`, [versionId]))
+      .map((row) => ({ id: row.id, originalName: row.original_name, mediaType: row.media_type,
+        sizeBytes: Number(row.size_bytes), contentSha256: row.content_sha256, createdAt: date(row.created_at) }));
+  }
+
+  async function attachmentByKnowledgeVersion(executor, versionId, attachmentId) {
+    const row = await executor.one(`SELECT id, original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+      FROM content_attachments WHERE id = ? AND knowledge_version_id = ?`, [attachmentId, versionId]);
+    return row ? { id: row.id, originalName: row.original_name, mediaType: row.media_type,
+      sizeBytes: Number(row.size_bytes), contentSha256: row.content_sha256, storageKey: row.storage_key, createdAt: date(row.created_at) } : null;
+  }
+
   async function normalizeConversationSource(executor, { actor, conversationId, assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256 }) {
     const conversation = requiredText(conversationId, 'INVALID_CONTENT_SOURCE', { max: 200 });
     const owner = await executor.one('SELECT id FROM conversations WHERE id = ? AND owner_user_id = ?', [conversation, actor.id]);
@@ -321,6 +335,7 @@ function createMySqlContentStore(db, {
       ...toKnowledgeSummary(row),
       ...(includeContent ? { markdown: row.markdown } : {}),
       references,
+      attachments: await attachmentsByKnowledgeVersion(db, row.version_id),
       versionHistory: history.map((version) => ({
         id: version.id, version: Number(version.version_number), title: version.title, category: version.category,
         tags: parseTags(version.tags_json), createdAt: date(version.created_at), createdByUserId: version.created_by_user_id
@@ -451,6 +466,40 @@ function createMySqlContentStore(db, {
     });
   }
 
+  async function createKnowledgeAttachment({ actorUserId, actorRole, documentId, id, originalName, mediaType, sizeBytes, contentSha256, storageKey }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const timestamp = now();
+    const attachmentId = requiredText(id, 'INVALID_ATTACHMENT', { max: 200 });
+    const name = requiredText(originalName, 'INVALID_ATTACHMENT', { max: 200 });
+    if (name.includes('/') || name.includes('\\')) throw contentError('INVALID_ATTACHMENT', 'attachment name is invalid');
+    const media = requiredText(mediaType, 'INVALID_ATTACHMENT', { max: 200 });
+    const size = Number(sizeBytes);
+    const digest = typeof contentSha256 === 'string' ? contentSha256.toLowerCase() : '';
+    const key = requiredText(storageKey, 'INVALID_ATTACHMENT', { max: 500 });
+    if (!Number.isInteger(size) || size < 0 || size > 50 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(digest)) {
+      throw contentError('INVALID_ATTACHMENT', 'attachment metadata is invalid');
+    }
+    return db.transaction(async (tx) => {
+      const knowledge = await writableKnowledge(tx, actor, documentId);
+      await tx.query(`INSERT INTO content_attachments (
+        id, owner_user_id, knowledge_version_id, solution_version_id,
+        original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`, [
+        attachmentId, actor.id, knowledge.version_id, name, media, size, digest, key, timestamp
+      ]);
+      return { id: attachmentId, originalName: name, mediaType: media, sizeBytes: size, contentSha256: digest, storageKey: key, createdAt: date(timestamp) };
+    });
+  }
+
+  async function getKnowledgeAttachment({ actorUserId, actorRole, documentId, attachmentId }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const id = requiredText(attachmentId, 'INVALID_ATTACHMENT', { max: 200 });
+    const knowledge = await readableKnowledge(db, actor, documentId);
+    const attachment = await attachmentByKnowledgeVersion(db, knowledge.version_id, id);
+    if (!attachment) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    return attachment;
+  }
+
   async function saveSolutionVersion({ actorUserId, actorRole, solutionId, title, description, solutionMarkdown, references, visibility, status }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const timestamp = now();
@@ -525,7 +574,8 @@ function createMySqlContentStore(db, {
 
   return Object.freeze({
     createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, searchKnowledge, listKnowledge,
-    createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, saveSolutionVersion, getSolution, listSolutions,
+    createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, createKnowledgeAttachment, saveSolutionVersion, getSolution, listSolutions,
+    getKnowledgeAttachment,
     publishKnowledge, withdrawKnowledge, publishSolution, withdrawSolution
   });
 }

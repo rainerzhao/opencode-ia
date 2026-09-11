@@ -22,7 +22,7 @@ test('upgrades a populated Stage 2 database with the complete Skill lifecycle sc
   });
   insertUser(db);
 
-  assert.deepEqual(migrateDatabase(db), { appliedVersions: [3, 4, 5, 6, 7] });
+  assert.deepEqual(migrateDatabase(db), { appliedVersions: [3, 4, 5, 6, 7, 8] });
   const tables = db.prepare(`
     SELECT name FROM sqlite_schema
     WHERE type = 'table' AND name IN ('skills', 'skill_versions', 'skill_installations')

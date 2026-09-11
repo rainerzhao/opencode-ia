@@ -162,6 +162,14 @@ function createContentStore(db, {
     FROM content_references
     WHERE knowledge_version_id = ? ORDER BY source_type, source_id
   `);
+  const attachmentsByKnowledgeVersion = db.prepare(`
+    SELECT id, original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+    FROM content_attachments WHERE knowledge_version_id = ? ORDER BY created_at, id
+  `);
+  const attachmentByKnowledgeVersion = db.prepare(`
+    SELECT a.id, a.original_name, a.media_type, a.size_bytes, a.content_sha256, a.storage_key, a.created_at
+    FROM content_attachments a WHERE a.id = ? AND a.knowledge_version_id = ?
+  `);
   const conversationByOwner = db.prepare(`
     SELECT id FROM conversations WHERE id = ? AND owner_user_id = ?
   `);
@@ -359,6 +367,10 @@ function createContentStore(db, {
         sourceId: item.source_id,
         createdAt: item.created_at
       })),
+      attachments: attachmentsByKnowledgeVersion.all(row.version_id).map((item) => ({
+        id: item.id, originalName: item.original_name, mediaType: item.media_type,
+        sizeBytes: item.size_bytes, contentSha256: item.content_sha256, createdAt: item.created_at
+      })),
       versionHistory: knowledgeHistory.all(row.document_id).map((version) => ({
         id: version.id,
         version: version.version_number,
@@ -510,6 +522,45 @@ function createContentStore(db, {
     });
   }
 
+  function createKnowledgeAttachment({ actorUserId, actorRole, documentId, id, originalName, mediaType, sizeBytes, contentSha256, storageKey }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const timestamp = now();
+    const attachmentId = requiredText(id, 'INVALID_ATTACHMENT', { max: 200 });
+    const name = requiredText(originalName, 'INVALID_ATTACHMENT', { max: 200 });
+    if (name.includes('/') || name.includes('\\')) throw contentError('INVALID_ATTACHMENT', 'attachment name is invalid');
+    const media = requiredText(mediaType, 'INVALID_ATTACHMENT', { max: 200 });
+    const size = Number(sizeBytes);
+    const digest = typeof contentSha256 === 'string' ? contentSha256.toLowerCase() : '';
+    const key = requiredText(storageKey, 'INVALID_ATTACHMENT', { max: 500 });
+    if (!Number.isInteger(size) || size < 0 || size > 50 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(digest)) {
+      throw contentError('INVALID_ATTACHMENT', 'attachment metadata is invalid');
+    }
+    return transaction(() => {
+      const knowledge = writableKnowledge(actor, documentId);
+      try {
+        db.prepare(`INSERT INTO content_attachments (
+          id, owner_user_id, knowledge_version_id, solution_version_id,
+          original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`).run(
+          attachmentId, actor.id, knowledge.version_id, name, media, size, digest, key, timestamp
+        );
+      } catch (error) {
+        if (/UNIQUE constraint failed/.test(error.message)) throw contentError('ATTACHMENT_CONFLICT', 'attachment already exists');
+        throw error;
+      }
+      return { id: attachmentId, originalName: name, mediaType: media, sizeBytes: size, contentSha256: digest, storageKey: key, createdAt: timestamp };
+    });
+  }
+
+  function getKnowledgeAttachment({ actorUserId, actorRole, documentId, attachmentId }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const knowledge = readableKnowledge(actor, documentId);
+    const attachment = attachmentByKnowledgeVersion.get(requiredText(attachmentId, 'INVALID_ATTACHMENT', { max: 200 }), knowledge.version_id);
+    if (!attachment) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    return { id: attachment.id, originalName: attachment.original_name, mediaType: attachment.media_type,
+      sizeBytes: attachment.size_bytes, contentSha256: attachment.content_sha256, storageKey: attachment.storage_key, createdAt: attachment.created_at };
+  }
+
   function saveSolutionVersion({ actorUserId, actorRole, solutionId, title, description, solutionMarkdown, references, visibility, status }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const timestamp = now();
@@ -629,6 +680,8 @@ function createContentStore(db, {
     createSolutionDraft,
     createSolutionFromConversation,
     createKnowledgeFromSolution,
+    createKnowledgeAttachment,
+    getKnowledgeAttachment,
     saveSolutionVersion,
     getSolution,
     listSolutions,
