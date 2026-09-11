@@ -70,6 +70,21 @@
 - [ ] **Step 4: Run full MySQL and Gateway acceptance.**
 - [ ] **Step 5: Update product status, verify, commit and push.**
 
+### Task 3.2: Prepare the content HTTP boundary for the asynchronous repository
+
+**Files:**
+- Modify: `src/modules/content/routes.js`
+- Add: `test/api/content-routes-async.test.js`
+
+**Interfaces:**
+- Consumes: the established content Store contract and Express error mapping.
+- Produces: one HTTP boundary that works for the historical synchronous Store and the future asynchronous MySQL Content Store, without exposing Promise objects or weakening audit metadata.
+
+- [x] **Step 1: Write a failing HTTP test using an asynchronous content Store.**
+- [x] **Step 2: Convert every knowledge and solution read/write/publish/withdraw operation to await the Store.**
+- [x] **Step 3: Preserve existing error mapping, ownership inputs and audit metadata.**
+- [x] **Step 4: Run content workflow and syntax checks; complete full verification before phase commit.**
+
 ## Self-review
 
 - Task 1 establishes every method Task 2 and Task 3 require.

@@ -20,6 +20,10 @@ Fresh verification completed before the phase commit:
 
 This phase does not validate Linux deployment, real-provider capacity, long-run stability, OS process sandboxing, or a MySQL-only application composition.
 
+## Task 3.2: Asynchronous content HTTP boundary
+
+**PASS — HTTP contract.** A real Express request to `POST /knowledge` against an asynchronous Store returns the created private knowledge item and records only safe audit metadata. The existing knowledge/solution create, edit, publish and withdraw workflow remains compatible with the historical synchronous Store. Fresh verification: 291 passed, 0 failed, 11 intentionally skipped; production build, 141-file syntax check and secret scan passed.
+
 ## Task 2: Asynchronous Gateway runtime
 
 **PASS — Mac Docker MySQL acceptance.** A delayed Worker metadata persistence test proves startup does not schedule a Job until the Worker exists in durable storage. The accepted Job creates and persists an OpenCode Session binding, uses that Session for the prompt, writes ordered events, and reaches `completed`.

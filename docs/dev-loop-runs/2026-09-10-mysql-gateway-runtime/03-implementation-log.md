@@ -22,3 +22,10 @@
 - RED: an asynchronous metadata Repository serialized as `{}` in the administrator Job list.
 - GREEN: the route awaits metadata and Job reads, returns a safe 503 for unavailable metadata, and continues to sanitize cancellation failures.
 - Verification: `npm test` reported 290 passed, 0 failed, 11 skipped; build, syntax and secret scans passed.
+
+## Task 3.2: Asynchronous content HTTP boundary
+
+- RED: `POST /knowledge` with a durable asynchronous Store returned a Promise-shaped response instead of a created knowledge item.
+- GREEN: all knowledge and solution list, read, create, update, publish and withdraw routes now await the Store and pass asynchronous errors through the established domain-error mapping.
+- Final verification: `npm test` reported 291 passed, 0 failed, 11 intentionally skipped; `npm run build`, `npm run check` (141 files) and `npm run security:scan` all exited successfully.
+- Product boundary: this is an interface-preparation step. The contents continue to use the historical SQLite Store until the MySQL Content Store and a MySQL-only application composition are accepted.
