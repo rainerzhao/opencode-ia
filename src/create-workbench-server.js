@@ -32,6 +32,7 @@ const { createSkillInstallationFiles } = require('./skills/skill-installation-fi
 const { createSkillInstallationService } = require('./skills/skill-installation-service');
 const { createSkillWorkspaceSync } = require('./skills/skill-workspace-sync');
 const { createContentStore } = require('./content/content-store');
+const { createConversationContentService } = require('./content/conversation-content-service');
 const { createContentRouter } = require('./modules/content/routes');
 
 function createWorkbenchServer({
@@ -81,6 +82,7 @@ const requestAuditor = createRequestAuditor({ db });
 const gatewayStore = createGatewayStore(db);
 const skillStore = createSkillStore(db);
 const contentStore = createContentStore(db);
+const conversationContentService = createConversationContentService({ gatewayStore, contentStore });
 const skillInstallationFiles = createSkillInstallationFiles({
   root: config.skillInstallRoot || path.join(config.projectDir, 'data/skill-installations')
 });
@@ -195,7 +197,7 @@ app.use('/api/skills', createSkillRouter({
   validationService: skillValidationService,
   installationService: skillInstallationService
 }));
-app.use('/api/content', createContentRouter({ store: contentStore, requestAuditor }));
+app.use('/api/content', createContentRouter({ store: contentStore, requestAuditor, conversationContentService }));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);

@@ -180,7 +180,7 @@ const MYSQL_MIGRATIONS = Object.freeze([
       FOREIGN KEY (id, current_version_id) REFERENCES solution_versions(solution_id, id)`,
     `CREATE TABLE content_references (
       id VARCHAR(200) PRIMARY KEY,
-      source_type ENUM('conversation','knowledge_version','skill_version','model') NOT NULL,
+      source_type ENUM('conversation','knowledge_version','solution_version','skill_version','model') NOT NULL,
       source_id VARCHAR(200) NOT NULL, target_type ENUM('knowledge_version','solution_version') NOT NULL,
       target_id VARCHAR(200) NOT NULL, knowledge_version_id VARCHAR(200) NULL, solution_version_id VARCHAR(200) NULL,
       created_at DATETIME(3) NOT NULL,
@@ -194,6 +194,21 @@ const MYSQL_MIGRATIONS = Object.freeze([
       INDEX content_references_knowledge_idx (knowledge_version_id),
       INDEX content_references_solution_idx (solution_version_id)
     ) ENGINE=InnoDB`
+  ] }),
+  Object.freeze({ version: 6, statements: [
+    `CREATE TABLE conversation_reference_details (
+      content_reference_id VARCHAR(200) PRIMARY KEY, conversation_id VARCHAR(200) NOT NULL,
+      first_sequence BIGINT UNSIGNED NOT NULL, last_sequence BIGINT UNSIGNED NOT NULL,
+      completed_turn_count INT UNSIGNED NOT NULL, content_sha256 CHAR(64) NOT NULL,
+      created_at DATETIME(3) NOT NULL,
+      CONSTRAINT conversation_reference_details_reference_fk FOREIGN KEY (content_reference_id) REFERENCES content_references(id) ON DELETE CASCADE,
+      CONSTRAINT conversation_reference_details_conversation_fk FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      CHECK (last_sequence >= first_sequence), CHECK (completed_turn_count >= 1),
+      INDEX conversation_reference_details_conversation_idx (conversation_id, last_sequence)
+    ) ENGINE=InnoDB`
+  ] }),
+  Object.freeze({ version: 7, statements: [
+    `ALTER TABLE content_references MODIFY source_type ENUM('conversation','knowledge_version','solution_version','skill_version','model') NOT NULL`
   ] })
 ]);
 

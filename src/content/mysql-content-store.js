@@ -5,7 +5,7 @@ const { toIsoTimestamp, toMySqlTimestamp } = require('../users/mysql-user-store'
 
 const CONTENT_STATUSES = new Set(['draft', 'published', 'withdrawn', 'archived']);
 const CONTENT_VISIBILITIES = new Set(['private', 'team']);
-const REFERENCE_TYPES = new Set(['conversation', 'knowledge_version', 'skill_version', 'model']);
+const REFERENCE_TYPES = new Set(['conversation', 'knowledge_version', 'solution_version', 'skill_version', 'model']);
 
 function contentError(code, message) {
   const error = new Error(message);
@@ -174,19 +174,83 @@ function createMySqlContentStore(db, {
   }
 
   async function referencesByVersion(executor, versionId) {
-    return (await executor.many(`SELECT source_type, source_id FROM content_references
-      WHERE solution_version_id = ? ORDER BY source_type, source_id`, [versionId]))
-      .map((row) => ({ sourceType: row.source_type, sourceId: row.source_id }));
+    return (await executor.many(`SELECT r.source_type, r.source_id,
+      d.conversation_id, d.first_sequence, d.last_sequence,
+      d.completed_turn_count, d.content_sha256, d.created_at AS reference_created_at
+      FROM content_references r
+      LEFT JOIN conversation_reference_details d ON d.content_reference_id = r.id
+      WHERE r.solution_version_id = ? ORDER BY r.source_type, r.source_id`, [versionId]))
+      .map((row) => ({
+        sourceType: row.source_type,
+        sourceId: row.source_id,
+        ...(row.conversation_id ? {
+          firstSequence: Number(row.first_sequence),
+          lastSequence: Number(row.last_sequence),
+          completedTurnCount: Number(row.completed_turn_count),
+          contentSha256: row.content_sha256
+        } : {})
+      }));
+  }
+
+  async function knowledgeReferencesByVersion(executor, versionId) {
+    return (await executor.many(`SELECT source_type, source_id, created_at
+      FROM content_references WHERE knowledge_version_id = ? ORDER BY source_type, source_id`, [versionId]))
+      .map((row) => ({ sourceType: row.source_type, sourceId: row.source_id, createdAt: date(row.created_at) }));
+  }
+
+  async function normalizeConversationSource(executor, { actor, conversationId, assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256 }) {
+    const conversation = requiredText(conversationId, 'INVALID_CONTENT_SOURCE', { max: 200 });
+    const owner = await executor.one('SELECT id FROM conversations WHERE id = ? AND owner_user_id = ?', [conversation, actor.id]);
+    if (!owner) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    const markdown = requiredText(assistantMarkdown, 'INVALID_CONTENT_SOURCE', { max: 1048576, multiline: true });
+    if (!Number.isInteger(firstSequence) || firstSequence < 1 ||
+      !Number.isInteger(lastSequence) || lastSequence < firstSequence ||
+      !Number.isInteger(completedTurnCount) || completedTurnCount < 1 ||
+      typeof contentSha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(contentSha256) ||
+      crypto.createHash('sha256').update(markdown).digest('hex') !== contentSha256.toLowerCase()) {
+      throw contentError('INVALID_CONTENT_SOURCE', 'conversation source is invalid');
+    }
+    return { conversationId: conversation, assistantMarkdown: markdown, firstSequence, lastSequence, completedTurnCount, contentSha256: contentSha256.toLowerCase() };
+  }
+
+  function toReferenceCard(item, { ownerUserId, actor }) {
+    if (!item.conversation_id) return { sourceType: item.source_type, sourceId: item.source_id };
+    if (ownerUserId === actor.id) {
+      return {
+        sourceType: item.source_type,
+        sourceId: item.source_id,
+        firstSequence: Number(item.first_sequence),
+        lastSequence: Number(item.last_sequence),
+        completedTurnCount: Number(item.completed_turn_count),
+        contentSha256: item.content_sha256
+      };
+    }
+    return {
+      sourceType: 'conversation',
+      completedTurnCount: Number(item.completed_turn_count),
+      createdAt: date(item.reference_created_at),
+      private: true
+    };
   }
 
   async function insertReferences(executor, { solutionVersionId, references, timestamp }) {
     for (const reference of references) {
+      const referenceId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
       await executor.query(`INSERT INTO content_references (
         id, source_type, source_id, target_type, target_id, knowledge_version_id, solution_version_id, created_at
       ) VALUES (?, ?, ?, 'solution_version', ?, NULL, ?, ?)`, [
-        requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 }), reference.sourceType, reference.sourceId,
+        referenceId, reference.sourceType, reference.sourceId,
         solutionVersionId, solutionVersionId, timestamp
       ]);
+      if (reference.sourceType === 'conversation' && reference.firstSequence !== undefined) {
+        await executor.query(`INSERT INTO conversation_reference_details (
+          content_reference_id, conversation_id, first_sequence, last_sequence,
+          completed_turn_count, content_sha256, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+          referenceId, reference.conversationId || reference.sourceId, reference.firstSequence,
+          reference.lastSequence, reference.completedTurnCount, reference.contentSha256, timestamp
+        ]);
+      }
     }
   }
 
@@ -248,11 +312,15 @@ function createMySqlContentStore(db, {
   async function getKnowledge({ actorUserId, actorRole, documentId, includeContent = false }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const row = await readableKnowledge(db, actor, documentId);
-    const history = await db.many(`SELECT id, version_number, title, category, tags_json, created_at, created_by_user_id
-      FROM knowledge_versions WHERE document_id = ? ORDER BY version_number DESC`, [row.document_id]);
+    const [references, history] = await Promise.all([
+      knowledgeReferencesByVersion(db, row.version_id),
+      db.many(`SELECT id, version_number, title, category, tags_json, created_at, created_by_user_id
+      FROM knowledge_versions WHERE document_id = ? ORDER BY version_number DESC`, [row.document_id])
+    ]);
     return {
       ...toKnowledgeSummary(row),
       ...(includeContent ? { markdown: row.markdown } : {}),
+      references,
       versionHistory: history.map((version) => ({
         id: version.id, version: Number(version.version_number), title: version.title, category: version.category,
         tags: parseTags(version.tags_json), createdAt: date(version.created_at), createdByUserId: version.created_by_user_id
@@ -310,6 +378,79 @@ function createMySqlContentStore(db, {
     });
   }
 
+  async function createSolutionFromConversation({ actorUserId, actorRole, conversationId, title, description = '', assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256 }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const timestamp = now();
+    const solutionId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+    const versionId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+    const referenceId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+    const fields = {
+      title: requiredText(title, 'INVALID_SOLUTION_TITLE', { max: 200 }),
+      description: requiredText(description, 'INVALID_SOLUTION_DESCRIPTION', { max: 10000, allowEmpty: true, multiline: true })
+    };
+    return db.transaction(async (tx) => {
+      const source = await normalizeConversationSource(tx, {
+        actor, conversationId, assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256
+      });
+      await tx.query(`INSERT INTO solutions (
+        id, owner_user_id, status, visibility, current_version_id, created_at, updated_at
+      ) VALUES (?, ?, 'draft', 'private', NULL, ?, ?)`, [solutionId, actor.id, timestamp, timestamp]);
+      await tx.query(`INSERT INTO solution_versions (
+        id, solution_id, version_number, title, description, solution_markdown, is_current, current_solution_id, created_at, created_by_user_id
+      ) VALUES (?, ?, 1, ?, ?, ?, 1, ?, ?, ?)`, [
+        versionId, solutionId, fields.title, fields.description, source.assistantMarkdown, solutionId, timestamp, actor.id
+      ]);
+      await tx.query(`INSERT INTO content_references (
+        id, source_type, source_id, target_type, target_id, knowledge_version_id, solution_version_id, created_at
+      ) VALUES (?, 'conversation', ?, 'solution_version', ?, NULL, ?, ?)`, [
+        referenceId, source.conversationId, versionId, versionId, timestamp
+      ]);
+      await tx.query(`INSERT INTO conversation_reference_details (
+        content_reference_id, conversation_id, first_sequence, last_sequence,
+        completed_turn_count, content_sha256, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+        referenceId, source.conversationId, source.firstSequence, source.lastSequence,
+        source.completedTurnCount, source.contentSha256, timestamp
+      ]);
+      await tx.query('UPDATE solutions SET current_version_id = ? WHERE id = ?', [versionId, solutionId]);
+      return toSolutionSummary(await tx.one(`${solutionSelect} WHERE s.id = ?`, [solutionId]));
+    });
+  }
+
+  async function createKnowledgeFromSolution({ actorUserId, actorRole, solutionId, title, category = '', tags = [], markdown }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const timestamp = now();
+    const documentId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+    const versionId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+    const referenceId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+    return db.transaction(async (tx) => {
+      const source = await writableSolution(tx, actor, solutionId);
+      const fields = {
+        title: title === undefined ? source.title : requiredText(title, 'INVALID_KNOWLEDGE_TITLE', { max: 200 }),
+        category: requiredText(category, 'INVALID_KNOWLEDGE_CATEGORY', { max: 100, allowEmpty: true }),
+        tags: normalizeTags(tags),
+        markdown: requiredText(markdown, 'INVALID_KNOWLEDGE_MARKDOWN', { max: 1048576, multiline: true }),
+        visibility: 'private',
+        status: 'draft'
+      };
+      await tx.query(`INSERT INTO knowledge_documents (
+        id, owner_user_id, status, visibility, current_version_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, ?, ?)`, [documentId, actor.id, fields.status, fields.visibility, timestamp, timestamp]);
+      await tx.query(`INSERT INTO knowledge_versions (
+        id, document_id, version_number, title, category, tags_json, markdown, is_current, current_document_id, created_at, created_by_user_id
+      ) VALUES (?, ?, 1, ?, ?, ?, ?, 1, ?, ?, ?)`, [
+        versionId, documentId, fields.title, fields.category, JSON.stringify(fields.tags), fields.markdown, documentId, timestamp, actor.id
+      ]);
+      await tx.query(`INSERT INTO content_references (
+        id, source_type, source_id, target_type, target_id, knowledge_version_id, solution_version_id, created_at
+      ) VALUES (?, 'solution_version', ?, 'knowledge_version', ?, ?, NULL, ?)`, [
+        referenceId, source.version_id, versionId, versionId, timestamp
+      ]);
+      await tx.query('UPDATE knowledge_documents SET current_version_id = ? WHERE id = ?', [versionId, documentId]);
+      return toKnowledgeSummary(await tx.one(`${knowledgeSelect} WHERE d.id = ?`, [documentId]));
+    });
+  }
+
   async function saveSolutionVersion({ actorUserId, actorRole, solutionId, title, description, solutionMarkdown, references, visibility, status }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const timestamp = now();
@@ -350,7 +491,7 @@ function createMySqlContentStore(db, {
     return {
       ...toSolutionSummary(row),
       ...(includeContent ? { description: row.description, solutionMarkdown: row.solution_markdown } : {}),
-      references,
+      references: references.map((item) => toReferenceCard(item, { ownerUserId: row.owner_user_id, actor })),
       versionHistory: history.map((version) => ({
         id: version.id, version: Number(version.version_number), title: version.title,
         createdAt: date(version.created_at), createdByUserId: version.created_by_user_id
@@ -384,7 +525,7 @@ function createMySqlContentStore(db, {
 
   return Object.freeze({
     createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, searchKnowledge, listKnowledge,
-    createSolutionDraft, saveSolutionVersion, getSolution, listSolutions,
+    createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, saveSolutionVersion, getSolution, listSolutions,
     publishKnowledge, withdrawKnowledge, publishSolution, withdrawSolution
   });
 }

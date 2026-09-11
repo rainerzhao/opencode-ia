@@ -307,7 +307,7 @@ const MIGRATIONS = Object.freeze([
 
       CREATE TABLE content_references (
         id TEXT PRIMARY KEY,
-        source_type TEXT NOT NULL CHECK (source_type IN ('conversation', 'knowledge_version', 'skill_version', 'model')),
+        source_type TEXT NOT NULL CHECK (source_type IN ('conversation', 'knowledge_version', 'solution_version', 'skill_version', 'model')),
         source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 200),
         knowledge_version_id TEXT REFERENCES knowledge_versions(id) ON DELETE CASCADE,
         solution_version_id TEXT REFERENCES solution_versions(id) ON DELETE CASCADE,
@@ -318,6 +318,75 @@ const MIGRATIONS = Object.freeze([
 
       CREATE INDEX content_references_knowledge_idx ON content_references(knowledge_version_id);
       CREATE INDEX content_references_solution_idx ON content_references(solution_version_id);
+    `
+  }),
+  Object.freeze({
+    version: 6,
+    sql: `
+      CREATE TABLE conversation_reference_details (
+        content_reference_id TEXT PRIMARY KEY REFERENCES content_references(id) ON DELETE CASCADE,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        first_sequence INTEGER NOT NULL CHECK (first_sequence >= 1),
+        last_sequence INTEGER NOT NULL CHECK (last_sequence >= first_sequence),
+        completed_turn_count INTEGER NOT NULL CHECK (completed_turn_count >= 1),
+        content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX conversation_reference_details_conversation_idx
+        ON conversation_reference_details(conversation_id, last_sequence);
+      `
+  }),
+  Object.freeze({
+    version: 7,
+    sql: `
+      CREATE TABLE conversation_reference_details_backup (
+        content_reference_id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        first_sequence INTEGER NOT NULL,
+        last_sequence INTEGER NOT NULL,
+        completed_turn_count INTEGER NOT NULL,
+        content_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO conversation_reference_details_backup
+        SELECT content_reference_id, conversation_id, first_sequence, last_sequence,
+          completed_turn_count, content_sha256, created_at
+        FROM conversation_reference_details;
+      DROP TABLE conversation_reference_details;
+      CREATE TABLE content_references_v7 (
+        id TEXT PRIMARY KEY,
+        source_type TEXT NOT NULL CHECK (source_type IN ('conversation', 'knowledge_version', 'solution_version', 'skill_version', 'model')),
+        source_id TEXT NOT NULL CHECK (length(source_id) BETWEEN 1 AND 200),
+        knowledge_version_id TEXT REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+        solution_version_id TEXT REFERENCES solution_versions(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        CHECK ((knowledge_version_id IS NOT NULL) != (solution_version_id IS NOT NULL)),
+        UNIQUE (source_type, source_id, knowledge_version_id, solution_version_id)
+      ) STRICT;
+      INSERT INTO content_references_v7
+        SELECT id, source_type, source_id, knowledge_version_id, solution_version_id, created_at
+        FROM content_references;
+      DROP TABLE content_references;
+      ALTER TABLE content_references_v7 RENAME TO content_references;
+      CREATE INDEX content_references_knowledge_idx ON content_references(knowledge_version_id);
+      CREATE INDEX content_references_solution_idx ON content_references(solution_version_id);
+      CREATE TABLE conversation_reference_details (
+        content_reference_id TEXT PRIMARY KEY REFERENCES content_references(id) ON DELETE CASCADE,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        first_sequence INTEGER NOT NULL CHECK (first_sequence >= 1),
+        last_sequence INTEGER NOT NULL CHECK (last_sequence >= first_sequence),
+        completed_turn_count INTEGER NOT NULL CHECK (completed_turn_count >= 1),
+        content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+        created_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO conversation_reference_details
+        SELECT content_reference_id, conversation_id, first_sequence, last_sequence,
+          completed_turn_count, content_sha256, created_at
+        FROM conversation_reference_details_backup;
+      DROP TABLE conversation_reference_details_backup;
+      CREATE INDEX conversation_reference_details_conversation_idx
+        ON conversation_reference_details(conversation_id, last_sequence);
     `
   })
 ]);

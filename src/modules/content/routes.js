@@ -35,7 +35,14 @@ function mapStoreError(error) {
     INVALID_KNOWLEDGE_MARKDOWN: 400,
     INVALID_SOLUTION_TITLE: 400,
     INVALID_SOLUTION_DESCRIPTION: 400,
-    INVALID_SOLUTION_MARKDOWN: 400
+    INVALID_SOLUTION_MARKDOWN: 400,
+    INVALID_CONTENT_SOURCE: 400,
+    SOURCE_CONVERSATION_INVALID: 400,
+    SOURCE_EVENTS_INVALID: 400,
+    SOURCE_EVENT_CONVERSATION_MISMATCH: 400,
+    SOURCE_EVENT_INVALID: 400,
+    SOURCE_NO_COMPLETED_TURNS: 422,
+    SOURCE_TOO_LARGE: 413
   };
   if (statuses[error.code]) error.status = statuses[error.code];
   return error;
@@ -55,7 +62,7 @@ function record(req, requestAuditor, action, targetType, targetId, content) {
   });
 }
 
-function createContentRouter({ store, requestAuditor }) {
+function createContentRouter({ store, requestAuditor, conversationContentService = null }) {
   if (!store || !requestAuditor) throw new TypeError('content route dependencies are required');
   const router = express.Router();
 
@@ -105,6 +112,16 @@ function createContentRouter({ store, requestAuditor }) {
     record(req, requestAuditor, 'content.solution.create', 'solution', solution.id, solution);
     res.status(201).json({ solution });
   }));
+  if (conversationContentService) {
+    router.post('/solutions/from-conversation', asyncRoute(async (req, res) => {
+      const solution = await conversationContentService.createSolutionFromConversation({
+        ...actor(req), conversationId: contentId(req.body?.conversationId),
+        title: req.body?.title, description: req.body?.description
+      });
+      record(req, requestAuditor, 'content.solution.create_from_conversation', 'solution', solution.id, solution);
+      res.status(201).json({ solution });
+    }));
+  }
   router.get('/solutions/:contentId', asyncRoute(async (req, res) => {
     res.json({ solution: await store.getSolution({ ...actor(req), solutionId: contentId(req.params.contentId), includeContent: true }) });
   }));
@@ -123,6 +140,17 @@ function createContentRouter({ store, requestAuditor }) {
       res.json({ solution });
     }));
   }
+  router.post('/solutions/:contentId/to-knowledge', asyncRoute(async (req, res) => {
+    if (typeof store.createKnowledgeFromSolution !== 'function') {
+      throw routeError('CONTENT_FEATURE_UNAVAILABLE', 'content conversion is unavailable', 501);
+    }
+    const knowledge = await store.createKnowledgeFromSolution({
+      ...actor(req), solutionId: contentId(req.params.contentId), title: req.body?.title,
+      category: req.body?.category, tags: req.body?.tags, markdown: req.body?.markdown
+    });
+    record(req, requestAuditor, 'content.knowledge.create_from_solution', 'knowledge_document', knowledge.id, knowledge);
+    res.status(201).json({ knowledge });
+  }));
   return router;
 }
 

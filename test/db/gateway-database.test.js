@@ -44,7 +44,7 @@ test('upgrades a populated version-1 database with the complete Gateway schema',
   );
   insertUser(db);
 
-  assert.deepEqual(migrateDatabase(db), { appliedVersions: [2, 3, 4, 5] });
+  assert.deepEqual(migrateDatabase(db), { appliedVersions: [2, 3, 4, 5, 6, 7] });
   assert.deepEqual(migrateDatabase(db), { appliedVersions: [] });
 
   const tables = db.prepare(`
@@ -65,7 +65,7 @@ test('upgrades a populated version-1 database with the complete Gateway schema',
   assert.equal(db.prepare('SELECT username FROM users WHERE id = ?').get('user-1').username, 'user-1');
   assert.deepEqual(
     db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((row) => row.version),
-    [1, 2, 3, 4, 5]
+    [1, 2, 3, 4, 5, 6, 7]
   );
 });
 

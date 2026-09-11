@@ -21,7 +21,10 @@ test('upgrades the established schema with versioned content and current-version
   });
   insertUser(db, 'member-a');
 
-  assert.deepEqual(migrateDatabase(db), { appliedVersions: [5] });
+  assert.deepEqual(migrateDatabase(db), { appliedVersions: [5, 6, 7] });
+  const details = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_reference_details'").all();
+  assert.equal(details.length, 1);
+  assert.equal(details[0].name, 'conversation_reference_details');
   const names = db.prepare(`
     SELECT name FROM sqlite_schema
     WHERE name IN ('knowledge_documents', 'knowledge_versions', 'solutions', 'solution_versions', 'content_references', 'knowledge_fts')

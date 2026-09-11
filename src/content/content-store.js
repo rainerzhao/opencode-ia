@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 
 const CONTENT_STATUSES = new Set(['draft', 'published', 'withdrawn', 'archived']);
 const CONTENT_VISIBILITIES = new Set(['private', 'team']);
-const REFERENCE_TYPES = new Set(['conversation', 'knowledge_version', 'skill_version', 'model']);
+const REFERENCE_TYPES = new Set(['conversation', 'knowledge_version', 'solution_version', 'skill_version', 'model']);
 
 function contentError(code, message) {
   const error = new Error(message);
@@ -150,8 +150,20 @@ function createContentStore(db, {
     FROM solution_versions WHERE solution_id = ? ORDER BY version_number DESC
   `);
   const referencesByVersion = db.prepare(`
-    SELECT source_type, source_id FROM content_references
-    WHERE solution_version_id = ? ORDER BY source_type, source_id
+    SELECT r.source_type, r.source_id,
+      d.conversation_id, d.first_sequence, d.last_sequence,
+      d.completed_turn_count, d.content_sha256, d.created_at AS reference_created_at
+    FROM content_references r
+    LEFT JOIN conversation_reference_details d ON d.content_reference_id = r.id
+    WHERE r.solution_version_id = ? ORDER BY r.source_type, r.source_id
+  `);
+  const knowledgeReferencesByVersion = db.prepare(`
+    SELECT source_type, source_id, created_at
+    FROM content_references
+    WHERE knowledge_version_id = ? ORDER BY source_type, source_id
+  `);
+  const conversationByOwner = db.prepare(`
+    SELECT id FROM conversations WHERE id = ? AND owner_user_id = ?
   `);
 
   function now() {
@@ -216,8 +228,63 @@ function createContentStore(db, {
       VALUES (?, ?, ?, NULL, ?, ?)
     `);
     for (const reference of references) {
-      insert.run(idFactory(), reference.sourceType, reference.sourceId, solutionVersionId, timestamp);
+      const referenceId = idFactory();
+      insert.run(referenceId, reference.sourceType, reference.sourceId, solutionVersionId, timestamp);
+      if (reference.sourceType === 'conversation' && reference.firstSequence !== undefined) {
+        db.prepare(`INSERT INTO conversation_reference_details (
+          content_reference_id, conversation_id, first_sequence, last_sequence,
+          completed_turn_count, content_sha256, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run(referenceId, reference.conversationId || reference.sourceId, reference.firstSequence,
+            reference.lastSequence, reference.completedTurnCount, reference.contentSha256, timestamp);
+      }
     }
+  }
+
+  function normalizeConversationSource({ actor, conversationId, assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256 }) {
+    const conversation = requiredText(conversationId, 'INVALID_CONTENT_SOURCE', { max: 200 });
+    if (!conversationByOwner.get(conversation, actor.id)) {
+      throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    }
+    const markdown = requiredText(assistantMarkdown, 'INVALID_CONTENT_SOURCE', {
+      max: 1048576,
+      multiline: true
+    });
+    if (!Number.isInteger(firstSequence) || firstSequence < 1 ||
+      !Number.isInteger(lastSequence) || lastSequence < firstSequence ||
+      !Number.isInteger(completedTurnCount) || completedTurnCount < 1 ||
+      typeof contentSha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(contentSha256) ||
+      crypto.createHash('sha256').update(markdown).digest('hex') !== contentSha256.toLowerCase()) {
+      throw contentError('INVALID_CONTENT_SOURCE', 'conversation source is invalid');
+    }
+    return {
+      conversationId: conversation,
+      assistantMarkdown: markdown,
+      firstSequence,
+      lastSequence,
+      completedTurnCount,
+      contentSha256: contentSha256.toLowerCase()
+    };
+  }
+
+  function toReferenceCard(item, { ownerUserId, actor }) {
+    if (!item.conversation_id) return { sourceType: item.source_type, sourceId: item.source_id };
+    if (ownerUserId === actor.id) {
+      return {
+        sourceType: item.source_type,
+        sourceId: item.source_id,
+        firstSequence: item.first_sequence,
+        lastSequence: item.last_sequence,
+        completedTurnCount: item.completed_turn_count,
+        contentSha256: item.content_sha256
+      };
+    }
+    return {
+      sourceType: 'conversation',
+      completedTurnCount: item.completed_turn_count,
+      createdAt: item.reference_created_at,
+      private: true
+    };
   }
 
   function createKnowledgeDraft({ actorUserId, actorRole, title, category = '', tags = [], markdown, visibility = 'private', status = 'draft' }) {
@@ -287,6 +354,11 @@ function createContentStore(db, {
     return {
       ...summary,
       ...(includeContent ? { markdown: row.markdown } : {}),
+      references: knowledgeReferencesByVersion.all(row.version_id).map((item) => ({
+        sourceType: item.source_type,
+        sourceId: item.source_id,
+        createdAt: item.created_at
+      })),
       versionHistory: knowledgeHistory.all(row.document_id).map((version) => ({
         id: version.id,
         version: version.version_number,
@@ -362,6 +434,82 @@ function createContentStore(db, {
     });
   }
 
+  function createSolutionFromConversation({ actorUserId, actorRole, conversationId, title, description = '', assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256 }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const source = normalizeConversationSource({
+      actor, conversationId, assistantMarkdown, firstSequence, lastSequence, completedTurnCount, contentSha256
+    });
+    const timestamp = now();
+    const solutionId = idFactory();
+    const versionId = idFactory();
+    const referenceId = idFactory();
+    const fields = {
+      title: requiredText(title, 'INVALID_SOLUTION_TITLE', { max: 200 }),
+      description: requiredText(description, 'INVALID_SOLUTION_DESCRIPTION', { max: 10000, allowEmpty: true, multiline: true }),
+      visibility: 'private',
+      status: 'draft'
+    };
+    return transaction(() => {
+      db.prepare(`
+        INSERT INTO solutions (id, owner_user_id, status, visibility, current_version_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, NULL, ?, ?)
+      `).run(solutionId, actor.id, fields.status, fields.visibility, timestamp, timestamp);
+      db.prepare(`
+        INSERT INTO solution_versions (
+          id, solution_id, version_number, title, description, solution_markdown, is_current, created_at, created_by_user_id
+        ) VALUES (?, ?, 1, ?, ?, ?, 1, ?, ?)
+      `).run(versionId, solutionId, fields.title, fields.description, source.assistantMarkdown, timestamp, actor.id);
+      db.prepare(`
+        INSERT INTO content_references (
+          id, source_type, source_id, knowledge_version_id, solution_version_id, created_at
+        ) VALUES (?, 'conversation', ?, NULL, ?, ?)
+      `).run(referenceId, source.conversationId, versionId, timestamp);
+      db.prepare(`
+        INSERT INTO conversation_reference_details (
+          content_reference_id, conversation_id, first_sequence, last_sequence,
+          completed_turn_count, content_sha256, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(referenceId, source.conversationId, source.firstSequence, source.lastSequence,
+        source.completedTurnCount, source.contentSha256, timestamp);
+      db.prepare('UPDATE solutions SET current_version_id = ? WHERE id = ?').run(versionId, solutionId);
+      return toSolutionSummary(currentSolutionById.get(solutionId));
+    });
+  }
+
+  function createKnowledgeFromSolution({ actorUserId, actorRole, solutionId, title, category = '', tags = [], markdown }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const timestamp = now();
+    const documentId = idFactory();
+    const versionId = idFactory();
+    const referenceId = idFactory();
+    return transaction(() => {
+      const source = writableSolution(actor, solutionId);
+      const fields = {
+        title: title === undefined ? source.title : requiredText(title, 'INVALID_KNOWLEDGE_TITLE', { max: 200 }),
+        category: requiredText(category, 'INVALID_KNOWLEDGE_CATEGORY', { max: 100, allowEmpty: true }),
+        tags: normalizeTags(tags),
+        markdown: requiredText(markdown, 'INVALID_KNOWLEDGE_MARKDOWN', { max: 1048576, multiline: true }),
+        visibility: 'private',
+        status: 'draft'
+      };
+      db.prepare(`INSERT INTO knowledge_documents (
+        id, owner_user_id, status, visibility, current_version_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, ?, ?)`).run(documentId, actor.id, fields.status, fields.visibility, timestamp, timestamp);
+      db.prepare(`INSERT INTO knowledge_versions (
+        id, document_id, version_number, title, category, tags_json, markdown, is_current, created_at, created_by_user_id
+      ) VALUES (?, ?, 1, ?, ?, ?, ?, 1, ?, ?)`).run(
+        versionId, documentId, fields.title, fields.category, JSON.stringify(fields.tags), fields.markdown, timestamp, actor.id
+      );
+      db.prepare(`INSERT INTO content_references (
+        id, source_type, source_id, knowledge_version_id, solution_version_id, created_at
+      ) VALUES (?, 'solution_version', ?, ?, NULL, ?)`).run(referenceId, source.version_id, versionId, timestamp);
+      db.prepare('UPDATE knowledge_documents SET current_version_id = ? WHERE id = ?').run(versionId, documentId);
+      const row = currentKnowledgeById.get(documentId);
+      replaceFts(row);
+      return toKnowledgeSummary(row);
+    });
+  }
+
   function saveSolutionVersion({ actorUserId, actorRole, solutionId, title, description, solutionMarkdown, references, visibility, status }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const timestamp = now();
@@ -373,7 +521,16 @@ function createContentStore(db, {
         description: optionalText(description, 'INVALID_SOLUTION_DESCRIPTION', { max: 10000, allowEmpty: true, multiline: true }) ?? existing.description,
         solutionMarkdown: optionalText(solutionMarkdown, 'INVALID_SOLUTION_MARKDOWN', { max: 1048576, allowEmpty: true, multiline: true }) ?? existing.solution_markdown,
         references: references === undefined
-          ? referencesByVersion.all(existing.version_id).map((item) => ({ sourceType: item.source_type, sourceId: item.source_id }))
+          ? referencesByVersion.all(existing.version_id).map((item) => ({
+            sourceType: item.source_type, sourceId: item.source_id,
+            ...(item.conversation_id ? {
+              conversationId: item.conversation_id,
+              firstSequence: item.first_sequence,
+              lastSequence: item.last_sequence,
+              completedTurnCount: item.completed_turn_count,
+              contentSha256: item.content_sha256
+            } : {})
+          }))
           : normalizeReferences(references),
         visibility: visibility === undefined ? existing.visibility : normalizeVisibility(visibility),
         status: status === undefined ? existing.status : normalizeStatus(status)
@@ -400,10 +557,7 @@ function createContentStore(db, {
     return {
       ...summary,
       ...(includeContent ? { description: row.description, solutionMarkdown: row.solution_markdown } : {}),
-      references: referencesByVersion.all(row.version_id).map((item) => ({
-        sourceType: item.source_type,
-        sourceId: item.source_id
-      })),
+      references: referencesByVersion.all(row.version_id).map((item) => toReferenceCard(item, { ownerUserId: row.owner_user_id, actor })),
       versionHistory: solutionHistory.all(row.solution_id).map((version) => ({
         id: version.id,
         version: version.version_number,
@@ -473,6 +627,8 @@ function createContentStore(db, {
     searchKnowledge,
     listKnowledge,
     createSolutionDraft,
+    createSolutionFromConversation,
+    createKnowledgeFromSolution,
     saveSolutionVersion,
     getSolution,
     listSolutions,

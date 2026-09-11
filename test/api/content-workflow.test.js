@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createAuditStore } = require('../../src/audit/audit-store');
+const { createGatewayStore } = require('../../src/gateway/gateway-store');
+const { GATEWAY_EVENT_TYPES } = require('../../packages/shared/gateway-events');
 const { authHeaders, createAuthenticatedWorkbench, readJson } = require('../fixtures/authenticated-workbench');
 
 test('creates private content, publishes it explicitly, then withdraws it with safe audit metadata', async (t) => {
@@ -61,4 +63,56 @@ test('keeps solution bodies private by default and permits owner-only updates', 
   });
   assert.equal(updated.status, 200);
   assert.equal((await readJson(updated)).solution.version, 2);
+});
+
+test('converts only completed owned conversation turns into a private solution', async (t) => {
+  const fixture = await createAuthenticatedWorkbench(t);
+  const author = await fixture.createMember({ username: 'conversation.author', displayName: 'Conversation Author' });
+  const viewer = await fixture.createMember({ username: 'conversation.viewer', displayName: 'Conversation Viewer' });
+  const gateway = createGatewayStore(fixture.db, { clock: () => '2026-09-11T00:00:00.000Z' });
+  const conversation = gateway.createConversation({ ownerUserId: author.user.id, title: '沉淀来源对话' });
+  const job = gateway.createJob({ conversationId: conversation.id, userId: author.user.id, idempotencyKey: 'source-job-1', inputText: '请整理方案' });
+  gateway.transitionJob({ jobId: job.id, userId: author.user.id, event: 'start' });
+  gateway.appendEvent({ conversationId: conversation.id, jobId: job.id, type: GATEWAY_EVENT_TYPES.MESSAGE_DELTA, payload: { role: 'assistant', text: '# 已完成方案\n正文' } });
+  gateway.transitionJob({ jobId: job.id, userId: author.user.id, event: 'complete' });
+
+  const created = await fetch(`${fixture.origin}/api/content/solutions/from-conversation`, {
+    method: 'POST', headers: authHeaders(author, { json: true }),
+    body: JSON.stringify({ conversationId: conversation.id, title: '对话沉淀方案', description: '来自已完成对话' })
+  });
+  assert.equal(created.status, 201);
+  const solution = (await readJson(created)).solution;
+  const detail = await fetch(`${fixture.origin}/api/content/solutions/${solution.id}`, { headers: { cookie: author.cookie } });
+  const ownerDetail = (await readJson(detail)).solution;
+  assert.equal(ownerDetail.solutionMarkdown, '# 已完成方案\n正文');
+  assert.equal(ownerDetail.references[0].firstSequence, 1);
+  await fetch(`${fixture.origin}/api/content/solutions/${solution.id}/publish`, { method: 'POST', headers: authHeaders(author) });
+  const viewerDetailResponse = await fetch(`${fixture.origin}/api/content/solutions/${solution.id}`, { headers: { cookie: viewer.cookie } });
+  const viewerDetail = (await readJson(viewerDetailResponse)).solution;
+  assert.equal(viewerDetail.references[0].private, true);
+  assert.equal(viewerDetail.references[0].sourceId, undefined);
+  assert.equal(viewerDetail.references[0].firstSequence, undefined);
+});
+
+test('converts an owned solution into a private knowledge draft', async (t) => {
+  const fixture = await createAuthenticatedWorkbench(t);
+  const author = await fixture.createMember({ username: 'solution.knowledge.author' });
+  const viewer = await fixture.createMember({ username: 'solution.knowledge.viewer' });
+  const created = await fetch(`${fixture.origin}/api/content/solutions`, {
+    method: 'POST', headers: authHeaders(author, { json: true }),
+    body: JSON.stringify({ title: '运行方案', solutionMarkdown: '# 运行方案' })
+  });
+  const solution = (await readJson(created)).solution;
+  const noCsrf = await fetch(`${fixture.origin}/api/content/solutions/${solution.id}/to-knowledge`, {
+    method: 'POST', headers: { cookie: author.cookie, 'content-type': 'application/json' }, body: JSON.stringify({ markdown: '# 知识' })
+  });
+  assert.equal(noCsrf.status, 403);
+  const converted = await fetch(`${fixture.origin}/api/content/solutions/${solution.id}/to-knowledge`, {
+    method: 'POST', headers: authHeaders(author, { json: true }), body: JSON.stringify({ markdown: '# 知识', category: 'runtime', tags: ['gateway'] })
+  });
+  assert.equal(converted.status, 201);
+  const knowledge = (await readJson(converted)).knowledge;
+  assert.equal(knowledge.visibility, 'private');
+  const blocked = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}`, { headers: { cookie: viewer.cookie } });
+  assert.equal(blocked.status, 404);
 });

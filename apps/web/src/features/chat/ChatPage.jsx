@@ -148,7 +148,7 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
     const form = new FormData(event.currentTarget);
     setSaving(true);
     try {
-      await request('/api/solutions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: form.get('title'), description: form.get('description'), solution: current.messages.filter((item) => item.role === 'assistant').map((item) => item.text).join('\n\n'), chatHistory: current.messages }) });
+      await request('/api/content/solutions/from-conversation', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ conversationId: activeId, title: form.get('title'), description: form.get('description') }) });
       setNotice('已保存到你的私有方案库。');
     } catch (error) { setNotice(error.message); } finally { setSaving(false); }
   }
