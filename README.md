@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路和运行管理视图已在 Mac Docker 真库或异步契约中验证，知识与方案的 HTTP 入口也已能安全接入异步仓储；真正的 MySQL 内容与 Skill 仓储、完整业务服务组合仍未完成，SQLite 仍是历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案的版本化 SQLite、FTS5、私有草稿和人工发布/撤回闭环，来源转换与备份仍在研发；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路和运行管理视图已在 Mac Docker 真库或异步契约中验证；知识与方案的 MySQL 仓储和 HTTP 闭环也已在 Mac Docker 真库验证。Skill 仓储和完整业务服务组合仍未完成，SQLite 仍是历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 

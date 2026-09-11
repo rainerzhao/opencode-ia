@@ -123,7 +123,7 @@ Stage 4 已完成 Mac 应用级验收。私人草稿只对创建者和治理管�
 
 ## 数据层迁移：MySQL 8.4 单一事实源
 
-已决定以 MySQL 8.4 替代 SQLite：Mac 开发、测试与 Demo 使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL。数据库基础已在真实容器验证字符集、UTC、中文 `ngram`、迁移版本记录、并发迁移锁和来源引用去重；用户、登录 Session、审计 Repository 与认证 HTTP 链路也已完成真库验收。Gateway 已有 MySQL Conversation/Job/Event/Worker/Session/启动恢复持久核心，调度服务、WebSocket 和管理读取已适配异步仓储；知识与方案 HTTP 入口也已适配异步仓储，作为 MySQL 内容 Repository 的前置接口。Skill 及真正的 MySQL 内容/Skill 仓储、最终 MySQL-only 应用组合仍待完成。迁移未结束前，SQLite 的既有章节只描述历史实现，不能将 MySQL 或 Linux 写成已完成上线。
+已决定以 MySQL 8.4 替代 SQLite：Mac 开发、测试与 Demo 使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL。数据库基础已在真实容器验证字符集、UTC、中文 `ngram`、迁移版本记录、并发迁移锁和来源引用去重；用户、登录 Session、审计 Repository 与认证 HTTP 链路也已完成真库验收。Gateway 已有 MySQL Conversation/Job/Event/Worker/Session/启动恢复持久核心，调度服务、WebSocket 和管理读取已适配异步仓储；知识与方案已具有等价 MySQL 仓储，并经真实 HTTP 生命周期验证。Skill 仓储及最终 MySQL-only 应用组合仍待完成。迁移未结束前，SQLite 的既有章节只描述历史实现，不能将 MySQL 或 Linux 写成已完成上线。
 
 ## 不变的边界
 
