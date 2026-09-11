@@ -248,6 +248,29 @@ test('editing an existing knowledge article keeps its title in submitted form da
   });
 });
 
+test('knowledge editor exposes attachment preview controls for supported text files', async () => {
+  await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
+    const html = renderToStaticMarkup(React.createElement(KnowledgePage, {
+      initialEditor: {
+        id: 'knowledge-preview',
+        title: '带附件的知识',
+        markdown: '# 内容',
+        content: '# 内容',
+        isNew: false,
+        attachments: [{
+          id: 'attachment-1',
+          originalName: 'guide.md',
+          sizeBytes: 12,
+          contentSha256: 'a'.repeat(64)
+        }]
+      }
+    }));
+    assert.match(html, /guide\.md/);
+    assert.match(html, />预览</);
+    assert.match(html, /input type="file"/);
+  });
+});
+
 test('a conversation can be explicitly saved as a private solution', async () => {
   await withViteModule('features/chat/ChatPage.jsx', ({ ChatPage }) => {
     const html = renderToStaticMarkup(React.createElement(ChatPage, {
