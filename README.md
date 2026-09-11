@@ -43,7 +43,7 @@ flowchart TB
 
 > 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案版本化、FTS5、私有草稿和人工发布/撤回，Stage 3C 已完成 Conversation → 私有 Solution → 私有 Knowledge 的来源追溯核心链路、隐私裁剪与旧文件接口适配层拆分，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载，以及 SQLite 一致性快照和带附件摘要清单的恢复；本阶段剩余附件内容解析、导入导出、版本差异和 MySQL 备份/真库验收；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路、知识/方案仓储和 Skill 仓储，均已在 Mac Docker 真库或异步 HTTP 契约中分阶段验证；MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。MySQL-only 生产组合的代码级工厂和启动能力检查已加入，真实 MySQL 全栈验收仍待完成；SQLite 仍是当前历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
-[查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
+[查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看内网部署手册](docs/operations/intranet-deployment.md)
 
 ![OpenCode 团队 AI 工作台多会话界面](docs/dev-loop-runs/2026-09-04-stage-2-opencode-gateway/artifacts/screenshots/stage-2d3-conversations-desktop.png)
 
@@ -93,7 +93,7 @@ DEMO_PORT=4321 npm run demo
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
 | MySQL 单一数据层 | 🚧 迁移中 | MySQL-only 生产组合已通过 Mac 登录与私有 Conversation 冒烟；完整业务回归和 Linux 切换仍在进行 |
 | 知识与方案闭环 | 🚧 Stage 3D 进行中 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件和 SQLite 快照恢复，解析/导入导出与 MySQL 备份仍在研发 |
-| 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
+| 内网生产服务 | 🚧 预发布模板 | 已提供 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
 
@@ -206,6 +206,8 @@ npm start
 | `KNOWLEDGE_FETCH_ALLOWED_HOSTS` | 空 | URL 导入精确主机白名单 |
 
 URL 导入默认禁用。启用后不支持通配符，非默认端口必须写为 `host:port`；每次重定向都会重新校验，回环、链路本地、云元数据和未授权地址会被拒绝。
+
+服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
 
 ### MySQL 生产组合（内网部署前置）
 

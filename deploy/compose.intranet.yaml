@@ -1,0 +1,50 @@
+services:
+  mysql:
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+      - --ngram_token_size=2
+    environment:
+      MYSQL_DATABASE: ${WORKBENCH_MYSQL_DATABASE:?set WORKBENCH_MYSQL_DATABASE}
+      MYSQL_USER: ${WORKBENCH_MYSQL_USER:?set WORKBENCH_MYSQL_USER}
+      MYSQL_PASSWORD: ${WORKBENCH_MYSQL_PASSWORD:?set WORKBENCH_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${WORKBENCH_MYSQL_ROOT_PASSWORD:?set WORKBENCH_MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  workbench:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      WORKBENCH_DATABASE_URL: mysql://${WORKBENCH_MYSQL_USER}:${WORKBENCH_MYSQL_PASSWORD}@mysql:3306/${WORKBENCH_MYSQL_DATABASE}
+      MYSQL_POOL_SIZE: ${MYSQL_POOL_SIZE:-20}
+      OPENCODE_CMD: /opt/opencode/bin/opencode
+      OPENCODE_VERIFIED_VERSION: ${OPENCODE_VERIFIED_VERSION:?set OPENCODE_VERIFIED_VERSION}
+      COOKIE_SECURE: "true"
+    volumes:
+      - workbench-data:/var/lib/opencode-workbench
+      - ${OPENCODE_INSTALL_ROOT:?set OPENCODE_INSTALL_ROOT}:/opt/opencode:ro
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  mysql-data:
+  workbench-data:

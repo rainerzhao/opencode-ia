@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3C 已完成、Stage 3D 正在实现附件闭环；MySQL 单一数据层迁移正在进行** 的状态。
+项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3D 正在实现附件闭环；MySQL 单一数据层迁移和 Stage 5 Linux 部署前置模板正在进行** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -17,7 +17,7 @@ Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、
 | Stage 2 OpenCode Gateway | ✅ Mac 验收完成 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，多人多会话可控 |
 | Stage 3 知识与方案 | 🚧 3D 进行中 | FTS5 检索、版本、私有到发布流程、对话来源追溯、附件 | 知识可查、可审、可撤回、可追溯 |
 | Stage 4 Skill 中心 | ✅ Mac 验收完成 | 草稿、校验、发布、安装、启用、版本、回滚、停用、归档 | 成员能安全生产并共享 Skill |
-| Stage 5 Linux 生产化 | ⏳ 待实施 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
+| Stage 5 Linux 生产化 | 🚧 前置模板已开始 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
 
 ## Stage 0：安全可演示基线
 
@@ -120,6 +120,8 @@ MySQL 迁移 Phase A 已完成：Skill 异步仓储、校验/安装/启用服务
 目标：迁移到公司内网单台 Linux 服务器，服务约 15–20 名成员。
 
 主要工作：非 root 服务账号；Nginx HTTPS 与 WebSocket；内部兼容 OpenAI 协议模型；备份恢复；日志和监控；容量、重启恢复和故障演练。
+
+已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理和 `/healthz` 探活。模板不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 出口标准：生产检查表全部通过，残余风险和回滚方案由人工确认后再开放访问。
 

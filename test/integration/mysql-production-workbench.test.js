@@ -79,6 +79,9 @@ test('starts the MySQL production composition and serves authenticated private C
   });
   const address = await workbench.start(0, '127.0.0.1');
   const origin = `http://127.0.0.1:${address.port}`;
+  const health = await fetch(`${origin}/healthz`);
+  assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { status: 'healthy', database: 'healthy', gateway: 'healthy' });
   const login = await fetch(`${origin}/api/auth/login`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username: 'mysql.production.admin', password: ADMIN_PASSWORD })

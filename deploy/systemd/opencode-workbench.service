@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenCode Team AI Workbench
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opencode
+Group=opencode
+WorkingDirectory=/opt/opencode-ia
+EnvironmentFile=/etc/opencode-workbench/workbench.env
+ExecStart=/usr/bin/node /opt/opencode-ia/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/opencode-workbench
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

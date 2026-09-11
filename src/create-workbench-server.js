@@ -164,6 +164,23 @@ app.get(['/', '/login.html'], (req, res, next) => {
   if (!fs.existsSync(entry)) return next();
   res.sendFile(entry);
 });
+app.get('/healthz', async (_req, res) => {
+  try {
+    const databaseHealth = typeof db?.health === 'function' ? await db.health() : null;
+    const gatewayState = activeGatewayService?.snapshot?.();
+    const workers = gatewayState?.pool?.workers || [];
+    const gatewayHealthy = !activeGatewayService || (
+      gatewayState?.status === 'running' && workers.length > 0 && workers.every((worker) => worker.status === 'healthy')
+    );
+    if (!gatewayHealthy) {
+      res.status(503).json({ status: 'degraded', database: databaseHealth ? 'healthy' : 'configured', gateway: 'degraded' });
+      return;
+    }
+    res.json({ status: 'healthy', database: databaseHealth ? 'healthy' : 'configured', gateway: activeGatewayService ? 'healthy' : 'not_configured' });
+  } catch {
+    res.status(503).json({ status: 'unhealthy', database: 'unavailable', gateway: activeGatewayService ? 'unknown' : 'not_configured' });
+  }
+});
 app.use('/api/auth', createAuthRouter({ authService, authMiddleware, config: authConfig }));
 app.use('/api/admin/users', createUserAdminRouter({ authService, authMiddleware }));
 app.use('/api', authMiddleware.requireAuth);
