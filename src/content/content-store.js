@@ -44,6 +44,14 @@ function normalizeStatus(value = 'draft') {
   return value;
 }
 
+function normalizeVersion(value) {
+  const version = Number(value);
+  if (!Number.isInteger(version) || version < 1 || version > 100000) {
+    throw contentError('INVALID_CONTENT_VERSION', 'content version is invalid');
+  }
+  return version;
+}
+
 function normalizeTags(value = []) {
   if (!Array.isArray(value) || value.length > 20) throw contentError('INVALID_CONTENT_TAGS', 'content tags are invalid');
   const normalized = [...new Set(value.map((item) => requiredText(item, 'INVALID_CONTENT_TAGS', { max: 64 })))]
@@ -137,6 +145,12 @@ function createContentStore(db, {
   const knowledgeHistory = db.prepare(`
     SELECT id, version_number, title, category, tags_json, created_at, created_by_user_id
     FROM knowledge_versions WHERE document_id = ? ORDER BY version_number DESC
+  `);
+  const knowledgeVersionByNumber = db.prepare(`
+    SELECT d.id AS document_id, d.owner_user_id, d.status, d.visibility,
+      v.id AS version_id, v.version_number, v.title, v.category, v.tags_json, v.markdown, v.created_at, v.created_by_user_id
+    FROM knowledge_documents d JOIN knowledge_versions v ON v.document_id = d.id
+    WHERE d.id = ? AND v.version_number = ?
   `);
   const currentSolutionById = db.prepare(`
     SELECT s.id AS solution_id, s.owner_user_id, s.status, s.visibility, s.created_at, s.updated_at,
@@ -380,6 +394,22 @@ function createContentStore(db, {
         createdAt: version.created_at,
         createdByUserId: version.created_by_user_id
       }))
+    };
+  }
+
+  function getKnowledgeVersion({ actorUserId, actorRole, documentId, version }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const current = readableKnowledge(actor, documentId);
+    const requestedVersion = normalizeVersion(version);
+    if (actor.role !== 'admin' && current.owner_user_id !== actor.id && requestedVersion !== current.version_number) {
+      throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    }
+    const row = knowledgeVersionByNumber.get(current.document_id, requestedVersion);
+    if (!row) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    return {
+      id: row.version_id, documentId: row.document_id, version: row.version_number,
+      title: row.title, category: row.category, tags: parseTags(row.tags_json), markdown: row.markdown,
+      createdAt: row.created_at, createdByUserId: row.created_by_user_id
     };
   }
 
@@ -675,6 +705,7 @@ function createContentStore(db, {
     createKnowledgeDraft,
     saveKnowledgeVersion,
     getKnowledge,
+    getKnowledgeVersion,
     searchKnowledge,
     listKnowledge,
     createSolutionDraft,

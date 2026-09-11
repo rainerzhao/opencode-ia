@@ -43,6 +43,14 @@ function normalizeStatus(value = 'draft') {
   return value;
 }
 
+function normalizeVersion(value) {
+  const version = Number(value);
+  if (!Number.isInteger(version) || version < 1 || version > 100000) {
+    throw contentError('INVALID_CONTENT_VERSION', 'content version is invalid');
+  }
+  return version;
+}
+
 function normalizeTags(value = []) {
   if (!Array.isArray(value) || value.length > 20) throw contentError('INVALID_CONTENT_TAGS', 'content tags are invalid');
   return [...new Set(value.map((item) => requiredText(item, 'INVALID_CONTENT_TAGS', { max: 64 })))]
@@ -351,6 +359,23 @@ function createMySqlContentStore(db, {
     };
   }
 
+  async function getKnowledgeVersion({ actorUserId, actorRole, documentId, version }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const current = await readableKnowledge(db, actor, documentId);
+    const requestedVersion = normalizeVersion(version);
+    if (actor.role !== 'admin' && current.owner_user_id !== actor.id && requestedVersion !== Number(current.version_number)) {
+      throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    }
+    const row = await db.one(`SELECT id, document_id, version_number, title, category, tags_json, markdown, created_at, created_by_user_id
+      FROM knowledge_versions WHERE document_id = ? AND version_number = ?`, [current.document_id, requestedVersion]);
+    if (!row) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+    return {
+      id: row.id, documentId: row.document_id, version: Number(row.version_number), title: row.title,
+      category: row.category, tags: parseTags(row.tags_json), markdown: row.markdown,
+      createdAt: date(row.created_at), createdByUserId: row.created_by_user_id
+    };
+  }
+
   async function searchKnowledge({ actorUserId, actorRole, query, limit = 20 }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const search = toMySqlSearchQuery(query);
@@ -581,7 +606,7 @@ function createMySqlContentStore(db, {
   }
 
   return Object.freeze({
-    createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, searchKnowledge, listKnowledge,
+    createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, getKnowledgeVersion, searchKnowledge, listKnowledge,
     createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, createKnowledgeAttachment, saveSolutionVersion, getSolution, listSolutions,
     getKnowledgeAttachment,
     publishKnowledge, withdrawKnowledge, publishSolution, withdrawSolution

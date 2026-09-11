@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { diffText } = require('../../content/version-diff');
 
 function routeError(code, message, status = 400) {
   const error = new Error(message);
@@ -42,7 +43,8 @@ function mapStoreError(error) {
     SOURCE_EVENT_CONVERSATION_MISMATCH: 400,
     SOURCE_EVENT_INVALID: 400,
     SOURCE_NO_COMPLETED_TURNS: 422,
-    SOURCE_TOO_LARGE: 413
+    SOURCE_TOO_LARGE: 413,
+    INVALID_CONTENT_VERSION: 400
   };
   if (statuses[error.code]) error.status = statuses[error.code];
   return error;
@@ -81,6 +83,13 @@ function createContentRouter({ store, requestAuditor, conversationContentService
   }));
   router.get('/knowledge/:contentId', asyncRoute(async (req, res) => {
     res.json({ knowledge: await store.getKnowledge({ ...actor(req), documentId: contentId(req.params.contentId), includeContent: true }) });
+  }));
+  router.get('/knowledge/:contentId/diff', asyncRoute(async (req, res) => {
+    if (typeof store.getKnowledgeVersion !== 'function') throw routeError('CONTENT_FEATURE_UNAVAILABLE', 'content version diff is unavailable', 501);
+    const documentId = contentId(req.params.contentId);
+    const from = await store.getKnowledgeVersion({ ...actor(req), documentId, version: req.query.from });
+    const to = await store.getKnowledgeVersion({ ...actor(req), documentId, version: req.query.to });
+    res.json({ knowledgeId: documentId, from: { id: from.id, version: from.version, title: from.title }, to: { id: to.id, version: to.version, title: to.title }, diff: diffText(from.markdown, to.markdown) });
   }));
   router.patch('/knowledge/:contentId', asyncRoute(async (req, res) => {
     const knowledge = await store.saveKnowledgeVersion({

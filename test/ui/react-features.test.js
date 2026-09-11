@@ -256,7 +256,9 @@ test('knowledge editor exposes attachment preview controls for supported text fi
         title: '带附件的知识',
         markdown: '# 内容',
         content: '# 内容',
+        version: 2,
         isNew: false,
+        versionHistory: [{ id: 'version-2', version: 2 }, { id: 'version-1', version: 1 }],
         attachments: [{
           id: 'attachment-1',
           originalName: 'guide.md',
@@ -269,6 +271,7 @@ test('knowledge editor exposes attachment preview controls for supported text fi
     assert.match(html, />预览</);
     assert.match(html, /导出知识包/);
     assert.match(html, /\/api\/content\/knowledge\/knowledge-preview\/export/);
+    assert.match(html, /对比 v1 → 当前 v2/);
     assert.match(html, /input type="file"/);
   });
 });

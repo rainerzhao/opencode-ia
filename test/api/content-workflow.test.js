@@ -156,3 +156,26 @@ test('stores a bounded private attachment against the current knowledge version'
   assert.equal(Object.hasOwn(bundle.attachments[0], 'storageKey'), false);
   assert.equal(createAuditStore(fixture.db).list({ limit: 100 }).some((item) => item.action === 'content.knowledge.export' && item.targetId === knowledge.id), true);
 });
+
+test('returns owner-only Knowledge version diffs and hides private history from team viewers', async (t) => {
+  const fixture = await createAuthenticatedWorkbench(t);
+  const author = await fixture.createMember({ username: 'diff.author' });
+  const viewer = await fixture.createMember({ username: 'diff.viewer' });
+  const created = await fetch(`${fixture.origin}/api/content/knowledge`, {
+    method: 'POST', headers: authHeaders(author, { json: true }),
+    body: JSON.stringify({ title: '版本差异', markdown: '# 标题\n旧内容' })
+  });
+  const knowledge = (await readJson(created)).knowledge;
+  const updated = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}`, {
+    method: 'PATCH', headers: authHeaders(author, { json: true }),
+    body: JSON.stringify({ markdown: '# 标题\n新内容\n新增一行' })
+  });
+  assert.equal((await readJson(updated)).knowledge.version, 2);
+  const ownerDiff = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/diff?from=1&to=2`, { headers: { cookie: author.cookie } });
+  assert.equal(ownerDiff.status, 200);
+  const diff = await ownerDiff.json();
+  assert.deepEqual(diff.diff.summary, { additions: 2, removals: 1, unchanged: 1 });
+  await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/publish`, { method: 'POST', headers: authHeaders(author) });
+  const viewerDiff = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/diff?from=1&to=2`, { headers: { cookie: viewer.cookie } });
+  assert.equal(viewerDiff.status, 404);
+});
