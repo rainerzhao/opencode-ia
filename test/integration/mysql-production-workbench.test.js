@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const WebSocket = require('ws');
 const { createMySqlDatabase } = require('../../src/db/mysql-database');
 const { migrateMySqlDatabase } = require('../../src/db/mysql-migrate');
 const { clearMySqlBusinessData } = require('../fixtures/mysql-test-database');
@@ -26,6 +27,27 @@ function cookieValue(headers, name) {
   const prefix = `${name}=`;
   const item = headers.map((header) => header.split(';', 1)[0]).find((value) => value.startsWith(prefix));
   return item ? decodeURIComponent(item.slice(prefix.length)) : null;
+}
+
+function waitForMessage(ws, predicate, timeoutMs = 3000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timed out waiting for MySQL Gateway message')); }, timeoutMs);
+    function cleanup() { clearTimeout(timer); ws.off('message', onMessage); ws.off('error', onError); }
+    function onMessage(data) {
+      const message = JSON.parse(data.toString());
+      if (!predicate(message)) return;
+      cleanup();
+      resolve(message);
+    }
+    function onError(error) { cleanup(); reject(error); }
+    ws.on('message', onMessage);
+    ws.on('error', onError);
+  });
+}
+
+function closeSocket(ws) {
+  if (!ws || ws.readyState === WebSocket.CLOSED) return Promise.resolve();
+  return new Promise((resolve) => { ws.once('close', resolve); ws.terminate(); });
 }
 
 test('starts the MySQL production composition and serves authenticated private Conversation HTTP', { skip: !testUrl }, async (t) => {
@@ -101,4 +123,16 @@ test('starts the MySQL production composition and serves authenticated private C
   const body = await conversation.json();
   assert.equal(body.conversation.title, 'MySQL private conversation');
   assert.equal((await (await fetch(`${origin}/api/conversations`, { headers: { cookie } })).json()).conversations.length, 1);
+
+  const socket = new WebSocket(origin.replace('http:', 'ws:'), { headers: { cookie } });
+  t.after(() => closeSocket(socket));
+  const connected = await waitForMessage(socket, (message) => message.type === 'connected');
+  assert.equal(typeof connected.sessionId, 'string');
+  socket.send(JSON.stringify({ type: 'subscribe', conversationId: body.conversation.id, afterSequence: 0 }));
+  await waitForMessage(socket, (message) => message.type === 'conversation.snapshot');
+  socket.send(JSON.stringify({ type: 'prompt', conversationId: body.conversation.id, idempotencyKey: 'mysql-ws-1', text: 'MySQL websocket roundtrip' }));
+  const delta = await waitForMessage(socket, (message) => message.type === 'message.delta');
+  assert.equal(delta.data.text, 'unused');
+  const completed = await waitForMessage(socket, (message) => message.type === 'job.completed' && message.jobId === delta.jobId);
+  assert.equal(typeof completed.jobId, 'string');
 });

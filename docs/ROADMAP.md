@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3D 正在收尾内容资产闭环；MySQL 单一数据层已完成代码级装配与分域真库回归，正在进行全栈验收；Stage 5 Linux 部署前置模板已具备** 的状态。
+项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3D 正在收尾内容资产闭环；MySQL 单一数据层已完成代码级装配与真实 MySQL HTTP/WebSocket 组合冒烟；Stage 5 Linux 部署前置模板已具备，内部 Provider 与生产验收尚未完成** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -111,7 +111,7 @@ Stage 3A–3C 让内容元数据、版本、检索和来源追溯形成稳定闭
 
 Stage 4 已完成 Mac 应用级验收。私人草稿只对创建者和治理管理员可见，团队可见性不能暴露 draft/archived 内容；列表按调用者解析当前公开版本，绝不以最新私有草稿替换团队版本。校验支持受控多文件包，报告不复制疑似秘密原文，静态检查与真实 OpenCode 受限加载必须同时通过；内容变化会使旧报告失效，过期异步结果不能覆盖新版本。发布、安装和启用是三个人工动作：不可变包原子写入每用户受管目录，启用前必须通过 OpenCode 发现验证，随后才在该账号 Conversation 工作区物化；不会自动全员启用或按用户绑定独占 Runtime。4D 保留历史发布版本，升级/回滚重置为已安装并强制重新验证；版本集变化会重绑新受管工作区和 OpenCode Session，避免常驻 Runtime 缓存旧 Skill。停用立即撤销 enabled 状态，归档保留版本与审计而不做永久删除。
 
-MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账号、审计和登录均接入同一异步 MySQL Repository，并在隔离 MySQL 8.4 上通过分域生命周期回归与生产组合启动能力检查；当前仍缺少组合工厂的完整 HTTP/WebSocket 全栈验收、Linux 部署和生产切换。
+MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账号、审计和登录均接入同一异步 MySQL Repository，并在隔离 MySQL 8.4 上通过分域生命周期回归、生产组合启动能力检查以及 HTTP/WebSocket 组合冒烟（模拟 Worker）；内部 Provider、真实 OpenCode 全链路、Linux 部署和生产切换仍未完成。
 
 出口标准：创建、校验、发布、安装、使用到回滚的完整流程通过端到端验收。
 

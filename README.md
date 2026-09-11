@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3C 已完成知识/方案版本化、FTS5、私有草稿、人工发布/撤回和来源追溯，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载、文本/JSON/CSV 安全预览、受控知识包导出，以及 SQLite 一致性快照和带附件摘要清单的恢复；知识包导入、版本差异、MySQL 附件备份和完整真库验收仍在后续阶段。Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已完成 MySQL 8.4 生产组合的代码级装配与 Mac 真库分域回归，当前正在补齐 MySQL-only HTTP/WebSocket 全栈验收；Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3C 已完成知识/方案版本化、FTS5、私有草稿、人工发布/撤回和来源追溯，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载、文本/JSON/CSV 安全预览、受控知识包导出，以及 SQLite 一致性快照和带附件摘要清单的恢复；知识包导入、版本差异、MySQL 附件备份和完整真库验收仍在后续阶段。Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已完成 MySQL 8.4 生产组合的代码级装配，并通过真实 MySQL + 模拟 Worker 的 HTTP/WebSocket 组合冒烟；内部 Provider、真实 OpenCode 全链路和 Linux 进程级沙箱仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看内网部署手册](docs/operations/intranet-deployment.md)
 
@@ -91,7 +91,7 @@ DEMO_PORT=4321 npm run demo
 | 工具与产物边界 | ✅ Mac 应用级验收 | 每个账号和 Conversation 使用独立工作目录，默认关闭 Bash、联网、子代理和外部插件 |
 | 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
-| MySQL 单一数据层 | 🚧 全栈验收中 | MySQL-only 生产组合、真实 MySQL 账号/内容/Skill/Gateway 分域回归已通过；完整 HTTP/WebSocket 验收和 Linux 切换仍在进行 |
+| MySQL 单一数据层 | 🚧 Provider 验收中 | MySQL-only 生产组合及真实 MySQL HTTP/WebSocket 组合冒烟已通过；内部 Provider、真实 OpenCode 全链路和 Linux 切换仍在进行 |
 | 知识与方案闭环 | 🚧 Stage 3D 收尾 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件、文本/JSON/CSV 预览和受控知识包导出，导入、版本差异与 MySQL 附件备份仍在研发 |
 | 内网生产服务 | 🚧 预发布模板 | 已提供 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
 
@@ -274,12 +274,12 @@ npm run security:scan
 
 - Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
 - Stage 4 已完成 Mac 端验收：普通成员可以创建、校验并人工发布默认私有的 Skill 草稿；成员独立安装，安装包原子落盘、启用前再经真实 OpenCode 发现验证。后继草稿不改变团队当前版本；升级、回滚与停用会刷新受管工作区，避免常驻 Runtime 沿用已缓存版本。
-- MySQL Skill 与内容/Gateway 分域真库回归已通过；当前补齐 MySQL-only 组合的完整 HTTP/WebSocket 验收，避免把分域测试误写成生产切换完成。
+- MySQL Skill 与内容/Gateway 分域真库回归已通过，MySQL-only 组合已完成 HTTP/WebSocket 冒烟（模拟 Worker）；内部 Provider 与真实 OpenCode 全链路仍待验收，不能误写成生产切换完成。
 - 历史 `/api/solutions` 文件接口已抽为独立兼容适配层，React 已不再调用；后续导入/导出与备份完成后再安排退役。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **MySQL-only HTTP/WebSocket 全栈验收与内容资产收尾**，完成后再进入 Linux 部署、内部 Provider 联调、OS 进程沙箱、长期容量与生产回滚验收。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
+下一交付点是 **知识包导入、版本差异与 MySQL 附件备份**，完成后进入内部 Provider/真实 OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 
