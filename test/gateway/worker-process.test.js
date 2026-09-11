@@ -152,11 +152,14 @@ test('fails startup on version drift and on a readiness deadline', async (t) => 
 
 test('marks an unexpected post-readiness exit unhealthy', async (t) => {
   const { worker } = await createFixture(t, {
-    env: { ...process.env, FAKE_OPENCODE_EXIT_AFTER_MS: '30' }
+    env: { ...process.env, FAKE_OPENCODE_EXIT_AFTER_HEALTH_MS: '1' }
   });
   await worker.start();
 
-  const exit = await worker.waitForExit();
+  const exit = await Promise.race([
+    worker.waitForExit(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('fixture did not exit after readiness')), 100))
+  ]);
 
   assert.equal(exit.expected, false);
   assert.equal(exit.code, 71);

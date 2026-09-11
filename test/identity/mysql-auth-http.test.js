@@ -13,6 +13,7 @@ const { createAuthMiddleware } = require('../../src/auth/auth-middleware');
 const { createAuthRouter } = require('../../src/modules/auth/routes');
 const { createUserAdminRouter } = require('../../src/modules/users/routes');
 const { bootstrapAdmin } = require('../../src/bootstrap/bootstrap-admin');
+const { clearMySqlBusinessData } = require('../fixtures/mysql-test-database');
 
 const testUrl = process.env.WORKBENCH_TEST_MYSQL_URL;
 
@@ -33,6 +34,7 @@ test('serves login Cookie, authenticated profile and CSRF-protected user adminis
   const db = await createMySqlDatabase({ url: testUrl, poolSize: 2 });
   t.after(async () => db.close());
   await migrateMySqlDatabase(db);
+  await clearMySqlBusinessData(db, { url: testUrl });
   await bootstrapAdmin({
     db, repositoryFactory: createMySqlIdentityRepositories, username: 'admin', displayName: 'Administrator',
     password: 'Admin Password 2026!', idFactory: () => 'http-mysql-admin'

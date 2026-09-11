@@ -19,7 +19,9 @@ const expectedAuthorization = `Basic ${Buffer.from(`${username}:${password}`).to
 const version = process.env.FAKE_OPENCODE_VERSION || '1.18.25';
 const startDelayMs = Number(process.env.FAKE_OPENCODE_START_DELAY_MS || 0);
 const exitAfterMs = Number(process.env.FAKE_OPENCODE_EXIT_AFTER_MS || 0);
+const exitAfterHealthMs = Number(process.env.FAKE_OPENCODE_EXIT_AFTER_HEALTH_MS || 0);
 const ignoreTerm = process.env.FAKE_OPENCODE_IGNORE_TERM === '1';
+let postReadinessExitScheduled = false;
 
 const server = http.createServer((req, res) => {
   if (req.headers.authorization !== expectedAuthorization) {
@@ -29,7 +31,12 @@ const server = http.createServer((req, res) => {
   }
   if (req.url === '/global/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ healthy: true, version }));
+    res.end(JSON.stringify({ healthy: true, version }), () => {
+      if (exitAfterHealthMs > 0 && !postReadinessExitScheduled) {
+        postReadinessExitScheduled = true;
+        setTimeout(() => process.exit(71), exitAfterHealthMs).unref();
+      }
+    });
     return;
   }
   res.writeHead(404, { 'content-type': 'application/json' });

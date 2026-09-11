@@ -7,6 +7,7 @@ const { migrateMySqlDatabase } = require('../../src/db/mysql-migrate');
 const { createMySqlUserStore } = require('../../src/users/mysql-user-store');
 const { createMySqlSessionStore } = require('../../src/sessions/mysql-session-store');
 const { createMySqlAuditStore } = require('../../src/audit/mysql-audit-store');
+const { clearMySqlBusinessData } = require('../fixtures/mysql-test-database');
 
 const testUrl = process.env.WORKBENCH_TEST_MYSQL_URL;
 
@@ -14,6 +15,7 @@ test('persists users, hashed login sessions, audit events and transaction rollba
   const db = await createMySqlDatabase({ url: testUrl, poolSize: 2 });
   t.after(async () => db.close());
   await migrateMySqlDatabase(db);
+  await clearMySqlBusinessData(db, { url: testUrl });
 
   const users = createMySqlUserStore(db);
   const sessions = createMySqlSessionStore(db);

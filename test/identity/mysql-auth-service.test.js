@@ -8,6 +8,7 @@ const { createMySqlIdentityRepositories } = require('../../src/auth/mysql-identi
 const { bootstrapAdmin } = require('../../src/bootstrap/bootstrap-admin');
 const { createLoginLimiter } = require('../../src/auth/login-limiter');
 const { createMySqlAuthService } = require('../../src/auth/mysql-auth-service');
+const { clearMySqlBusinessData } = require('../fixtures/mysql-test-database');
 
 const testUrl = process.env.WORKBENCH_TEST_MYSQL_URL;
 
@@ -15,6 +16,7 @@ test('uses async MySQL repositories for bootstrap, login, session invalidation a
   const db = await createMySqlDatabase({ url: testUrl, poolSize: 2 });
   t.after(async () => db.close());
   await migrateMySqlDatabase(db);
+  await clearMySqlBusinessData(db, { url: testUrl });
   let now = new Date('2026-09-10T09:00:00.000Z');
   let ids = 0;
   await bootstrapAdmin({

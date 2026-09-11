@@ -4,12 +4,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createMySqlDatabase } = require('../../src/db/mysql-database');
 const { migrateMySqlDatabase } = require('../../src/db/mysql-migrate');
+const { resetMySqlSchema } = require('../fixtures/mysql-test-database');
 
 const testUrl = process.env.WORKBENCH_TEST_MYSQL_URL;
 
 test('uses a real MySQL 8.4 database with utf8mb4 UTC, ngram and repeatable versioned migrations', { skip: !testUrl }, async (t) => {
   const db = await createMySqlDatabase({ url: testUrl, poolSize: 2 });
   t.after(async () => db.close());
+
+  await resetMySqlSchema(db, { url: testUrl });
 
   const health = await db.health();
   assert.match(health.version, /^8\.4\./);
