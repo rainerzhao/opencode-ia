@@ -14,3 +14,4 @@
 - 聚焦验证：45 tests，43 pass，2 skip（MySQL 环境未配置）；语法 151 文件、密钥扫描、React 构建均通过。
 - 历史文件型 `/api/solutions` 已抽为 `src/modules/legacy/solutions-routes.js`；保留兼容读写和原有权限/CSRF 行为，React 正式路径不再调用。
 - 兼容收口后复验：14 API tests 全部通过；语法 152 文件、密钥扫描通过。
+- 浏览器复验：Demo 登录与需求方案库加载成功；桌面及 390px 宽度横向溢出均为 0。
