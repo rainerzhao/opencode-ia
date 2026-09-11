@@ -209,7 +209,7 @@ URL 导入默认禁用。启用后不支持通配符，非默认端口必须写�
 
 服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
 
-MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：备份生成 SHA-256 清单，恢复必须显式传入 `--confirm`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，并通过 `/export` 下载带摘要清单的私有知识包；DOCX/PDF 当前明确返回“不支持预览”。
+MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：SQL dump 与 Knowledge 附件 sidecar 分开生成，各自带 SHA-256 清单；恢复必须显式传入 `--confirm`，附件恢复需显式传入 `--attachments <dir>`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，并通过 `/export` 下载带摘要清单的私有知识包；DOCX/PDF 当前明确返回“不支持预览”。
 
 ### MySQL 生产组合（内网部署前置）
 
@@ -279,7 +279,7 @@ npm run security:scan
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **知识包导入与 MySQL 附件备份**，完成后进入内部 Provider/真实 OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
+下一交付点是 **知识包导入与 MySQL 真库恢复演练**，完成后进入内部 Provider/真实 OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 
