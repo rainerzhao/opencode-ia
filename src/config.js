@@ -60,6 +60,8 @@ function loadConfig({ env = process.env, projectDir }) {
 
   return Object.freeze({
     projectDir: root,
+    workbenchDatabaseUrl: env.WORKBENCH_DATABASE_URL || env.MYSQL_URL || null,
+    mysqlPoolSize: boundedPositiveInteger(env.MYSQL_POOL_SIZE, 10, 'MYSQL_POOL_SIZE', 100),
     staticDir: path.resolve(env.WEB_DIST_DIR || path.join(root, 'dist/web')),
     port: positiveInteger(env.PORT, 3000, 'PORT'),
     maxSessions: positiveInteger(env.MAX_SESSIONS, 20, 'MAX_SESSIONS'),

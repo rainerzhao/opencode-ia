@@ -42,6 +42,25 @@ test('accepts an explicit database path without placing it in source directories
   assert.equal(config.databasePath, '/var/lib/opencode-workbench/workbench.db');
 });
 
+test('loads an explicit MySQL production URL and bounded pool size', () => {
+  const config = loadConfig({
+    env: {
+      WORKBENCH_DATABASE_URL: 'mysql://workbench:secret@127.0.0.1:3306/workbench',
+      MYSQL_POOL_SIZE: '24'
+    },
+    projectDir: '/srv/workbench'
+  });
+  assert.equal(config.workbenchDatabaseUrl, 'mysql://workbench:secret@127.0.0.1:3306/workbench');
+  assert.equal(config.mysqlPoolSize, 24);
+});
+
+test('rejects an oversized MySQL pool', () => {
+  assert.throws(
+    () => loadConfig({ env: { MYSQL_POOL_SIZE: '101' }, projectDir: '/srv/workbench' }),
+    /MYSQL_POOL_SIZE/
+  );
+});
+
 test('rejects invalid positive integer limits', () => {
   assert.throws(
     () => loadConfig({ env: { MAX_SESSIONS: '0' }, projectDir: '/srv/workbench' }),

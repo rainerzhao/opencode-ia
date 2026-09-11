@@ -7,9 +7,9 @@ function safeSourceIp(req) {
   return typeof value === 'string' ? value.slice(0, 128) : null;
 }
 
-function createRequestAuditor({ db, clock = () => new Date() }) {
-  if (!db) throw new TypeError('database is required');
-  const auditStore = createAuditStore(db);
+function createRequestAuditor({ db, auditStore: providedAuditStore = null, clock = () => new Date() }) {
+  const auditStore = providedAuditStore || (db && createAuditStore(db));
+  if (!auditStore || typeof auditStore.append !== 'function') throw new TypeError('audit store is required');
 
   function record(req, { action, targetType, targetId = null, metadata = {} }) {
     if (!req?.auth?.user?.id) throw new TypeError('authenticated request is required');

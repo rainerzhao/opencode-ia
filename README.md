@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案版本化、FTS5、私有草稿和人工发布/撤回，Stage 3C 已完成 Conversation → 私有 Solution → 私有 Knowledge 的来源追溯核心链路、隐私裁剪与旧文件接口适配层拆分，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载，以及 SQLite 一致性快照和带附件摘要清单的恢复；本阶段剩余附件内容解析、导入导出、版本差异和 MySQL 备份/真库验收；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路、知识/方案仓储和 Skill 仓储，均已在 Mac Docker 真库或异步 HTTP 契约中分阶段验证；MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。完整 MySQL-only 服务组合仍未完成，SQLite 仍是当前历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3B 已完成知识/方案版本化、FTS5、私有草稿和人工发布/撤回，Stage 3C 已完成 Conversation → 私有 Solution → 私有 Knowledge 的来源追溯核心链路、隐私裁剪与旧文件接口适配层拆分，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载，以及 SQLite 一致性快照和带附件摘要清单的恢复；本阶段剩余附件内容解析、导入导出、版本差异和 MySQL 备份/真库验收；Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目正在迁移至 MySQL 8.4 单一数据层：账号、登录、审计、Gateway 核心运行链路、知识/方案仓储和 Skill 仓储，均已在 Mac Docker 真库或异步 HTTP 契约中分阶段验证；MySQL 真库回归现以受保护的专用测试库隔离运行，避免迁移和账号引导的历史数据干扰验收。MySQL-only 生产组合的代码级工厂和启动能力检查已加入，真实 MySQL 全栈验收仍待完成；SQLite 仍是当前历史运行实现。Linux 进程级沙箱和生产部署仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md)
 
@@ -195,6 +195,8 @@ npm start
 | `SOLUTIONS_DIR` | `<root>/solutions` | 方案目录 |
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
 | `DATABASE_PATH` | `<root>/data/workbench.db` | 当前历史 SQLite 运行库；MySQL 单一数据层迁移期间保留，切换完成后删除 |
+| `WORKBENCH_DATABASE_URL` | 空 | 配置后启用 MySQL 8.4 生产组合；凭证只存在受保护的运行环境 |
+| `MYSQL_POOL_SIZE` | `10` | MySQL 连接池上限（1–100） |
 | `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
 | `COOKIE_SECURE` | 生产环境为 `true` | HTTPS 下为认证 Cookie 增加 `Secure` |
 | `SESSION_TTL_SECONDS` | `28800` | 登录 Session 有效期，单位秒 |
@@ -204,6 +206,10 @@ npm start
 | `KNOWLEDGE_FETCH_ALLOWED_HOSTS` | 空 | URL 导入精确主机白名单 |
 
 URL 导入默认禁用。启用后不支持通配符，非默认端口必须写为 `host:port`；每次重定向都会重新校验，回环、链路本地、云元数据和未授权地址会被拒绝。
+
+### MySQL 生产组合（内网部署前置）
+
+设置 `WORKBENCH_DATABASE_URL` 后，生产启动器会选择 MySQL 8.4 组合：启动前检查版本、字符集、UTC 时区和中文 `ngram` 能力，执行受锁保护的迁移，并将账号、审计、Conversation/Gateway、知识/方案和 Skill 全部装配到同一个 MySQL Repository。未配置该变量时仍使用历史 SQLite 组合，便于 Mac Demo；两种组合不会混用业务 Store。该组合已完成代码级装配，真实 MySQL 与 Linux 生产验收仍在后续阶段。
 
 ### Stage 1A：创建首位管理员
 

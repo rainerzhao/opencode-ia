@@ -46,20 +46,29 @@ function createWorkbenchServer({
   fetchAllowedTextImpl = fetchAllowedText,
   gatewayService,
   gatewayServiceFactory,
-  skillRuntimeValidator = null
+  skillRuntimeValidator = null,
+  repositories = null
 }) {
 
 let db = database;
 let ownsDatabase = false;
-try {
-  if (!db) {
-    db = openDatabase({ filename: config.databasePath || ':memory:' });
-    ownsDatabase = true;
+if (repositories) {
+  if (!db || typeof db.close !== 'function') throw new TypeError('injected database is required');
+  const requiredRepositories = ['authService', 'requestAuditor', 'gatewayStore', 'skillStore', 'contentStore'];
+  if (requiredRepositories.some((name) => !repositories[name])) {
+    throw new TypeError('injected workbench repositories are incomplete');
   }
-  migrateDatabase(db);
-} catch (error) {
-  if (ownsDatabase) db?.close();
-  throw error;
+} else {
+  try {
+    if (!db) {
+      db = openDatabase({ filename: config.databasePath || ':memory:' });
+      ownsDatabase = true;
+    }
+    migrateDatabase(db);
+  } catch (error) {
+    if (ownsDatabase) db?.close();
+    throw error;
+  }
 }
 
 const authConfig = Object.freeze({
@@ -74,16 +83,14 @@ const loginLimiter = createLoginLimiter({
   windowMs: authConfig.loginWindowSeconds * 1000,
   lockMs: authConfig.loginLockSeconds * 1000
 });
-const authService = createAuthService({
-  db,
-  loginLimiter,
-  sessionTtlSeconds: authConfig.sessionTtlSeconds
+const authService = repositories?.authService || createAuthService({
+  db, loginLimiter, sessionTtlSeconds: authConfig.sessionTtlSeconds
 });
 const authMiddleware = createAuthMiddleware({ authService });
-const requestAuditor = createRequestAuditor({ db });
-const gatewayStore = createGatewayStore(db);
-const skillStore = createSkillStore(db);
-const contentStore = createContentStore(db);
+const requestAuditor = repositories?.requestAuditor || createRequestAuditor({ db });
+const gatewayStore = repositories?.gatewayStore || createGatewayStore(db);
+const skillStore = repositories?.skillStore || createSkillStore(db);
+const contentStore = repositories?.contentStore || createContentStore(db);
 const conversationContentService = createConversationContentService({ gatewayStore, contentStore });
 const skillInstallationFiles = createSkillInstallationFiles({
   root: config.skillInstallRoot || path.join(config.projectDir, 'data/skill-installations')
@@ -1068,6 +1075,7 @@ return {
   httpServer,
   start,
   stop,
+  database: db,
   sessions,
   authService,
   gatewayService: activeGatewayService,
