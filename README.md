@@ -91,7 +91,7 @@ DEMO_PORT=4321 npm run demo
 | 工具与产物边界 | ✅ Mac 应用级验收 | 每个账号和 Conversation 使用独立工作目录，默认关闭 Bash、联网、子代理和外部插件 |
 | 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
-| MySQL 单一数据层 | 🚧 迁移中 | Skill、知识/方案、账号、审计和 Gateway 正在逐项切换；最终服务组合尚未切换 |
+| MySQL 单一数据层 | 🚧 迁移中 | MySQL-only 生产组合已通过 Mac 登录与私有 Conversation 冒烟；完整业务回归和 Linux 切换仍在进行 |
 | 知识与方案闭环 | 🚧 Stage 3D 进行中 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件和 SQLite 快照恢复，解析/导入导出与 MySQL 备份仍在研发 |
 | 内网生产服务 | 📝 规划中 | 部署到 Linux，并接入公司内部模型服务 |
 

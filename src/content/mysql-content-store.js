@@ -228,21 +228,29 @@ function createMySqlContentStore(db, {
   }
 
   function toReferenceCard(item, { ownerUserId, actor }) {
-    if (!item.conversation_id) return { sourceType: item.source_type, sourceId: item.source_id };
+    const sourceType = item.source_type ?? item.sourceType;
+    const sourceId = item.source_id ?? item.sourceId;
+    const conversationId = item.conversation_id ?? item.conversationId;
+    const firstSequence = item.first_sequence ?? item.firstSequence;
+    const lastSequence = item.last_sequence ?? item.lastSequence;
+    const completedTurnCount = item.completed_turn_count ?? item.completedTurnCount;
+    const contentSha256 = item.content_sha256 ?? item.contentSha256;
+    const referenceCreatedAt = item.reference_created_at ?? item.referenceCreatedAt;
+    if (!conversationId) return { sourceType, sourceId };
     if (ownerUserId === actor.id) {
       return {
-        sourceType: item.source_type,
-        sourceId: item.source_id,
-        firstSequence: Number(item.first_sequence),
-        lastSequence: Number(item.last_sequence),
-        completedTurnCount: Number(item.completed_turn_count),
-        contentSha256: item.content_sha256
+        sourceType,
+        sourceId,
+        firstSequence: Number(firstSequence),
+        lastSequence: Number(lastSequence),
+        completedTurnCount: Number(completedTurnCount),
+        contentSha256
       };
     }
     return {
       sourceType: 'conversation',
-      completedTurnCount: Number(item.completed_turn_count),
-      createdAt: date(item.reference_created_at),
+      completedTurnCount: Number(completedTurnCount),
+      createdAt: date(referenceCreatedAt),
       private: true
     };
   }
