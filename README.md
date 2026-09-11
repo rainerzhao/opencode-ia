@@ -92,7 +92,7 @@ DEMO_PORT=4321 npm run demo
 | 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
 | MySQL 单一数据层 | 🚧 迁移中 | MySQL-only 生产组合已通过 Mac 登录与私有 Conversation 冒烟；完整业务回归和 Linux 切换仍在进行 |
-| 知识与方案闭环 | 🚧 Stage 3D 进行中 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件和 SQLite 快照恢复，解析/导入导出与 MySQL 备份仍在研发 |
+| 知识与方案闭环 | 🚧 Stage 3D 进行中 | 对话可人工沉淀为私有方案，再转换为私有知识草稿；Knowledge 版本支持私有附件、文本/JSON/CSV 预览和 SQLite 快照恢复，导入导出、版本差异与 MySQL 备份仍在研发 |
 | 内网生产服务 | 🚧 预发布模板 | 已提供 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
@@ -209,7 +209,7 @@ URL 导入默认禁用。启用后不支持通配符，非默认端口必须写�
 
 服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
 
-MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：备份生成 SHA-256 清单，恢复必须显式传入 `--confirm`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。
+MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：备份生成 SHA-256 清单，恢复必须显式传入 `--confirm`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，DOCX/PDF 当前明确返回“不支持预览”。
 
 ### MySQL 生产组合（内网部署前置）
 

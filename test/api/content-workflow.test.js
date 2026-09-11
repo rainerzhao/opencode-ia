@@ -140,4 +140,7 @@ test('stores a bounded private attachment against the current knowledge version'
   const downloaded = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/attachments/${attachment.id}`, { headers: { cookie: author.cookie } });
   assert.equal(downloaded.status, 200);
   assert.equal(await downloaded.text(), '# 附件内容');
+  const preview = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/attachments/${attachment.id}/preview`, { headers: { cookie: author.cookie } });
+  assert.equal(preview.status, 200);
+  assert.deepEqual(await preview.json(), { attachmentId: attachment.id, format: 'md', truncated: false, text: '# 附件内容' });
 });

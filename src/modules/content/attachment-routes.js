@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
+const { extractAttachmentText } = require('../../content/attachment-parser');
 
 function attachmentError(code, message, status = 400) {
   const error = new Error(message);
@@ -17,6 +18,8 @@ function mapAttachmentError(error) {
     if (error.code === 'ATTACHMENT_CONFLICT') error.status = 409;
     else if (error.code === 'CONTENT_NOT_FOUND') error.status = 404;
     else if (error.code === 'INVALID_ATTACHMENT') error.status = 400;
+    else if (error.code === 'ATTACHMENT_PARSE_UNSUPPORTED') error.status = 415;
+    else if (error.code === 'ATTACHMENT_PARSE_INVALID') error.status = 422;
   }
   return error;
 }
@@ -72,6 +75,21 @@ function createContentAttachmentRouter({ store, uploadMiddleware, attachmentRoot
       res.setHeader('content-length', String(attachment.sizeBytes));
       res.setHeader('content-disposition', `attachment; filename="${attachment.originalName.replace(/"/g, '')}"`);
       fs.createReadStream(target).on('error', next).pipe(res);
+    } catch (error) { next(mapAttachmentError(error)); }
+  });
+
+  router.get('/knowledge/:contentId/attachments/:attachmentId/preview', async (req, res, next) => {
+    try {
+      const attachment = await Promise.resolve(store.getKnowledgeAttachment({
+        actorUserId: req.auth.user.id, actorRole: req.auth.user.role,
+        documentId: req.params.contentId, attachmentId: req.params.attachmentId
+      }));
+      const root = path.resolve(attachmentRoot);
+      const target = path.resolve(root, ...attachment.storageKey.split('/'));
+      if (target !== root && !target.startsWith(`${root}${path.sep}`)) throw attachmentError('UNSAFE_PATH', 'attachment path is not allowed', 400);
+      if (!fs.existsSync(target)) throw attachmentError('CONTENT_NOT_FOUND', 'content was not found', 404);
+      const parsed = extractAttachmentText({ originalName: attachment.originalName, content: fs.readFileSync(target) });
+      res.json({ attachmentId: attachment.id, format: parsed.format, truncated: parsed.truncated, text: parsed.text });
     } catch (error) { next(mapAttachmentError(error)); }
   });
 
