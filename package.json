@@ -21,6 +21,7 @@
     "check": "node scripts/check-js.js",
     "security:scan": "node scripts/scan-secrets.js",
     "preflight:production": "node scripts/check-production-config.js",
+    "preflight:opencode": "node scripts/check-opencode-provider.js",
     "backup:sqlite": "node scripts/backup-sqlite.js",
     "restore:sqlite": "node scripts/restore-sqlite.js",
     "backup:mysql": "node scripts/backup-mysql.js",

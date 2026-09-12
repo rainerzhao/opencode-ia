@@ -153,7 +153,7 @@ npm ci
 cp .env.example .env
 ```
 
-至少确认 `OPENCODE_CMD` 和 `OPENCODE_CWD`。项目不接收模型 API Key；Provider 地址和凭证只配置在 OpenCode 自己的受保护环境中。
+至少确认 `OPENCODE_CMD`、`OPENCODE_CWD` 和 `OPENCODE_CONFIG_FILE`。项目不接收模型 API Key；Provider 地址和凭证只配置在 OpenCode 自己的受保护环境中。Linux 预发布还需执行 `npm run preflight:opencode`。
 
 ```bash
 set -a
@@ -283,7 +283,7 @@ npm run security:scan
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **MySQL 真库恢复演练与 Stage 3 完整验收**，完成后进入内部 Provider/真实 OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收。知识包导入已接入知识库页面，导入始终生成新的私有草稿。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
+下一交付点是 **MySQL 真库恢复演练与 Stage 3 完整验收**，同时已完成 Stage 5C 的 Provider 配置门禁和联调清单；真实内部 Provider/OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收仍待在公司预发布机完成。知识包导入已接入知识库页面，导入始终生成新的私有草稿。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)、[内部 Provider 联调清单](docs/operations/internal-provider.md) 和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 

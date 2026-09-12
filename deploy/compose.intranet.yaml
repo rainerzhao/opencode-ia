@@ -31,11 +31,13 @@ services:
       WORKBENCH_DATABASE_URL: mysql://${WORKBENCH_MYSQL_USER}:${WORKBENCH_MYSQL_PASSWORD}@mysql:3306/${WORKBENCH_MYSQL_DATABASE}
       MYSQL_POOL_SIZE: ${MYSQL_POOL_SIZE:-20}
       OPENCODE_CMD: /opt/opencode/bin/opencode
+      OPENCODE_CONFIG_FILE: /etc/opencode-workbench/opencode.json
       OPENCODE_VERIFIED_VERSION: ${OPENCODE_VERIFIED_VERSION:?set OPENCODE_VERIFIED_VERSION}
       COOKIE_SECURE: "true"
     volumes:
       - workbench-data:/var/lib/opencode-workbench
       - ${OPENCODE_INSTALL_ROOT:?set OPENCODE_INSTALL_ROOT}:/opt/opencode:ro
+      - ${OPENCODE_CONFIG_FILE_HOST:?set OPENCODE_CONFIG_FILE_HOST}:/etc/opencode-workbench/opencode.json:ro
     expose:
       - "3000"
     healthcheck:

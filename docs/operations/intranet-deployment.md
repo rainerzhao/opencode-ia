@@ -4,12 +4,12 @@
 
 ## Compose 方式
 
-1. 在受保护的环境文件中填写 `WORKBENCH_MYSQL_DATABASE`、`WORKBENCH_MYSQL_USER`、`WORKBENCH_MYSQL_PASSWORD`、`WORKBENCH_MYSQL_ROOT_PASSWORD`、`OPENCODE_INSTALL_ROOT` 和 `OPENCODE_VERIFIED_VERSION`。
+1. 在受保护的环境文件中填写 `WORKBENCH_MYSQL_DATABASE`、`WORKBENCH_MYSQL_USER`、`WORKBENCH_MYSQL_PASSWORD`、`WORKBENCH_MYSQL_ROOT_PASSWORD`、`OPENCODE_INSTALL_ROOT`、`OPENCODE_CONFIG_FILE_HOST` 和 `OPENCODE_VERIFIED_VERSION`。
 2. 将 `deploy/compose.intranet.yaml` 的 `ai-workbench.intra.example`、TLS 路径、数据卷和 OpenCode 安装路径替换为内网值。
 3. 先启动并观察数据库健康：`docker compose -f deploy/compose.intranet.yaml up -d mysql`。
 4. 再启动工作台：`docker compose -f deploy/compose.intranet.yaml up -d workbench`，检查 `curl -fsS http://127.0.0.1:3000/healthz`。
 5. 首次初始化管理员使用受控终端执行 `npm run admin:create`；密码不写入命令参数、镜像或 Git。
-6. 启动前执行 `npm run preflight:production`；必须显示 MySQL、Secure Cookie、OpenCode Runtime 和非 root 检查通过，否则停止发布流程。
+6. 启动前执行 `npm run preflight:production` 和 `OPENCODE_CONFIG_FILE=/etc/opencode-workbench/opencode.json npm run preflight:opencode`；必须同时通过 MySQL、Secure Cookie、OpenCode Runtime、非 root、Provider 地址和默认模型检查，否则停止发布流程。
 
 ## systemd + Nginx 方式
 
