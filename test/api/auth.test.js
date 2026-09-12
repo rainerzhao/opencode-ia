@@ -49,7 +49,6 @@ async function setup(t, overrides = {}) {
     maxSessions: 2,
     opencodeCwd: root,
     knowledgeDir: path.join(root, 'knowledge'),
-    solutionsDir: path.join(root, 'solutions'),
     skillsDir: path.join(root, 'skills'),
     uploadTempDir: path.join(root, 'uploads'),
     fetchAllowedHosts: [],
@@ -63,7 +62,6 @@ async function setup(t, overrides = {}) {
   };
   for (const directory of [
     config.knowledgeDir,
-    config.solutionsDir,
     config.skillsDir,
     config.uploadTempDir
   ]) fs.mkdirSync(directory, { recursive: true });

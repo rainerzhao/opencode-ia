@@ -6,7 +6,6 @@ const { loadConfig } = require('../src/config');
 test('derives data paths from the injected project directory', () => {
   const config = loadConfig({ env: {}, projectDir: '/srv/workbench' });
   assert.equal(config.knowledgeDir, path.resolve('/srv/workbench/knowledge'));
-  assert.equal(config.solutionsDir, path.resolve('/srv/workbench/solutions'));
   assert.equal(config.databasePath, path.resolve('/srv/workbench/data/workbench.db'));
   assert.equal(config.staticDir, path.resolve('/srv/workbench/dist/web'));
   assert.equal(config.port, 3000);

@@ -25,7 +25,7 @@ test('rejects anonymous business REST access and requires CSRF for writes', asyn
   assert.equal(authenticated.headers.get('cache-control'), 'no-store');
   assert.equal(Object.hasOwn(await readJson(authenticated), 'opencodeCwd'), false);
 
-  const missingCsrf = await fetch(`${fixture.origin}/api/solutions`, {
+  const missingCsrf = await fetch(`${fixture.origin}/api/content/solutions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -53,36 +53,11 @@ test('enforces the admin and member role matrix for active sessions', async (t) 
   assert.equal(adminSessions.status, 200);
 });
 
-test('keeps solution records private between members while allowing admin management', async (t) => {
+test('retires the legacy file solution endpoint before production', async (t) => {
   const fixture = await createAuthenticatedWorkbench(t);
   const memberA = await fixture.createMember({ username: 'member.a', displayName: 'Member A' });
-  const memberB = await fixture.createMember({ username: 'member.b', displayName: 'Member B' });
-
-  const created = await fetch(`${fixture.origin}/api/solutions`, {
-    method: 'POST',
-    headers: authHeaders(memberA, { json: true }),
-    body: JSON.stringify({ title: 'A private plan', description: 'member-a-only' })
-  });
-  assert.equal(created.status, 200);
-  const solutionId = (await readJson(created)).id;
-  assert.equal(fs.statSync(path.join(fixture.config.solutionsDir, `${solutionId}.json`)).mode & 0o777, 0o600);
-
-  const listAResponse = await fetch(`${fixture.origin}/api/solutions`, {
-    headers: { cookie: memberA.cookie }
-  });
-  assert.equal(listAResponse.headers.get('cache-control'), 'no-store');
-  const listA = await readJson(listAResponse);
-  const listB = await readJson(await fetch(`${fixture.origin}/api/solutions`, {
-    headers: { cookie: memberB.cookie }
-  }));
-  const listAdmin = await readJson(await fetch(`${fixture.origin}/api/solutions`, {
-    headers: { cookie: fixture.admin.cookie }
-  }));
-
-  assert.equal(listA.length, 1);
-  assert.equal(listA[0].createdBy, memberA.user.id);
-  assert.deepEqual(listB, []);
-  assert.equal(listAdmin.length, 1);
+  const response = await fetch(`${fixture.origin}/api/solutions`, { headers: { cookie: memberA.cookie } });
+  assert.equal(response.status, 404);
 });
 
 test('isolates member knowledge writes and records safe actor-attributed audit metadata', async (t) => {

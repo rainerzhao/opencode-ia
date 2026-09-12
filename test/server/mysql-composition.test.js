@@ -16,7 +16,6 @@ test('accepts an injected asynchronous repository set without opening or migrati
     maxSessions: 4,
     opencodeCwd: root,
     knowledgeDir: path.join(root, 'knowledge'),
-    solutionsDir: path.join(root, 'solutions'),
     skillsDir: path.join(root, 'skills'),
     skillInstallRoot: path.join(root, 'skill-installations'),
     contentAttachmentRoot: path.join(root, 'content-attachments'),

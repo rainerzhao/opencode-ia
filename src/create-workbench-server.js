@@ -35,7 +35,6 @@ const { createContentStore } = require('./content/content-store');
 const { createConversationContentService } = require('./content/conversation-content-service');
 const { createContentRouter } = require('./modules/content/routes');
 const { createContentAttachmentRouter } = require('./modules/content/attachment-routes');
-const { createLegacySolutionsRouter } = require('./modules/legacy/solutions-routes');
 const { createMetrics } = require('./observability/metrics');
 
 function createWorkbenchServer({
@@ -406,11 +405,6 @@ app.get('/api/sessions', authMiddleware.requireRole('admin'), (req, res) => {
   });
   res.json(list);
 });
-
-// 历史文件型接口：仅为旧数据兼容，React 正式路径使用 /api/content/solutions。
-app.use('/api/solutions', createLegacySolutionsRouter({
-  solutionsDir: config.solutionsDir, safePath, safeFileName, ensurePrivateDirectory, writePrivateFile, can, requestAuditor
-}));
 
 // API: 获取知识库目录结构
 app.get('/api/knowledge/tree', (req, res) => {

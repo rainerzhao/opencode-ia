@@ -138,7 +138,6 @@ function loadConfig({ env = process.env, projectDir }) {
       env.SKILL_INSTALL_ROOT || path.join(root, 'data/skill-installations')
     ),
     knowledgeDir: path.resolve(env.KNOWLEDGE_DIR || path.join(root, 'knowledge')),
-    solutionsDir: path.resolve(env.SOLUTIONS_DIR || path.join(root, 'solutions')),
     skillsDir: path.resolve(env.SKILLS_DIR || path.join(root, '.opencode/skills')),
     databasePath: path.resolve(env.DATABASE_PATH || path.join(root, 'data/workbench.db')),
     uploadTempDir: path.resolve(env.UPLOAD_TEMP_DIR || path.join(root, 'data/tmp/uploads')),

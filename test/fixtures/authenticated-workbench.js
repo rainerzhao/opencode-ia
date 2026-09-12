@@ -69,7 +69,6 @@ async function createAuthenticatedWorkbench(t, options = {}) {
     maxSessions: options.maxSessions || 4,
     opencodeCwd: root,
     knowledgeDir: path.join(root, 'knowledge'),
-    solutionsDir: path.join(root, 'solutions'),
     skillsDir: path.join(root, 'skills'),
     skillInstallRoot: path.join(root, 'skill-installations'),
     contentAttachmentRoot: path.join(root, 'content-attachments'),
@@ -84,7 +83,6 @@ async function createAuthenticatedWorkbench(t, options = {}) {
   };
   for (const directory of [
     config.knowledgeDir,
-    config.solutionsDir,
     config.skillsDir,
     config.skillInstallRoot,
     config.contentAttachmentRoot,

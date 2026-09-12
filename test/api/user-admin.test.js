@@ -42,7 +42,6 @@ async function setup(t) {
     maxSessions: 2,
     opencodeCwd: root,
     knowledgeDir: path.join(root, 'knowledge'),
-    solutionsDir: path.join(root, 'solutions'),
     skillsDir: path.join(root, 'skills'),
     uploadTempDir: path.join(root, 'uploads'),
     fetchAllowedHosts: [],
@@ -53,7 +52,7 @@ async function setup(t) {
     loginWindowSeconds: 900,
     loginLockSeconds: 900
   };
-  for (const directory of [config.knowledgeDir, config.solutionsDir, config.skillsDir, config.uploadTempDir]) {
+  for (const directory of [config.knowledgeDir, config.skillsDir, config.uploadTempDir]) {
     fs.mkdirSync(directory, { recursive: true });
   }
   const workbench = createWorkbenchServer({

@@ -192,7 +192,6 @@ npm start
 | `GATEWAY_WORKSPACE_ROOT` | `<root>/data/workspaces` | 服务端生成的 Conversation 工作目录根 |
 | `SKILL_INSTALL_ROOT` | `<root>/data/skill-installations` | 服务端受管的按账号 Skill 安装包目录；不会自动成为全局 Skill |
 | `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
-| `SOLUTIONS_DIR` | `<root>/solutions` | 方案目录 |
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
 | `DATABASE_PATH` | `<root>/data/workbench.db` | 当前历史 SQLite 运行库；MySQL 单一数据层迁移期间保留，切换完成后删除 |
 | `WORKBENCH_DATABASE_URL` | 空 | 配置后启用 MySQL 8.4 生产组合；凭证只存在受保护的运行环境 |
@@ -279,11 +278,11 @@ npm run security:scan
 - Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
 - Stage 4 已完成 Mac 端验收：普通成员可以创建、校验并人工发布默认私有的 Skill 草稿；成员独立安装，安装包原子落盘、启用前再经真实 OpenCode 发现验证。后继草稿不改变团队当前版本；升级、回滚与停用会刷新受管工作区，避免常驻 Runtime 沿用已缓存版本。
 - MySQL Skill 与内容/Gateway 分域真库回归已通过，MySQL-only 组合已完成 HTTP/WebSocket 冒烟（模拟 Worker）；内部 Provider 与真实 OpenCode 全链路仍待验收，不能误写成生产切换完成。
-- 历史 `/api/solutions` 文件接口已抽为独立兼容适配层，React 已不再调用；后续导入/导出与备份完成后再安排退役。
+- 历史 `/api/solutions` 文件接口已退役，方案统一使用 `/api/content/solutions` 和 MySQL/SQLite 版本化内容仓储。
 - 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
 - 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
 
-下一交付点是 **MySQL 真库恢复演练与 Stage 3 完整验收**，同时已完成 Stage 5C 的 Provider 配置门禁和联调清单；真实内部 Provider/OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收仍待在公司预发布机完成。知识包导入已接入知识库页面，导入始终生成新的私有草稿。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)、[内部 Provider 联调清单](docs/operations/internal-provider.md) 和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
+下一交付点是 **知识/方案版本恢复与 Stage 3 完整验收**；MySQL 真库恢复演练和历史方案文件接口退役已完成。Stage 5C 的 Provider 配置门禁和联调清单已具备，真实内部 Provider/OpenCode 联调、Linux 部署、OS 进程沙箱、长期容量与生产回滚验收仍待在公司预发布机完成。知识包导入已接入知识库页面，导入始终生成新的私有草稿。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)、[内部 Provider 联调清单](docs/operations/internal-provider.md) 和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
 
 ## 项目目录
 

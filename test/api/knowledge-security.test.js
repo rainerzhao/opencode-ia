@@ -23,7 +23,6 @@ async function createFixture(t, options = {}) {
   return {
     ...fixture,
     knowledgeDir: fixture.config.knowledgeDir,
-    solutionsDir: fixture.config.solutionsDir,
     skillsDir: fixture.config.skillsDir,
     uploadTempDir: fixture.config.uploadTempDir,
     privateKnowledgeDir: path.join(fixture.config.knowledgeDir, '.private', 'user-admin'),
