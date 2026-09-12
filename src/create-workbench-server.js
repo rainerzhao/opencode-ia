@@ -156,7 +156,8 @@ app.use((req, res, next) => {
   res.setHeader('x-request-id', req.requestId);
   next();
 });
-app.use(express.json());
+// Knowledge bundle import carries base64 attachments; keep the parser bounded above the 20 MiB export limit.
+app.use(express.json({ limit: '32mb' }));
 const staticDir = config.staticDir || path.join(config.projectDir, 'public');
 app.use(express.static(staticDir));
 app.get(['/', '/login.html'], (req, res, next) => {

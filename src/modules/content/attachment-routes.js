@@ -6,6 +6,8 @@ const path = require('node:path');
 const express = require('express');
 const { extractAttachmentText } = require('../../content/attachment-parser');
 
+const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
+
 function attachmentError(code, message, status = 400) {
   const error = new Error(message);
   error.code = code;
@@ -21,8 +23,50 @@ function mapAttachmentError(error) {
     else if (error.code === 'ATTACHMENT_PARSE_UNSUPPORTED') error.status = 415;
     else if (error.code === 'ATTACHMENT_PARSE_INVALID') error.status = 422;
     else if (error.code === 'ATTACHMENT_EXPORT_TOO_LARGE') error.status = 413;
+    else if (error.code === 'INVALID_KNOWLEDGE_BUNDLE') error.status = 400;
+    else if (error.code === 'CONTENT_CONFLICT') error.status = 409;
+    else if (['INVALID_KNOWLEDGE_TITLE', 'INVALID_KNOWLEDGE_CATEGORY', 'INVALID_KNOWLEDGE_MARKDOWN', 'INVALID_KNOWLEDGE_TAGS'].includes(error.code)) error.status = 400;
   }
   return error;
+}
+
+function parseKnowledgeBundle(value, safeFileName, allowedExtensions) {
+  if (!value || typeof value !== 'object' || value.type !== 'knowledge-bundle' || value.schemaVersion !== 1) {
+    throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle is invalid');
+  }
+  const source = value.knowledge;
+  if (!source || typeof source !== 'object') throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle is invalid');
+  if (value.attachments !== undefined && !Array.isArray(value.attachments)) throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle attachments are invalid');
+  const attachments = Array.isArray(value.attachments) ? value.attachments : [];
+  if (attachments.length > 50) throw attachmentError('ATTACHMENT_EXPORT_TOO_LARGE', 'knowledge bundle has too many attachments', 413);
+  let totalBytes = 0;
+  const files = attachments.map((item) => {
+    if (!item || typeof item !== 'object' || typeof item.contentBase64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(item.contentBase64) || item.contentBase64.length % 4 !== 0) {
+      throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle attachment is invalid');
+    }
+    const content = Buffer.from(item.contentBase64, 'base64');
+    if (content.toString('base64') !== item.contentBase64) throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle attachment is invalid');
+    const originalName = safeFileName(item.originalName);
+    if (!allowedExtensions.has(path.extname(originalName).toLowerCase())) throw attachmentError('ATTACHMENT_EXTENSION_NOT_ALLOWED', 'attachment extension is not allowed');
+    const sizeBytes = Number(item.sizeBytes);
+    const contentSha256 = typeof item.contentSha256 === 'string' ? item.contentSha256.toLowerCase() : '';
+    const digest = crypto.createHash('sha256').update(content).digest('hex');
+    if (!Number.isInteger(sizeBytes) || sizeBytes !== content.length || sizeBytes > 50 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(contentSha256) || contentSha256 !== digest) {
+      throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle attachment is invalid');
+    }
+    totalBytes += content.length;
+    if (totalBytes > MAX_IMPORT_BYTES) throw attachmentError('ATTACHMENT_EXPORT_TOO_LARGE', 'knowledge bundle is too large', 413);
+    const mediaType = item.mediaType === undefined ? 'application/octet-stream' : item.mediaType;
+    if (typeof mediaType !== 'string' || mediaType.length < 1 || mediaType.length > 200 || /[\u0000-\u001f\u007f]/.test(mediaType)) throw attachmentError('INVALID_KNOWLEDGE_BUNDLE', 'knowledge bundle attachment is invalid');
+    return { originalName, mediaType, content, sizeBytes, contentSha256 };
+  });
+  return {
+    title: source.title,
+    category: source.category,
+    tags: source.tags,
+    markdown: source.markdown,
+    files
+  };
 }
 
 function createContentAttachmentRouter({ store, uploadMiddleware, attachmentRoot, safeFileName, ensurePrivateDirectory, requestAuditor = null }) {
@@ -33,6 +77,52 @@ function createContentAttachmentRouter({ store, uploadMiddleware, attachmentRoot
   const router = express.Router();
   const allowedExtensions = new Set(['.md', '.txt', '.docx', '.pdf', '.json', '.csv']);
   const maxExportBytes = 20 * 1024 * 1024;
+
+  router.post('/knowledge/import', async (req, res, next) => {
+    const temporary = path.join(attachmentRoot, `.import-${crypto.randomUUID()}`);
+    const createdTargets = [];
+    let createdKnowledge = null;
+    try {
+      const bundle = parseKnowledgeBundle(req.body, safeFileName, allowedExtensions);
+      const knowledge = await Promise.resolve(store.createKnowledgeDraft({
+        actorUserId: req.auth.user.id, actorRole: req.auth.user.role,
+        title: bundle.title, category: bundle.category, tags: bundle.tags, markdown: bundle.markdown,
+        visibility: 'private', status: 'draft'
+      }));
+      createdKnowledge = knowledge;
+      ensurePrivateDirectory(temporary);
+      for (const file of bundle.files) {
+        const id = crypto.randomUUID();
+        const storageKey = `${safeFileName(req.auth.user.id)}/${safeFileName(knowledge.id)}/${id}${path.extname(file.originalName).toLowerCase()}`;
+        const target = path.join(attachmentRoot, ...storageKey.split('/'));
+        ensurePrivateDirectory(path.dirname(target));
+        const staged = path.join(temporary, id);
+        fs.writeFileSync(staged, file.content, { mode: 0o600, flag: 'wx' });
+        fs.renameSync(staged, target);
+        createdTargets.push(target);
+        await Promise.resolve(store.createKnowledgeAttachment({
+          actorUserId: req.auth.user.id, actorRole: req.auth.user.role, documentId: knowledge.id,
+          id, originalName: file.originalName, mediaType: file.mediaType, sizeBytes: file.sizeBytes,
+          contentSha256: file.contentSha256, storageKey
+        }));
+      }
+      if (requestAuditor) requestAuditor.record(req, {
+        action: 'content.knowledge.import', targetType: 'knowledge_document', targetId: knowledge.id,
+        metadata: { attachmentCount: bundle.files.length }
+      });
+      res.status(201).json({ knowledge });
+    } catch (error) {
+      for (const target of createdTargets) { try { fs.unlinkSync(target); } catch {} }
+      if (createdKnowledge && typeof store.deleteKnowledgeDraft === 'function') {
+        await Promise.resolve(store.deleteKnowledgeDraft({
+          actorUserId: req.auth.user.id, actorRole: req.auth.user.role, documentId: createdKnowledge.id
+        })).catch(() => {});
+      }
+      next(mapAttachmentError(error));
+    } finally {
+      try { fs.rmSync(temporary, { recursive: true, force: true }); } catch {}
+    }
+  });
 
   router.post('/knowledge/:contentId/attachments', uploadMiddleware, async (req, res, next) => {
     const temporary = req.file?.path;

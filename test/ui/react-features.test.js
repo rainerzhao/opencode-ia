@@ -67,6 +67,7 @@ test('knowledge page exposes search, authoring, and upload workflows', async () 
     assert.match(html, /placeholder="搜索标题或正文"/);
     assert.match(html, />新建文档</);
     assert.match(html, />上传文件</);
+    assert.match(html, /导入知识包/);
   });
 });
 

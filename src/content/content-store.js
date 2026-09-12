@@ -413,6 +413,16 @@ function createContentStore(db, {
     };
   }
 
+  function deleteKnowledgeDraft({ actorUserId, actorRole, documentId }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    return transaction(() => {
+      const row = writableKnowledge(actor, documentId);
+      if (row.status !== 'draft' || row.visibility !== 'private') throw contentError('CONTENT_CONFLICT', 'only a private draft can be removed');
+      db.prepare('DELETE FROM knowledge_documents WHERE id = ?').run(row.document_id);
+      return true;
+    });
+  }
+
   function searchKnowledge({ actorUserId, actorRole, query, limit = 20 }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const ftsQuery = toFtsQuery(query);
@@ -706,6 +716,7 @@ function createContentStore(db, {
     saveKnowledgeVersion,
     getKnowledge,
     getKnowledgeVersion,
+    deleteKnowledgeDraft,
     searchKnowledge,
     listKnowledge,
     createSolutionDraft,

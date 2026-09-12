@@ -155,6 +155,33 @@ test('stores a bounded private attachment against the current knowledge version'
   assert.equal(Buffer.from(bundle.attachments[0].contentBase64, 'base64').toString(), '# 附件内容');
   assert.equal(Object.hasOwn(bundle.attachments[0], 'storageKey'), false);
   assert.equal(createAuditStore(fixture.db).list({ limit: 100 }).some((item) => item.action === 'content.knowledge.export' && item.targetId === knowledge.id), true);
+
+  const imported = await fetch(`${fixture.origin}/api/content/knowledge/import`, {
+    method: 'POST', headers: authHeaders(author, { json: true }), body: JSON.stringify({
+      type: bundle.type,
+      schemaVersion: bundle.schemaVersion,
+      knowledge: { ...bundle.knowledge, visibility: 'team', status: 'published', versionHistory: [{ version: 99 }] },
+      attachments: bundle.attachments
+    })
+  });
+  assert.equal(imported.status, 201);
+  const importedKnowledge = (await readJson(imported)).knowledge;
+  assert.notEqual(importedKnowledge.id, knowledge.id);
+  assert.equal(importedKnowledge.visibility, 'private');
+  assert.equal(importedKnowledge.status, 'draft');
+  const importedDetail = (await readJson(await fetch(`${fixture.origin}/api/content/knowledge/${importedKnowledge.id}`, { headers: { cookie: author.cookie } }))).knowledge;
+  assert.equal(importedDetail.attachments.length, 1);
+  const importedDownload = await fetch(`${fixture.origin}/api/content/knowledge/${importedKnowledge.id}/attachments/${importedDetail.attachments[0].id}`, { headers: { cookie: author.cookie } });
+  assert.equal(await importedDownload.text(), '# 附件内容');
+
+  const rejectedImport = await fetch(`${fixture.origin}/api/content/knowledge/import`, {
+    method: 'POST', headers: authHeaders(author, { json: true }), body: JSON.stringify({
+      type: 'knowledge-bundle', schemaVersion: 1,
+      knowledge: { title: '恶意导入', markdown: '# x' },
+      attachments: [{ originalName: 'bad.md', mediaType: 'text/markdown', sizeBytes: 1, contentSha256: '0'.repeat(64), contentBase64: 'eA==' }]
+    })
+  });
+  assert.equal(rejectedImport.status, 400);
 });
 
 test('returns owner-only Knowledge version diffs and hides private history from team viewers', async (t) => {

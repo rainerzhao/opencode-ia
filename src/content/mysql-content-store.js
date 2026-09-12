@@ -359,6 +359,16 @@ function createMySqlContentStore(db, {
     };
   }
 
+  async function deleteKnowledgeDraft({ actorUserId, actorRole, documentId }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    return db.transaction(async (tx) => {
+      const row = await writableKnowledge(tx, actor, documentId);
+      if (row.status !== 'draft' || row.visibility !== 'private') throw contentError('CONTENT_CONFLICT', 'only a private draft can be removed');
+      await tx.query('DELETE FROM knowledge_documents WHERE id = ?', [row.document_id]);
+      return true;
+    });
+  }
+
   async function getKnowledgeVersion({ actorUserId, actorRole, documentId, version }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const current = await readableKnowledge(db, actor, documentId);
@@ -606,7 +616,7 @@ function createMySqlContentStore(db, {
   }
 
   return Object.freeze({
-    createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, getKnowledgeVersion, searchKnowledge, listKnowledge,
+    createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, getKnowledgeVersion, deleteKnowledgeDraft, searchKnowledge, listKnowledge,
     createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, createKnowledgeAttachment, saveSolutionVersion, getSolution, listSolutions,
     getKnowledgeAttachment,
     publishKnowledge, withdrawKnowledge, publishSolution, withdrawSolution
