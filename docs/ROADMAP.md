@@ -17,7 +17,7 @@ Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、
 | Stage 2 OpenCode Gateway | ✅ Mac 验收完成 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，多人多会话可控 |
 | Stage 3 知识与方案 | 🚧 3D 收尾 | FTS5 检索、版本、私有到发布流程、对话来源追溯、附件 | 知识可查、可审、可撤回、可追溯 |
 | Stage 4 Skill 中心 | ✅ Mac 验收完成 | 草稿、校验、发布、安装、启用、版本、回滚、停用、归档 | 成员能安全生产并共享 Skill |
-| Stage 5 Linux 生产化 | 🚧 前置模板已开始 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
+| Stage 5 Linux 生产化 | 🚧 5A 配置门禁完成 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
 
 ## Stage 0：安全可演示基线
 
@@ -121,7 +121,7 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 
 主要工作：非 root 服务账号；Nginx HTTPS 与 WebSocket；内部兼容 OpenAI 协议模型；备份恢复；日志和监控；容量、重启恢复和故障演练。
 
-已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。模板不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
+已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置。模板和门禁不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 出口标准：生产检查表全部通过，残余风险和回滚方案由人工确认后再开放访问。
 
