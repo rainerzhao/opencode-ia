@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const net = require('node:net');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 const { createWorkerProcess } = require('../../src/gateway/worker-process');
 
 const FIXTURE = path.resolve(__dirname, '../fixtures/fake-opencode-serve.js');
@@ -98,6 +100,31 @@ test('starts in pure mode with forced workspace tool permissions', async (t) => 
   assert.equal(config.permission.webfetch, 'deny');
   assert.equal(config.permission.websearch, 'deny');
   assert.equal(config.permission.task, 'deny');
+});
+
+test('loads an owner-only provider config file before applying forced permissions', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-config-file-'));
+  const file = path.join(root, 'opencode.json');
+  fs.writeFileSync(file, JSON.stringify({ model: 'internal/model', provider: { internal: { options: { baseURL: 'https://model.intra.example/v1' } } } }), { mode: 0o600 });
+  fs.chmodSync(file, 0o600);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const spawned = [];
+  const child = new EventEmitter(); child.pid = 43211;
+  child.kill = (signal) => { setImmediate(() => child.emit('close', 0, signal)); return true; };
+  const { worker } = await createFixture(t, {
+    env: { OPENCODE_CONFIG_FILE: file },
+    spawnImpl(command, args, options) { spawned.push({ command, args, options }); return child; },
+    fetchImpl: async () => ({ ok: true, json: async () => ({ healthy: true, version: '1.18.25' }) })
+  });
+  await worker.start();
+  const config = JSON.parse(spawned[0].options.env.OPENCODE_CONFIG_CONTENT);
+  assert.equal(config.model, 'internal/model');
+  assert.equal(config.provider.internal.options.baseURL, 'https://model.intra.example/v1');
+  assert.equal(config.permission.bash, 'deny');
+});
+
+test('rejects an unsafe provider config file before spawning', () => {
+  assert.throws(() => createWorkerProcess({ command: process.execPath, baseArgs: [FIXTURE], cwd: process.cwd(), port: 4319, env: { OPENCODE_CONFIG_FILE: 'relative.json' } }), (error) => error.code === 'OPENCODE_CONFIG_FILE_INVALID');
 });
 
 test('rejects a non-loopback worker configuration before spawning', async () => {

@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const path = require('node:path');
+const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { createOpenCodeClient } = require('./opencode-client');
 const { secureOpenCodeConfigContent } = require('./tool-policy');
@@ -18,6 +19,21 @@ function positiveInteger(value, name, { max = Number.MAX_SAFE_INTEGER } = {}) {
     throw new TypeError(`${name} is invalid`);
   }
   return value;
+}
+
+function readOpenCodeConfigContent(env) {
+  if (env.OPENCODE_CONFIG_FILE) {
+    if (typeof env.OPENCODE_CONFIG_FILE !== 'string' || !path.isAbsolute(env.OPENCODE_CONFIG_FILE)) {
+      throw workerError('OPENCODE_CONFIG_FILE_INVALID', 'OpenCode config file must be an absolute path');
+    }
+    let stat;
+    try { stat = fs.statSync(env.OPENCODE_CONFIG_FILE); } catch { throw workerError('OPENCODE_CONFIG_FILE_INVALID', 'OpenCode config file is unavailable'); }
+    if (!stat.isFile() || (stat.mode & 0o077) !== 0) {
+      throw workerError('OPENCODE_CONFIG_FILE_INVALID', 'OpenCode config file must be an owner-readable regular file');
+    }
+    try { return fs.readFileSync(env.OPENCODE_CONFIG_FILE, 'utf8'); } catch { throw workerError('OPENCODE_CONFIG_FILE_INVALID', 'OpenCode config file is unreadable'); }
+  }
+  return env.OPENCODE_CONFIG_CONTENT;
 }
 
 function delay(milliseconds) {
@@ -74,7 +90,7 @@ function createWorkerProcess({
     throw new TypeError('OpenCode worker password is invalid');
   }
   const endpoint = `http://${hostname}:${port}`;
-  const securedConfigContent = secureOpenCodeConfigContent(env.OPENCODE_CONFIG_CONTENT);
+  const securedConfigContent = secureOpenCodeConfigContent(readOpenCodeConfigContent(env));
   const client = createOpenCodeClient({
     endpoint,
     username,
