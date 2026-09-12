@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "prestart": "npm run build",
     "start": "node server.js",
+    "start:production": "node scripts/start-production.js",
     "dev": "node server.js",
     "predemo": "npm run build",
     "demo": "node scripts/start-demo.js",

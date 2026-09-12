@@ -35,3 +35,14 @@ test('rejects missing provider, unsafe permissions and missing model', (t) => {
   const noModel = fixtureFile(t, JSON.stringify({ provider: { internal: { options: { baseURL: 'http://x' } } } }));
   assert.throws(() => validateOpenCodeProviderConfig({ env: { OPENCODE_CONFIG_FILE: noModel } }), /default model/);
 });
+
+test('rejects a config file that is not owned by the service account', (t) => {
+  const file = fixtureFile(t, JSON.stringify({
+    model: 'internal/model', provider: { internal: { options: { baseURL: 'https://model.intra.example/v1' } } }
+  }));
+  assert.throws(() => validateOpenCodeProviderConfig({
+    env: { OPENCODE_CONFIG_FILE: file }, uid: 1001,
+    statSync: () => ({ isFile: () => true, mode: 0o100600, uid: 0 }),
+    readFileSync: fs.readFileSync
+  }), /owned by the service account/);
+});

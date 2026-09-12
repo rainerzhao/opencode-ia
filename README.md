@@ -42,7 +42,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway、Stage 3 知识与方案闭环、Stage 4 团队 Skill 中心均已完成 Mac 应用级验收；MySQL 8.4 生产组合、内容与附件恢复演练也已在本机真库通过。当前研发主线已经进入 Stage 5 Linux 内网生产化：配置门禁、聚合指标和内部 Provider 联调门禁已具备，真实内部 Provider/OpenCode 全链路、Linux 进程级沙箱、容量与灾备验收仍须在公司预发布机完成。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway、Stage 3 知识与方案闭环、Stage 4 团队 Skill 中心均已完成 Mac 应用级验收；MySQL 8.4 生产组合、内容与附件恢复演练也已在本机真库通过。当前研发主线已经进入 Stage 5 Linux 内网生产化：应用容器连接公司云 MySQL，不在 Compose 内自建数据库；配置门禁、聚合指标和内部 Provider 联调门禁已具备，真实内部 Provider/OpenCode 全链路、Linux 进程级沙箱、容量与灾备验收仍须在公司预发布机完成。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看内网部署手册](docs/operations/intranet-deployment.md)
 
@@ -94,7 +94,7 @@ DEMO_PORT=4321 npm run demo
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
 | MySQL 单一数据层 | ✅ Mac 真库已验收 | MySQL-only 生产组合、真实 MySQL HTTP/WebSocket 冒烟及 SQL/附件恢复演练已通过；Linux 切换仍待预发布验收 |
 | 知识与方案闭环 | ✅ Stage 3 已完成 Mac 验收 | 对话可人工沉淀为私有方案，再转换为私有知识；支持来源、附件、预览、导入导出、版本差异和历史版本恢复 |
-| 内网生产服务 | 🚧 预发布模板 | 已提供 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
+| 内网生产服务 | 🚧 预发布模板 | 已提供连接外部云 MySQL 的 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
 
@@ -114,7 +114,7 @@ flowchart LR
     W --> A[Express REST API]
     W --> S[WebSocket 会话层]
     A --> F[Markdown / 文件资产]
-    A --> D[(业务数据库<br/>MySQL 8.4 / SQLite Demo)]
+    A --> D[(业务数据库<br/>公司云 MySQL 8.4 / SQLite Demo)]
     S --> G[Gateway 控制面<br/>Stage 2D 产品链路已验证]
     G --> Q[公平队列与会话映射]
     Q --> W1[OpenCode Worker 1]
@@ -195,7 +195,7 @@ npm start
 | `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
 | `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
 | `DATABASE_PATH` | `<root>/data/workbench.db` | 当前历史 SQLite 运行库；MySQL 单一数据层迁移期间保留，切换完成后删除 |
-| `WORKBENCH_DATABASE_URL` | 空 | 配置后启用 MySQL 8.4 生产组合；凭证只存在受保护的运行环境 |
+| `WORKBENCH_DATABASE_URL` | 空 | 生产环境必填公司云 MySQL 8.4 连接串；凭证只存在受保护的运行环境 |
 | `MYSQL_POOL_SIZE` | `10` | MySQL 连接池上限（1–100） |
 | `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
 | `COOKIE_SECURE` | 生产环境为 `true` | HTTPS 下为认证 Cookie 增加 `Secure` |
@@ -215,9 +215,11 @@ MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：SQL 
 
 Linux 预发布启动前可执行 `npm run preflight:production`：它会拒绝 root、非 production 模式、SQLite 路径混用、非 Secure Cookie、缺失/非绝对 OpenCode 可执行文件，以及超过 Worker 池容量的全局并发上限。该检查只输出非敏感配置摘要，不会打印数据库 URL 或 Provider 凭证。
 
+生产部署必须使用 `npm run start:production`（Docker 与 systemd 模板已默认使用），它会在打开 HTTP 端口前强制执行生产配置和 OpenCode Provider 两项门禁。Provider 配置必须为 `0600` 且归运行服务账号所有；任一门禁失败，服务都不会启动。普通 `npm start` 仅保留给 Mac 开发流程。
+
 ### MySQL 生产组合（内网部署前置）
 
-设置 `WORKBENCH_DATABASE_URL` 后，生产启动器会选择 MySQL 8.4 组合：启动前检查版本、字符集、UTC 时区和中文 `ngram` 能力，执行受锁保护的迁移，并将账号、审计、Conversation/Gateway、知识/方案和 Skill 全部装配到同一个 MySQL Repository。未配置该变量时仍使用历史 SQLite 组合，便于 Mac Demo；两种组合不会混用业务 Store。MySQL 组合已完成代码级装配和真实 MySQL 分域回归，完整 HTTP/WebSocket 全栈验收与 Linux 切换仍在后续阶段。
+生产环境由工作台容器连接公司云 MySQL 8.4，不在应用 Compose 内启动或维护 MySQL。设置 `WORKBENCH_DATABASE_URL` 后，生产启动器会选择 MySQL 组合：启动前检查版本、字符集、UTC 时区和中文 `ngram` 能力，执行受锁保护的迁移，并将账号、审计、Conversation/Gateway、知识/方案和 Skill 全部装配到同一个 MySQL Repository。云数据库负责实例高可用、自动备份和基础监控，应用仍负责 schema migration 与兼容性门禁。未配置该变量时仍使用历史 SQLite 组合，仅便于 Mac Demo；两种组合不会混用业务 Store。MySQL 组合已完成代码级装配和真实 MySQL 分域回归，完整 HTTP/WebSocket 全栈验收与 Linux 切换仍在后续阶段。
 
 ### Stage 1A：创建首位管理员
 

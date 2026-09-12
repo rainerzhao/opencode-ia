@@ -10,7 +10,12 @@ function providerConfigError(message) {
   return error;
 }
 
-function validateOpenCodeProviderConfig({ env = process.env, statSync = fs.statSync, readFileSync = fs.readFileSync } = {}) {
+function validateOpenCodeProviderConfig({
+  env = process.env,
+  uid = process.getuid?.(),
+  statSync = fs.statSync,
+  readFileSync = fs.readFileSync
+} = {}) {
   const filename = env.OPENCODE_CONFIG_FILE;
   if (typeof filename !== 'string' || filename.trim() === '') {
     throw providerConfigError('OPENCODE_CONFIG_FILE is required for provider preflight');
@@ -23,6 +28,9 @@ function validateOpenCodeProviderConfig({ env = process.env, statSync = fs.statS
   try { stat = statSync(filename); } catch { throw providerConfigError('OPENCODE_CONFIG_FILE does not exist'); }
   if (!stat.isFile()) throw providerConfigError('OPENCODE_CONFIG_FILE must be a regular file');
   if ((stat.mode & 0o077) !== 0) throw providerConfigError('OPENCODE_CONFIG_FILE must be owner-readable only (0600)');
+  if (Number.isInteger(uid) && Number.isInteger(stat.uid) && stat.uid !== uid) {
+    throw providerConfigError('OPENCODE_CONFIG_FILE must be owned by the service account');
+  }
 
   let config;
   try { config = JSON.parse(readFileSync(filename, 'utf8')); } catch { throw providerConfigError('OpenCode provider config must be valid JSON'); }

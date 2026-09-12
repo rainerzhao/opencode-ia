@@ -1,6 +1,6 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-11
+更新时间：2026-09-12
 
 ## 当前结论
 
@@ -121,18 +121,18 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 
 主要工作：非 root 服务账号；Nginx HTTPS 与 WebSocket；内部兼容 OpenAI 协议模型；备份恢复；日志和监控；容量、重启恢复和故障演练。
 
-已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置；Stage 5B 新增聚合 `/metrics`；Stage 5C 新增 `npm run preflight:opencode` 和 [内部 Provider 联调清单](operations/internal-provider.md)，校验受保护配置文件、Provider 地址和默认模型且不泄露凭证。模板、门禁和指标不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
+已加入预发布配置模板：`deploy/Dockerfile`、连接公司云 MySQL 的 `deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。生产 Compose 只运行工作台，不承担数据库实例、高可用或自动备份。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置；Stage 5B 新增聚合 `/metrics`；Stage 5C 新增 `npm run preflight:opencode` 和 [内部 Provider 联调清单](operations/internal-provider.md)。Stage 5D1 已把两项门禁接入 Docker/systemd 受检启动器，生产服务在门禁失败时不会打开端口，并为 Docker build context 排除本机配置、数据库、Git 与交接材料。模板、门禁和指标不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 剩余交付分为两个阶段：
 
-- 🚧 Stage 5D：在公司 Linux 预发布机以非 root 账号完成 MySQL、Nginx、OpenCode 常驻 Runtime 和工作台部署，接入真实内部 OpenAI 兼容 Provider，跑通登录、多会话、Skill、知识与审计全链路。
+- 🚧 Stage 5D：在公司 Linux 预发布机以非 root 账号部署 Nginx、OpenCode 常驻 Runtime 和工作台，连接公司云 MySQL，接入真实内部 OpenAI 兼容 Provider，跑通登录、多会话、Skill、知识与审计全链路。
 - ⏳ Stage 5E：完成 15–20 用户容量、长时间运行、Runtime/MySQL/进程故障、备份恢复、升级回滚、安全检查与上线清单，由人工确认残余风险后再开放访问。
 
 出口标准：生产检查表全部通过，残余风险和回滚方案由人工确认后再开放访问。
 
 ## 数据层迁移：MySQL 8.4 单一事实源
 
-已决定以 MySQL 8.4 作为生产单一事实源：Mac 开发与验收使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL；无密钥 Demo 仍可使用隔离 SQLite。账号、登录 Session、审计、Gateway、知识、方案与 Skill 均已接入 MySQL-only 生产组合，并在 Mac 真库完成 HTTP/WebSocket、迁移、检索和恢复回归。该证据只证明应用组合可迁移，Linux 实际切换、容量和灾备仍属于 Stage 5D–5E。
+已决定以 MySQL 8.4 作为生产单一事实源：Mac 开发与验收使用本机 Docker MySQL 8.4，公司 Linux 环境连接同主版本的公司云 MySQL；生产应用 Compose 不自建数据库，无密钥 Demo 仍可使用隔离 SQLite。账号、登录 Session、审计、Gateway、知识、方案与 Skill 均已接入 MySQL-only 生产组合，并在 Mac 真库完成 HTTP/WebSocket、迁移、检索和恢复回归。该证据只证明应用组合可迁移，云数据库网络/TLS、Linux 实际切换、容量和灾备仍属于 Stage 5D–5E。
 
 ## 不变的边界
 

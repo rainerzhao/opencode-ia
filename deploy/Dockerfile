@@ -5,6 +5,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY . .
 RUN npm run build
+RUN install -d -o node -g node \
+    /var/lib/opencode-workbench \
+    /var/lib/opencode-workbench/runtime \
+    /var/lib/opencode-workbench/workspaces \
+    /var/lib/opencode-workbench/skill-installations \
+    /var/lib/opencode-workbench/tmp/uploads
 
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -16,4 +22,4 @@ ENV NODE_ENV=production \
 
 USER node
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "scripts/start-production.js"]
