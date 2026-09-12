@@ -56,11 +56,17 @@ function asyncRoute(handler) {
 }
 
 function record(req, requestAuditor, action, targetType, targetId, content) {
+  const restoredFromVersion = Number(content.restoredFromVersion);
   requestAuditor.record(req, {
     action,
     targetType,
     targetId,
-    metadata: { version: content.version, status: content.status, visibility: content.visibility }
+    metadata: {
+      version: content.version,
+      status: content.status,
+      visibility: content.visibility,
+      ...(Number.isInteger(restoredFromVersion) ? { restoredFromVersion } : {})
+    }
   });
 }
 
@@ -109,6 +115,15 @@ function createContentRouter({ store, requestAuditor, conversationContentService
     record(req, requestAuditor, 'content.knowledge.withdraw', 'knowledge_document', knowledge.id, knowledge);
     res.json({ knowledge });
   }));
+  router.post('/knowledge/:contentId/restore', asyncRoute(async (req, res) => {
+    const knowledge = await store.restoreKnowledgeVersion({
+      ...actor(req), documentId: contentId(req.params.contentId), version: req.body?.version
+    });
+    record(req, requestAuditor, 'content.knowledge.restore', 'knowledge_document', knowledge.id, {
+      ...knowledge, restoredFromVersion: Number(req.body?.version)
+    });
+    res.json({ knowledge });
+  }));
 
   router.get('/solutions', asyncRoute(async (req, res) => {
     res.json({ solutions: await store.listSolutions(actor(req)) });
@@ -149,6 +164,15 @@ function createContentRouter({ store, requestAuditor, conversationContentService
       res.json({ solution });
     }));
   }
+  router.post('/solutions/:contentId/restore', asyncRoute(async (req, res) => {
+    const solution = await store.restoreSolutionVersion({
+      ...actor(req), solutionId: contentId(req.params.contentId), version: req.body?.version
+    });
+    record(req, requestAuditor, 'content.solution.restore', 'solution', solution.id, {
+      ...solution, restoredFromVersion: Number(req.body?.version)
+    });
+    res.json({ solution });
+  }));
   router.post('/solutions/:contentId/to-knowledge', asyncRoute(async (req, res) => {
     if (typeof store.createKnowledgeFromSolution !== 'function') {
       throw routeError('CONTENT_FEATURE_UNAVAILABLE', 'content conversion is unavailable', 501);

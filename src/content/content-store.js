@@ -180,6 +180,16 @@ function createContentStore(db, {
     SELECT id, original_name, media_type, size_bytes, content_sha256, storage_key, created_at
     FROM content_attachments WHERE knowledge_version_id = ? ORDER BY created_at, id
   `);
+  const attachmentsForCopy = db.prepare(`
+    SELECT owner_user_id, original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+    FROM content_attachments WHERE knowledge_version_id = ? ORDER BY created_at, id
+  `);
+  const solutionVersionByNumber = db.prepare(`
+    SELECT s.id AS solution_id, s.owner_user_id, s.status, s.visibility,
+      v.id AS version_id, v.version_number, v.title, v.description, v.solution_markdown
+    FROM solutions s JOIN solution_versions v ON v.solution_id = s.id
+    WHERE s.id = ? AND v.version_number = ?
+  `);
   const attachmentByKnowledgeVersion = db.prepare(`
     SELECT a.id, a.original_name, a.media_type, a.size_bytes, a.content_sha256, a.storage_key, a.created_at
     FROM content_attachments a WHERE a.id = ? AND a.knowledge_version_id = ?
@@ -260,6 +270,27 @@ function createContentStore(db, {
           .run(referenceId, reference.conversationId || reference.sourceId, reference.firstSequence,
             reference.lastSequence, reference.completedTurnCount, reference.contentSha256, timestamp);
       }
+    }
+  }
+
+  function insertKnowledgeReferences({ knowledgeVersionId, references, timestamp }) {
+    const insert = db.prepare(`INSERT INTO content_references (
+      id, source_type, source_id, knowledge_version_id, solution_version_id, created_at
+    ) VALUES (?, ?, ?, ?, NULL, ?)`);
+    for (const reference of references) {
+      insert.run(idFactory(), reference.source_type ?? reference.sourceType,
+        reference.source_id ?? reference.sourceId, knowledgeVersionId, timestamp);
+    }
+  }
+
+  function copyKnowledgeAttachments({ sourceVersionId, targetVersionId }) {
+    const insert = db.prepare(`INSERT INTO content_attachments (
+      id, owner_user_id, knowledge_version_id, solution_version_id,
+      original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+    ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`);
+    for (const attachment of attachmentsForCopy.all(sourceVersionId)) {
+      insert.run(idFactory(), attachment.owner_user_id, targetVersionId, attachment.original_name,
+        attachment.media_type, attachment.size_bytes, attachment.content_sha256, attachment.storage_key, attachment.created_at);
     }
   }
 
@@ -360,9 +391,45 @@ function createContentStore(db, {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
       `).run(versionId, existing.document_id, existing.version_number + 1, next.title, next.category,
         JSON.stringify(next.tags), next.markdown, timestamp, actor.id);
+      insertKnowledgeReferences({
+        knowledgeVersionId: versionId,
+        references: knowledgeReferencesByVersion.all(existing.version_id),
+        timestamp
+      });
+      copyKnowledgeAttachments({ sourceVersionId: existing.version_id, targetVersionId: versionId });
       db.prepare(`
         UPDATE knowledge_documents SET current_version_id = ?, visibility = ?, status = ?, updated_at = ? WHERE id = ?
       `).run(versionId, next.visibility, next.status, timestamp, existing.document_id);
+      const row = currentKnowledgeById.get(existing.document_id);
+      replaceFts(row);
+      return toKnowledgeSummary(row);
+    });
+  }
+
+  function restoreKnowledgeVersion({ actorUserId, actorRole, documentId, version }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const requestedVersion = normalizeVersion(version);
+    const timestamp = now();
+    return transaction(() => {
+      const existing = writableKnowledge(actor, documentId);
+      const source = knowledgeVersionByNumber.get(existing.document_id, requestedVersion);
+      if (!source) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+      const versionId = idFactory();
+      db.prepare('UPDATE knowledge_versions SET is_current = 0 WHERE id = ?').run(existing.version_id);
+      db.prepare(`INSERT INTO knowledge_versions (
+        id, document_id, version_number, title, category, tags_json, markdown, is_current, created_at, created_by_user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`).run(
+        versionId, existing.document_id, existing.version_number + 1, source.title, source.category,
+        source.tags_json, source.markdown, timestamp, actor.id
+      );
+      insertKnowledgeReferences({
+        knowledgeVersionId: versionId,
+        references: knowledgeReferencesByVersion.all(source.version_id),
+        timestamp
+      });
+      copyKnowledgeAttachments({ sourceVersionId: source.version_id, targetVersionId: versionId });
+      db.prepare(`UPDATE knowledge_documents SET current_version_id = ?, updated_at = ? WHERE id = ?`)
+        .run(versionId, timestamp, existing.document_id);
       const row = currentKnowledgeById.get(existing.document_id);
       replaceFts(row);
       return toKnowledgeSummary(row);
@@ -641,6 +708,37 @@ function createContentStore(db, {
     });
   }
 
+  function restoreSolutionVersion({ actorUserId, actorRole, solutionId, version }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const requestedVersion = normalizeVersion(version);
+    const timestamp = now();
+    return transaction(() => {
+      const existing = writableSolution(actor, solutionId);
+      const source = solutionVersionByNumber.get(existing.solution_id, requestedVersion);
+      if (!source) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+      const versionId = idFactory();
+      const references = referencesByVersion.all(source.version_id).map((item) => ({
+        sourceType: item.source_type, sourceId: item.source_id,
+        ...(item.conversation_id ? {
+          conversationId: item.conversation_id, firstSequence: item.first_sequence,
+          lastSequence: item.last_sequence, completedTurnCount: item.completed_turn_count,
+          contentSha256: item.content_sha256
+        } : {})
+      }));
+      db.prepare('UPDATE solution_versions SET is_current = 0 WHERE id = ?').run(existing.version_id);
+      db.prepare(`INSERT INTO solution_versions (
+        id, solution_id, version_number, title, description, solution_markdown, is_current, created_at, created_by_user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`).run(
+        versionId, existing.solution_id, existing.version_number + 1, source.title,
+        source.description, source.solution_markdown, timestamp, actor.id
+      );
+      insertReferences({ solutionVersionId: versionId, references, timestamp });
+      db.prepare(`UPDATE solutions SET current_version_id = ?, updated_at = ? WHERE id = ?`)
+        .run(versionId, timestamp, existing.solution_id);
+      return toSolutionSummary(currentSolutionById.get(existing.solution_id));
+    });
+  }
+
   function getSolution({ actorUserId, actorRole, solutionId, includeContent = false }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const row = readableSolution(actor, solutionId);
@@ -714,6 +812,7 @@ function createContentStore(db, {
   return {
     createKnowledgeDraft,
     saveKnowledgeVersion,
+    restoreKnowledgeVersion,
     getKnowledge,
     getKnowledgeVersion,
     deleteKnowledgeDraft,
@@ -725,6 +824,7 @@ function createContentStore(db, {
     createKnowledgeAttachment,
     getKnowledgeAttachment,
     saveSolutionVersion,
+    restoreSolutionVersion,
     getSolution,
     listSolutions,
     publishKnowledge,

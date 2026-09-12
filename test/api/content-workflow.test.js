@@ -63,6 +63,17 @@ test('keeps solution bodies private by default and permits owner-only updates', 
   });
   assert.equal(updated.status, 200);
   assert.equal((await readJson(updated)).solution.version, 2);
+  const restored = await fetch(`${fixture.origin}/api/content/solutions/${solution.id}/restore`, {
+    method: 'POST', headers: authHeaders(author, { json: true }), body: JSON.stringify({ version: 1 })
+  });
+  assert.equal(restored.status, 200);
+  assert.equal((await readJson(restored)).solution.version, 3);
+  const restoredDetail = (await readJson(await fetch(`${fixture.origin}/api/content/solutions/${solution.id}`, { headers: { cookie: author.cookie } }))).solution;
+  assert.equal(restoredDetail.solutionMarkdown, '# Cluster\nprivate');
+  const restoreAudit = createAuditStore(fixture.db).list({ limit: 100 })
+    .find((item) => item.action === 'content.solution.restore' && item.targetId === solution.id);
+  assert.equal(restoreAudit.metadata.restoredFromVersion, 1);
+  assert.equal(JSON.stringify(restoreAudit).includes('Cluster'), false);
 });
 
 test('converts only completed owned conversation turns into a private solution', async (t) => {
@@ -205,4 +216,11 @@ test('returns owner-only Knowledge version diffs and hides private history from 
   await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/publish`, { method: 'POST', headers: authHeaders(author) });
   const viewerDiff = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/diff?from=1&to=2`, { headers: { cookie: viewer.cookie } });
   assert.equal(viewerDiff.status, 404);
+  const restored = await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}/restore`, {
+    method: 'POST', headers: authHeaders(author, { json: true }), body: JSON.stringify({ version: 1 })
+  });
+  assert.equal(restored.status, 200);
+  assert.equal((await readJson(restored)).knowledge.version, 4);
+  const visible = (await readJson(await fetch(`${fixture.origin}/api/content/knowledge/${knowledge.id}`, { headers: { cookie: viewer.cookie } }))).knowledge;
+  assert.equal(visible.markdown, '# 标题\n旧内容');
 });

@@ -95,6 +95,40 @@ test('creates immutable solution versions and preserves source identifiers witho
   assert.equal(detail.versionHistory.length, 2);
 });
 
+test('carries knowledge attachments forward and restores historical content as a new immutable version', (t) => {
+  const { store } = fixture(t);
+  const knowledge = store.createKnowledgeDraft({ actorUserId: 'member-a', title: 'Runbook v1', markdown: '# v1' });
+  store.createKnowledgeAttachment({
+    actorUserId: 'member-a', documentId: knowledge.id, id: 'attachment-1', originalName: 'guide.md',
+    mediaType: 'text/markdown', sizeBytes: 4, contentSha256: 'a'.repeat(64), storageKey: 'member-a/shared/guide.md'
+  });
+  const edited = store.saveKnowledgeVersion({ actorUserId: 'member-a', documentId: knowledge.id, title: 'Runbook v2', markdown: '# v2' });
+  assert.equal(store.getKnowledge({ actorUserId: 'member-a', documentId: knowledge.id }).attachments.length, 1);
+  const restored = store.restoreKnowledgeVersion({ actorUserId: 'member-a', documentId: knowledge.id, version: 1 });
+  assert.equal(restored.version, edited.version + 1);
+  const detail = store.getKnowledge({ actorUserId: 'member-a', documentId: knowledge.id, includeContent: true });
+  assert.equal(detail.title, 'Runbook v1');
+  assert.equal(detail.markdown, '# v1');
+  assert.equal(detail.attachments.length, 1);
+  assert.throws(() => store.restoreKnowledgeVersion({ actorUserId: 'member-b', documentId: knowledge.id, version: 1 }), (error) => error.code === 'CONTENT_NOT_FOUND');
+});
+
+test('restores a solution version with its historical references as a new version', (t) => {
+  const { store } = fixture(t);
+  const solution = store.createSolutionDraft({
+    actorUserId: 'member-a', title: 'Plan v1', solutionMarkdown: '# v1', references: [{ sourceType: 'model', sourceId: 'internal/model-a' }]
+  });
+  store.saveSolutionVersion({
+    actorUserId: 'member-a', solutionId: solution.id, title: 'Plan v2', solutionMarkdown: '# v2', references: [{ sourceType: 'model', sourceId: 'internal/model-b' }]
+  });
+  const restored = store.restoreSolutionVersion({ actorUserId: 'member-a', solutionId: solution.id, version: 1 });
+  assert.equal(restored.version, 3);
+  const detail = store.getSolution({ actorUserId: 'member-a', solutionId: solution.id, includeContent: true });
+  assert.equal(detail.title, 'Plan v1');
+  assert.equal(detail.solutionMarkdown, '# v1');
+  assert.deepEqual(detail.references.map((item) => [item.sourceType, item.sourceId]), [['model', 'internal/model-a']]);
+});
+
 test('publishes and withdraws content through immutable visibility transition versions', (t) => {
   const { store } = fixture(t);
   const knowledge = store.createKnowledgeDraft({

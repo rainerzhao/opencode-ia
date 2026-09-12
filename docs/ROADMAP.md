@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0、Stage 1、Stage 2、Stage 4 已完成 Mac 验收；Stage 3D 正在收尾内容资产闭环；MySQL 单一数据层已完成代码级装配与真实 MySQL HTTP/WebSocket 组合冒烟；Stage 5 Linux 部署前置模板已具备，内部 Provider 与生产验收尚未完成** 的状态。
+项目当前处于 **Stage 0–4 已完成 Mac 应用级验收；MySQL 单一数据层已完成代码级装配、真实 MySQL HTTP/WebSocket 冒烟和恢复演练；Stage 5A–5C 已完成部署前置能力，Stage 5D–5E 必须在公司 Linux 预发布机继续验收** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -15,7 +15,7 @@ Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、
 | Stage 0 安全基线 | ✅ 完成 | 让原型可测试、可演示、可公开协作 | 自动测试、密钥扫描、浏览器验收通过 |
 | Stage 1 产品底座 | ✅ 完成 | React/Vite、账号密码、SQLite、角色与审计 | 多用户身份清晰、数据可追踪、默认私有 |
 | Stage 2 OpenCode Gateway | ✅ Mac 验收完成 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，多人多会话可控 |
-| Stage 3 知识与方案 | 🚧 3D 收尾（真库通过，恢复演练已验证） | FTS5 检索、版本、私有到发布流程、对话来源追溯、附件 | 知识可查、可审、可撤回、可追溯 |
+| Stage 3 知识与方案 | ✅ Mac 验收完成 | 检索、版本、私有到发布流程、来源追溯、附件和恢复 | 知识可查、可审、可撤回、可追溯、可恢复 |
 | Stage 4 Skill 中心 | ✅ Mac 验收完成 | 草稿、校验、发布、安装、启用、版本、回滚、停用、归档 | 成员能安全生产并共享 Skill |
 | Stage 5 Linux 生产化 | 🚧 5A 配置门禁、5B 可观测性、5C Provider 联调门禁完成 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
 
@@ -90,9 +90,9 @@ Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢
 - ✅ Stage 3A：知识/方案资产与不可变版本数据模型、当前版本 FTS5、默认私有可见性、来源引用 ID 和仓储层隔离测试。
 - ✅ Stage 3B：版本化知识/方案 REST 与 React 草稿编辑、页面内二次确认发布/撤回、审计和浏览器验收。
 - ✅ Stage 3C：对话沉淀为方案、方案转知识、引用展示与来源追溯核心链路；Legacy Adapter 已拆分，MySQL 真库仍待验收。
-- 🚧 Stage 3D：已完成 Knowledge 版本私有附件的存储、摘要校验、下载、文本/JSON/CSV 安全预览、带摘要清单的受控知识包导出/导入、版本差异，以及 SQLite/MySQL 一致性备份与带附件 sidecar manifest 的恢复脚本；本机 MySQL 8.4 真库应用链路、SQL dump、附件 sidecar 恢复演练已通过，历史 `/api/solutions` 文件接口已退役。版本恢复与 Linux 预发布完整内容验收仍待完成。
+- ✅ Stage 3D：完成 Knowledge 版本私有附件、摘要校验、下载、安全预览、知识包导入导出、版本差异、SQLite/MySQL 备份恢复、历史版本恢复和旧方案文件接口退役；知识与方案恢复都会复制历史正文及来源为新的不可变当前版本，Knowledge 同时继承对应附件。
 
-Stage 3A–3C 让内容元数据、版本、检索和来源追溯形成稳定闭环：只索引当前知识版本，私人草稿不会因误设团队可见性而对成员暴露；成员可将已完成对话人工沉淀为私有方案，再转为私有知识草稿；来源卡按所有权裁剪，发布不会反向公开私人 Conversation。附件传输、文本安全预览、受控导出/导入、版本差异和 SQLite/MySQL 备份恢复脚本已具备，本机 MySQL 真库与恢复演练已通过；方案只保留版本化内容 API。版本恢复与 Linux 预发布完整验收仍待完成，不能将 Stage 3 写成生产就绪。
+Stage 3 已在 Mac 上形成内容资产闭环：只索引当前知识版本，私人草稿不会因误设团队可见性而对成员暴露；成员可将已完成对话人工沉淀为私有方案，再转为私有知识草稿；来源卡按所有权裁剪，发布不会反向公开私人 Conversation。附件、预览、受控导入导出、版本差异、备份恢复和历史版本恢复均已通过 SQLite、真实 MySQL 及浏览器验收。该结论不替代 Linux 预发布和生产灾备验收。
 
 出口标准：所有公开内容可定位作者、来源、版本和发布时间，并能回滚。
 
@@ -123,11 +123,16 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 
 已加入预发布配置模板：`deploy/Dockerfile`、`deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置；Stage 5B 新增聚合 `/metrics`；Stage 5C 新增 `npm run preflight:opencode` 和 [内部 Provider 联调清单](operations/internal-provider.md)，校验受保护配置文件、Provider 地址和默认模型且不泄露凭证。模板、门禁和指标不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
+剩余交付分为两个阶段：
+
+- 🚧 Stage 5D：在公司 Linux 预发布机以非 root 账号完成 MySQL、Nginx、OpenCode 常驻 Runtime 和工作台部署，接入真实内部 OpenAI 兼容 Provider，跑通登录、多会话、Skill、知识与审计全链路。
+- ⏳ Stage 5E：完成 15–20 用户容量、长时间运行、Runtime/MySQL/进程故障、备份恢复、升级回滚、安全检查与上线清单，由人工确认残余风险后再开放访问。
+
 出口标准：生产检查表全部通过，残余风险和回滚方案由人工确认后再开放访问。
 
 ## 数据层迁移：MySQL 8.4 单一事实源
 
-已决定以 MySQL 8.4 替代 SQLite：Mac 开发、测试与 Demo 使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL。数据库基础已在真实容器验证字符集、UTC、中文 `ngram`、迁移版本记录、并发迁移锁和来源引用去重；用户、登录 Session、审计 Repository 与认证 HTTP 链路也已完成真库验收。Gateway 已有 MySQL Conversation/Job/Event/Worker/Session/启动恢复持久核心，调度服务、WebSocket 和管理读取已适配异步仓储；知识、方案与 Skill 已具有等价 MySQL 仓储，并经真实 HTTP 或服务生命周期验证。最终 MySQL-only 应用组合仍待完成：当前 `create-workbench-server` 默认仍装配历史 SQLite 组合，不能把本阶段的真库测试误写成生产切换。迁移未结束前，SQLite 的既有章节只描述历史实现，不能将 MySQL 或 Linux 写成已完成上线。
+已决定以 MySQL 8.4 作为生产单一事实源：Mac 开发与验收使用本机 Docker MySQL 8.4，Linux 使用同主版本的内网 MySQL；无密钥 Demo 仍可使用隔离 SQLite。账号、登录 Session、审计、Gateway、知识、方案与 Skill 均已接入 MySQL-only 生产组合，并在 Mac 真库完成 HTTP/WebSocket、迁移、检索和恢复回归。该证据只证明应用组合可迁移，Linux 实际切换、容量和灾备仍属于 Stage 5D–5E。
 
 ## 不变的边界
 

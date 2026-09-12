@@ -55,6 +55,15 @@ test('persists private versioned knowledge and solutions on MySQL', { skip: !tes
   assert.equal(withdrawnKnowledge.version, 4);
   await assert.rejects(() => store.getKnowledge({ ...other, documentId: knowledge.id }), (error) => error?.code === 'CONTENT_NOT_FOUND');
   assert.equal((await store.getKnowledge({ ...owner, documentId: knowledge.id })).versionHistory.length, 4);
+  await store.createKnowledgeAttachment({
+    ...owner, documentId: knowledge.id, id: 'mysql-content-attachment', originalName: 'guide.md',
+    mediaType: 'text/markdown', sizeBytes: 4, contentSha256: 'a'.repeat(64), storageKey: 'mysql-content/shared/guide.md'
+  });
+  await store.saveKnowledgeVersion({ ...owner, documentId: knowledge.id, markdown: '# changed after attachment' });
+  assert.equal((await store.getKnowledge({ ...owner, documentId: knowledge.id })).attachments.length, 1);
+  const restoredKnowledge = await store.restoreKnowledgeVersion({ ...owner, documentId: knowledge.id, version: 4 });
+  assert.equal(restoredKnowledge.version, 6);
+  assert.equal((await store.getKnowledge({ ...owner, documentId: knowledge.id })).attachments.length, 1);
 
   const solution = await store.createSolutionDraft({
     ...owner, title: 'Private migration solution', description: 'private', solutionMarkdown: '# solution',
@@ -69,4 +78,7 @@ test('persists private versioned knowledge and solutions on MySQL', { skip: !tes
   const withdrawnSolution = await store.withdrawSolution({ ...owner, solutionId: solution.id });
   assert.equal(withdrawnSolution.version, 3);
   await assert.rejects(() => store.getSolution({ ...other, solutionId: solution.id }), (error) => error?.code === 'CONTENT_NOT_FOUND');
+  const restoredSolution = await store.restoreSolutionVersion({ ...owner, solutionId: solution.id, version: 1 });
+  assert.equal(restoredSolution.version, 4);
+  assert.deepEqual((await store.getSolution({ ...owner, solutionId: solution.id })).references, [{ sourceType: 'conversation', sourceId: 'conversation-source-1' }]);
 });

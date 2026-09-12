@@ -409,6 +409,34 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX content_attachments_solution_idx ON content_attachments(solution_version_id, created_at);
       CREATE INDEX content_attachments_owner_idx ON content_attachments(owner_user_id, created_at);
     `
+  }),
+  Object.freeze({
+    version: 9,
+    sql: `
+      CREATE TABLE content_attachments_v9 (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        knowledge_version_id TEXT REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+        solution_version_id TEXT REFERENCES solution_versions(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL CHECK (length(original_name) BETWEEN 1 AND 200),
+        media_type TEXT NOT NULL CHECK (length(media_type) BETWEEN 1 AND 200),
+        size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0 AND size_bytes <= 52428800),
+        content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+        storage_key TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        CHECK ((knowledge_version_id IS NOT NULL) != (solution_version_id IS NOT NULL))
+      ) STRICT;
+      INSERT INTO content_attachments_v9
+        SELECT id, owner_user_id, knowledge_version_id, solution_version_id,
+          original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+        FROM content_attachments;
+      DROP TABLE content_attachments;
+      ALTER TABLE content_attachments_v9 RENAME TO content_attachments;
+      CREATE INDEX content_attachments_knowledge_idx ON content_attachments(knowledge_version_id, created_at);
+      CREATE INDEX content_attachments_solution_idx ON content_attachments(solution_version_id, created_at);
+      CREATE INDEX content_attachments_owner_idx ON content_attachments(owner_user_id, created_at);
+      CREATE INDEX content_attachments_storage_idx ON content_attachments(storage_key);
+    `
   })
 ]);
 

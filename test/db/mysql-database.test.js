@@ -23,7 +23,7 @@ test('uses a real MySQL 8.4 database with utf8mb4 UTC, ngram and repeatable vers
   await assert.doesNotReject(() => db.assertCapabilities());
 
   const first = await migrateMySqlDatabase(db);
-  assert.deepEqual(first.appliedVersions, [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(first.appliedVersions, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(await migrateMySqlDatabase(db), { appliedVersions: [] });
 
   const secondDb = await createMySqlDatabase({ url: testUrl, poolSize: 1 });

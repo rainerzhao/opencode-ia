@@ -225,6 +225,10 @@ const MYSQL_MIGRATIONS = Object.freeze([
       INDEX content_attachments_solution_idx (solution_version_id, created_at),
       INDEX content_attachments_owner_idx (owner_user_id, created_at)
     ) ENGINE=InnoDB`
+  ] }),
+  Object.freeze({ version: 9, statements: [
+    `ALTER TABLE content_attachments DROP INDEX storage_key,
+      ADD INDEX content_attachments_storage_idx (storage_key)`
   ] })
 ]);
 

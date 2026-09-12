@@ -284,6 +284,34 @@ function createMySqlContentStore(db, {
     }
   }
 
+  async function insertKnowledgeReferences(executor, { knowledgeVersionId, references, timestamp }) {
+    for (const reference of references) {
+      const referenceId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+      await executor.query(`INSERT INTO content_references (
+        id, source_type, source_id, target_type, target_id, knowledge_version_id, solution_version_id, created_at
+      ) VALUES (?, ?, ?, 'knowledge_version', ?, ?, NULL, ?)`, [
+        referenceId, reference.sourceType, reference.sourceId,
+        knowledgeVersionId, knowledgeVersionId, timestamp
+      ]);
+    }
+  }
+
+  async function copyKnowledgeAttachments(executor, { sourceVersionId, targetVersionId }) {
+    const attachments = await executor.many(`SELECT owner_user_id, original_name, media_type, size_bytes,
+      content_sha256, storage_key, created_at FROM content_attachments
+      WHERE knowledge_version_id = ? ORDER BY created_at, id`, [sourceVersionId]);
+    for (const attachment of attachments) {
+      await executor.query(`INSERT INTO content_attachments (
+        id, owner_user_id, knowledge_version_id, solution_version_id,
+        original_name, media_type, size_bytes, content_sha256, storage_key, created_at
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`, [
+        requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 }), attachment.owner_user_id,
+        targetVersionId, attachment.original_name, attachment.media_type, Number(attachment.size_bytes),
+        attachment.content_sha256, attachment.storage_key, attachment.created_at
+      ]);
+    }
+  }
+
   async function createKnowledgeDraft({ actorUserId, actorRole, title, category = '', tags = [], markdown, visibility = 'private', status = 'draft' }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const documentId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
@@ -332,8 +360,44 @@ function createMySqlContentStore(db, {
         versionId, existing.document_id, Number(existing.version_number) + 1, next.title, next.category,
         JSON.stringify(next.tags), next.markdown, existing.document_id, timestamp, actor.id
       ]);
+      await insertKnowledgeReferences(tx, {
+        knowledgeVersionId: versionId,
+        references: await knowledgeReferencesByVersion(tx, existing.version_id),
+        timestamp
+      });
+      await copyKnowledgeAttachments(tx, { sourceVersionId: existing.version_id, targetVersionId: versionId });
       await tx.query(`UPDATE knowledge_documents SET current_version_id = ?, visibility = ?, status = ?, updated_at = ? WHERE id = ?`, [
         versionId, next.visibility, next.status, timestamp, existing.document_id
+      ]);
+      return toKnowledgeSummary(await tx.one(`${knowledgeSelect} WHERE d.id = ?`, [existing.document_id]));
+    });
+  }
+
+  async function restoreKnowledgeVersion({ actorUserId, actorRole, documentId, version }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const requestedVersion = normalizeVersion(version);
+    const timestamp = now();
+    return db.transaction(async (tx) => {
+      const existing = await writableKnowledge(tx, actor, documentId);
+      const source = await tx.one(`SELECT id, document_id, version_number, title, category, tags_json, markdown
+        FROM knowledge_versions WHERE document_id = ? AND version_number = ?`, [existing.document_id, requestedVersion]);
+      if (!source) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+      const versionId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+      await tx.query('UPDATE knowledge_versions SET is_current = 0, current_document_id = NULL WHERE id = ?', [existing.version_id]);
+      await tx.query(`INSERT INTO knowledge_versions (
+        id, document_id, version_number, title, category, tags_json, markdown, is_current, current_document_id, created_at, created_by_user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, [
+        versionId, existing.document_id, Number(existing.version_number) + 1, source.title,
+        source.category, source.tags_json, source.markdown, existing.document_id, timestamp, actor.id
+      ]);
+      await insertKnowledgeReferences(tx, {
+        knowledgeVersionId: versionId,
+        references: await knowledgeReferencesByVersion(tx, source.id),
+        timestamp
+      });
+      await copyKnowledgeAttachments(tx, { sourceVersionId: source.id, targetVersionId: versionId });
+      await tx.query('UPDATE knowledge_documents SET current_version_id = ?, updated_at = ? WHERE id = ?', [
+        versionId, timestamp, existing.document_id
       ]);
       return toKnowledgeSummary(await tx.one(`${knowledgeSelect} WHERE d.id = ?`, [existing.document_id]));
     });
@@ -591,6 +655,32 @@ function createMySqlContentStore(db, {
     };
   }
 
+  async function restoreSolutionVersion({ actorUserId, actorRole, solutionId, version }) {
+    const actor = normalizeActor({ actorUserId, actorRole });
+    const requestedVersion = normalizeVersion(version);
+    const timestamp = now();
+    return db.transaction(async (tx) => {
+      const existing = await writableSolution(tx, actor, solutionId);
+      const source = await tx.one(`SELECT id, solution_id, version_number, title, description, solution_markdown
+        FROM solution_versions WHERE solution_id = ? AND version_number = ?`, [existing.solution_id, requestedVersion]);
+      if (!source) throw contentError('CONTENT_NOT_FOUND', 'content was not found');
+      const versionId = requiredText(idFactory(), 'INVALID_CONTENT_ID', { max: 200 });
+      const references = await referencesByVersion(tx, source.id);
+      await tx.query('UPDATE solution_versions SET is_current = 0, current_solution_id = NULL WHERE id = ?', [existing.version_id]);
+      await tx.query(`INSERT INTO solution_versions (
+        id, solution_id, version_number, title, description, solution_markdown, is_current, current_solution_id, created_at, created_by_user_id
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`, [
+        versionId, existing.solution_id, Number(existing.version_number) + 1, source.title,
+        source.description, source.solution_markdown, existing.solution_id, timestamp, actor.id
+      ]);
+      await insertReferences(tx, { solutionVersionId: versionId, references, timestamp });
+      await tx.query('UPDATE solutions SET current_version_id = ?, updated_at = ? WHERE id = ?', [
+        versionId, timestamp, existing.solution_id
+      ]);
+      return toSolutionSummary(await tx.one(`${solutionSelect} WHERE s.id = ?`, [existing.solution_id]));
+    });
+  }
+
   async function listSolutions({ actorUserId, actorRole }) {
     const actor = normalizeActor({ actorUserId, actorRole });
     const rows = await db.many(`${solutionSelect}
@@ -616,8 +706,8 @@ function createMySqlContentStore(db, {
   }
 
   return Object.freeze({
-    createKnowledgeDraft, saveKnowledgeVersion, getKnowledge, getKnowledgeVersion, deleteKnowledgeDraft, searchKnowledge, listKnowledge,
-    createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, createKnowledgeAttachment, saveSolutionVersion, getSolution, listSolutions,
+    createKnowledgeDraft, saveKnowledgeVersion, restoreKnowledgeVersion, getKnowledge, getKnowledgeVersion, deleteKnowledgeDraft, searchKnowledge, listKnowledge,
+    createSolutionDraft, createSolutionFromConversation, createKnowledgeFromSolution, createKnowledgeAttachment, saveSolutionVersion, restoreSolutionVersion, getSolution, listSolutions,
     getKnowledgeAttachment,
     publishKnowledge, withdrawKnowledge, publishSolution, withdrawSolution
   });

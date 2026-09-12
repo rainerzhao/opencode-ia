@@ -88,6 +88,21 @@ test('content pages show private state and explicit in-page publish or withdraw 
   });
 });
 
+test('content editors expose explicit historical version restore controls', async () => {
+  await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
+    const html = renderToStaticMarkup(React.createElement(KnowledgePage, {
+      initialEditor: { id: 'knowledge-1', title: '知识 v2', status: 'draft', visibility: 'private', version: 2, content: '# v2', versionHistory: [{ id: 'v2', version: 2 }, { id: 'v1', version: 1 }] }
+    }));
+    assert.match(html, />恢复 v1</);
+  });
+  await withViteModule('features/solutions/SolutionsPage.jsx', ({ SolutionsPage }) => {
+    const html = renderToStaticMarkup(React.createElement(SolutionsPage, {
+      initialItems: [], initialEditor: { id: 'solution-1', title: '方案 v2', status: 'draft', visibility: 'private', version: 2, solutionMarkdown: '# v2', versionHistory: [{ id: 'v2', version: 2 }, { id: 'v1', version: 1 }] }
+    }));
+    assert.match(html, />恢复 v1</);
+  });
+});
+
 test('Skill center exposes private draft creation and editing controls', async () => {
   await withViteModule('features/skills/SkillsPage.jsx', ({ SkillsPage }) => {
     const skill = {
