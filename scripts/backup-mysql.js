@@ -74,7 +74,7 @@ function main(argv = process.argv, { spawnSyncImpl = spawnSync, clock = () => ne
   const temporaryAttachmentManifest = attachmentManifest ? `${attachmentManifest}.partial` : null;
   const args = [
     '--host', connection.host, '--port', String(connection.port), '--user', connection.user,
-    '--single-transaction', '--routines', '--triggers', '--set-gtid-purged=OFF', connection.database
+    '--single-transaction', '--routines', '--triggers', '--no-tablespaces', '--set-gtid-purged=OFF', connection.database
   ];
   let temporaryAttachment = null;
   try {

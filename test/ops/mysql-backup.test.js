@@ -26,6 +26,7 @@ test('writes an atomic MySQL dump and redacted digest manifest', () => {
   assert.equal(manifest.sha256.length, 64);
   assert.equal(invocation.options.env.MYSQL_PWD, 'secret');
   assert.equal(invocation.args.includes('secret'), false);
+  assert.equal(invocation.args.includes('--no-tablespaces'), true);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

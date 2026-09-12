@@ -41,7 +41,7 @@ flowchart TB
 - 由管理员创建账号、重置密码、停用账号和撤销登录会话；
 - 在没有真实模型和密钥的情况下运行完整 Demo。
 
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3C 已完成知识/方案版本化、FTS5、私有草稿、人工发布/撤回和来源追溯，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载、文本/JSON/CSV 安全预览、受控知识包导出/导入、版本差异，以及 SQLite/MySQL 一致性备份与带附件摘要清单的恢复脚本；MySQL 真库恢复演练和完整验收仍在后续阶段。Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已完成 MySQL 8.4 生产组合的代码级装配，并通过真实 MySQL + 模拟 Worker 的 HTTP/WebSocket 组合冒烟；内部 Provider、真实 OpenCode 全链路和 Linux 进程级沙箱仍在后续阶段。
+> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway 已在 Mac 完成多人多会话、运行管理、崩溃恢复及 OpenCode 标准工具面的应用级隔离验收；Stage 3A–3C 已完成知识/方案版本化、FTS5、私有草稿、人工发布/撤回和来源追溯，Stage 3D 已完成 Knowledge 版本附件的私有存储、摘要校验、下载、文本/JSON/CSV 安全预览、受控知识包导出/导入、版本差异，以及 SQLite/MySQL 一致性备份与带附件摘要清单的恢复脚本；本机 MySQL 8.4 真库应用链路和 SQL/附件恢复演练已通过，Linux 预发布恢复与完整验收仍在后续阶段。Stage 4A–4D 已完成默认私有草稿、校验、发布、按账号安装/启用、版本升级/回滚、停用/归档和真实 OpenCode 发现验证。项目已完成 MySQL 8.4 生产组合的代码级装配，并通过真实 MySQL + 模拟 Worker 的 HTTP/WebSocket 组合冒烟；内部 Provider、真实 OpenCode 全链路和 Linux 进程级沙箱仍在后续阶段。
 
 [查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看内网部署手册](docs/operations/intranet-deployment.md)
 
