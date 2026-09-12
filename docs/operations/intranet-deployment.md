@@ -17,6 +17,7 @@
 - 将 `deploy/systemd/opencode-workbench.service` 安装到 `/etc/systemd/system/`，将环境变量放到权限为 `0600` 的 `/etc/opencode-workbench/workbench.env`。
 - 将 `deploy/nginx/nginx.conf.snippet` 放入 Nginx `http {}`，再按内网域名和证书调整 `opencode-workbench.conf`。
 - 启动顺序：MySQL 健康 → `systemctl start opencode-workbench` → 检查 `/healthz` → 通过 HTTPS 登录验收 WebSocket。
+- Prometheus 可抓取内网主机的 `/metrics`；该端点只返回聚合指标，不含账号、会话正文、Provider 或密钥。
 
 ## 升级、回滚和恢复
 

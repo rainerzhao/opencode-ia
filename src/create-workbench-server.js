@@ -36,6 +36,7 @@ const { createConversationContentService } = require('./content/conversation-con
 const { createContentRouter } = require('./modules/content/routes');
 const { createContentAttachmentRouter } = require('./modules/content/attachment-routes');
 const { createLegacySolutionsRouter } = require('./modules/legacy/solutions-routes');
+const { createMetrics } = require('./observability/metrics');
 
 function createWorkbenchServer({
   config,
@@ -133,6 +134,7 @@ const skillInstallationService = createSkillInstallationService({
 
 const app = express();
 const httpServer = http.createServer(app);
+const metrics = createMetrics();
 const wss = new WebSocket.Server({ noServer: true, maxPayload: 512 * 1024 });
 let lifecycle = 'idle';
 let starting = null;
@@ -154,6 +156,8 @@ const PUBLIC_RUNNER_ERRORS = Object.freeze({
 app.use((req, res, next) => {
   req.requestId = crypto.randomUUID();
   res.setHeader('x-request-id', req.requestId);
+  const request = metrics.beginRequest();
+  res.once('finish', () => request.end(res.statusCode));
   next();
 });
 // Knowledge bundle import carries base64 attachments; keep the parser bounded above the 20 MiB export limit.
@@ -181,6 +185,18 @@ app.get('/healthz', async (_req, res) => {
   } catch {
     res.status(503).json({ status: 'unhealthy', database: 'unavailable', gateway: activeGatewayService ? 'unknown' : 'not_configured' });
   }
+});
+app.get('/metrics', (_req, res) => {
+  const state = activeGatewayService?.snapshot?.();
+  const workers = state?.pool?.workers || [];
+  metrics.recordGateway({
+    workersHealthy: workers.filter((worker) => worker.status === 'healthy').length,
+    workersTotal: workers.length,
+    queued: state?.queue?.totalQueued,
+    running: state?.running
+  });
+  res.setHeader('cache-control', 'no-store');
+  res.type('text/plain').send(metrics.toPrometheus());
 });
 app.use('/api/auth', createAuthRouter({ authService, authMiddleware, config: authConfig }));
 app.use('/api/admin/users', createUserAdminRouter({ authService, authMiddleware }));

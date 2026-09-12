@@ -209,6 +209,8 @@ URL 导入默认禁用。启用后不支持通配符，非默认端口必须写�
 
 服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
 
+服务同时提供不需要登录的 `GET /metrics`，仅输出聚合请求计数、错误计数、活动请求数和 Gateway Worker/队列概况，不包含用户名、标题、会话正文、Provider 或密钥，可接入内网 Prometheus。
+
 MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：SQL dump 与 Knowledge 附件 sidecar 分开生成，各自带 SHA-256 清单；恢复必须显式传入 `--confirm`，附件恢复需显式传入 `--attachments <dir>`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，并通过 `/export` 下载带摘要清单的私有知识包；DOCX/PDF 当前明确返回“不支持预览”。
 
 Linux 预发布启动前可执行 `npm run preflight:production`：它会拒绝 root、非 production 模式、SQLite 路径混用、非 Secure Cookie、缺失/非绝对 OpenCode 可执行文件，以及超过 Worker 池容量的全局并发上限。该检查只输出非敏感配置摘要，不会打印数据库 URL 或 Provider 凭证。
