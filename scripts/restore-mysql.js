@@ -6,9 +6,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { parseMySqlUrl } = require('../src/db/mysql-database');
+const { mysqlClientOptions } = require('./mysql-client-options');
 
-function parseArgs(argv) {
-  const values = { url: process.env.WORKBENCH_DATABASE_URL, confirm: false };
+function parseArgs(argv, env = process.env) {
+  const values = { url: env.WORKBENCH_DATABASE_URL, confirm: false };
   for (let index = 2; index < argv.length; index += 1) {
     const key = argv[index];
     if (key === '--confirm') { values.confirm = true; continue; }
@@ -59,9 +60,9 @@ function verifyAttachmentManifest(input, attachments) {
   return verified;
 }
 
-function main(argv = process.argv, { spawnSyncImpl = spawnSync } = {}) {
-  const { url, input, attachments, mysqlBin } = parseArgs(argv);
-  const connection = parseMySqlUrl(url);
+function main(argv = process.argv, { env = process.env, spawnSyncImpl = spawnSync } = {}) {
+  const { url, input, attachments, mysqlBin } = parseArgs(argv, env);
+  const connection = parseMySqlUrl(url, { sslCaFile: env.MYSQL_SSL_CA_FILE });
   if (!fs.existsSync(input)) throw new Error('backup input does not exist');
   const manifestPath = `${input}.manifest.json`;
   if (!fs.existsSync(manifestPath)) throw new Error('backup manifest is required');
@@ -75,9 +76,9 @@ function main(argv = process.argv, { spawnSyncImpl = spawnSync } = {}) {
   const temporaryAttachments = attachments ? `${attachments}.partial-${process.pid}-${Date.now()}` : null;
   if (temporaryAttachments && fs.existsSync(temporaryAttachments)) throw new Error('restore attachment temporary path already exists');
   const result = spawnSyncImpl(mysqlBin, [
-    '--host', connection.host, '--port', String(connection.port), '--user', connection.user, connection.database
+    ...mysqlClientOptions(connection, env.MYSQL_SSL_CA_FILE), connection.database
   ], {
-    env: { ...process.env, MYSQL_PWD: connection.password },
+    env: { ...env, MYSQL_PWD: connection.password },
     input: dump,
     encoding: null,
     maxBuffer: 16 * 1024 * 1024

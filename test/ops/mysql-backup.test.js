@@ -7,6 +7,35 @@ const os = require('node:os');
 const path = require('node:path');
 const { main: backup } = require('../../scripts/backup-mysql');
 const { main: restore } = require('../../scripts/restore-mysql');
+const tls = require('node:tls');
+
+test('backup and restore preserve mysqls identity verification and the operator CA', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mysql-backup-tls-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const ca = path.join(root, 'ca.pem');
+  fs.writeFileSync(ca, tls.rootCertificates[0]);
+  const env = { WORKBENCH_DATABASE_URL: 'mysqls://user:secret@db.intra.example/workbench_test', MYSQL_SSL_CA_FILE: ca };
+  const output = path.join(root, 'backup.sql');
+  const invocations = [];
+  const spawnSyncImpl = (bin, args, options) => {
+    invocations.push({ bin, args, options });
+    return { status: 0, stdout: Buffer.from('SELECT 1;') };
+  };
+  backup(['node', 'backup-mysql.js', '--output', output], { env, spawnSyncImpl });
+  restore(['node', 'restore-mysql.js', '--input', output, '--confirm'], { env, spawnSyncImpl });
+  assert.equal(invocations.length, 2);
+  for (const { args, options } of invocations) {
+    assert.ok(args.includes('--ssl-mode=VERIFY_IDENTITY'));
+    assert.ok(args.includes(`--ssl-ca=${ca}`));
+    assert.ok(args.includes('--protocol=TCP'));
+    assert.equal(args.includes('secret'), false);
+    assert.equal(options.env.MYSQL_PWD, 'secret');
+  }
+  fs.writeFileSync(ca, 'invalid');
+  assert.throws(() => backup(['node', 'backup-mysql.js', '--output', path.join(root, 'bad.sql')], { env, spawnSyncImpl }), /CA/);
+  assert.throws(() => restore(['node', 'restore-mysql.js', '--input', output, '--confirm'], { env, spawnSyncImpl }), /CA/);
+  assert.equal(invocations.length, 2);
+});
 
 test('writes an atomic MySQL dump and redacted digest manifest', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mysql-backup-'));

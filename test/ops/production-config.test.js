@@ -37,3 +37,10 @@ test('rejects a running limit that exceeds the configured worker pool', () => {
     env: { ...baseEnv, GATEWAY_GLOBAL_RUNNING: '3' }, uid: 1001, commandExists: true
   }), /worker capacity/);
 });
+
+test('production preflight refuses an unreadable MySQL CA before startup', () => {
+  assert.throws(() => validateProductionConfig({ env: { ...baseEnv,
+    WORKBENCH_DATABASE_URL: 'mysqls://app:secret@db.intra.example/workbench',
+    MYSQL_SSL_CA_FILE: '/nonexistent-workbench-mysql-ca.pem'
+  }, uid: 1001, commandExists: true }), /TLS configuration/);
+});

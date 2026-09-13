@@ -6,9 +6,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { parseMySqlUrl } = require('../src/db/mysql-database');
+const { mysqlClientOptions } = require('./mysql-client-options');
 
-function parseArgs(argv) {
-  const values = { url: process.env.WORKBENCH_DATABASE_URL };
+function parseArgs(argv, env = process.env) {
+  const values = { url: env.WORKBENCH_DATABASE_URL };
   for (let index = 2; index < argv.length; index += 2) {
     const key = argv[index];
     const value = argv[index + 1];
@@ -58,9 +59,9 @@ function copyAttachments(sourceRoot, destinationRoot) {
   return manifest.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function main(argv = process.argv, { spawnSyncImpl = spawnSync, clock = () => new Date().toISOString() } = {}) {
-  const { url, output, attachments, mysqldumpBin } = parseArgs(argv);
-  const connection = parseMySqlUrl(url);
+function main(argv = process.argv, { env = process.env, spawnSyncImpl = spawnSync, clock = () => new Date().toISOString() } = {}) {
+  const { url, output, attachments, mysqldumpBin } = parseArgs(argv, env);
+  const connection = parseMySqlUrl(url, { sslCaFile: env.MYSQL_SSL_CA_FILE });
   const sqlManifest = `${output}.manifest.json`;
   const attachmentOutput = attachments ? `${output}.attachments` : null;
   const attachmentManifest = attachments ? `${output}.attachments.manifest.json` : null;
@@ -73,7 +74,7 @@ function main(argv = process.argv, { spawnSyncImpl = spawnSync, clock = () => ne
   const temporary = `${output}.partial`;
   const temporaryAttachmentManifest = attachmentManifest ? `${attachmentManifest}.partial` : null;
   const args = [
-    '--host', connection.host, '--port', String(connection.port), '--user', connection.user,
+    ...mysqlClientOptions(connection, env.MYSQL_SSL_CA_FILE),
     '--single-transaction', '--routines', '--triggers', '--no-tablespaces', '--set-gtid-purged=OFF', connection.database
   ];
   let temporaryAttachment = null;
@@ -81,7 +82,7 @@ function main(argv = process.argv, { spawnSyncImpl = spawnSync, clock = () => ne
     fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 });
     temporaryAttachment = attachments ? fs.mkdtempSync(path.join(path.dirname(output), `.${path.basename(output)}.attachments-`)) : null;
     const result = spawnSyncImpl(mysqldumpBin, args, {
-      env: { ...process.env, MYSQL_PWD: connection.password },
+      env: { ...env, MYSQL_PWD: connection.password },
       encoding: null,
       maxBuffer: 512 * 1024 * 1024
     });

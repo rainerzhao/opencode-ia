@@ -197,6 +197,7 @@ npm start
 | `DATABASE_PATH` | `<root>/data/workbench.db` | 当前历史 SQLite 运行库；MySQL 单一数据层迁移期间保留，切换完成后删除 |
 | `WORKBENCH_DATABASE_URL` | 空 | 生产环境必填公司云 MySQL 8.4 连接串；凭证只存在受保护的运行环境 |
 | `MYSQL_POOL_SIZE` | `10` | MySQL 连接池上限（1–100） |
+| `MYSQL_SSL_CA_FILE` | 空 | 公司云 MySQL 的内部 CA PEM 文件绝对路径；与 `mysqls://` 一起使用 |
 | `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
 | `COOKIE_SECURE` | 生产环境为 `true` | HTTPS 下为认证 Cookie 增加 `Secure` |
 | `SESSION_TTL_SECONDS` | `28800` | 登录 Session 有效期，单位秒 |
@@ -220,6 +221,8 @@ Linux 预发布启动前可执行 `npm run preflight:production`：它会拒绝 
 ### MySQL 生产组合（内网部署前置）
 
 生产环境由工作台容器连接公司云 MySQL 8.4，不在应用 Compose 内启动或维护 MySQL。设置 `WORKBENCH_DATABASE_URL` 后，生产启动器会选择 MySQL 组合：启动前检查版本、字符集、UTC 时区和中文 `ngram` 能力，执行受锁保护的迁移，并将账号、审计、Conversation/Gateway、知识/方案和 Skill 全部装配到同一个 MySQL Repository。云数据库负责实例高可用、自动备份和基础监控，应用仍负责 schema migration 与兼容性门禁。未配置该变量时仍使用历史 SQLite 组合，仅便于 Mac Demo；两种组合不会混用业务 Store。MySQL 组合已完成代码级装配和真实 MySQL 分域回归，完整 HTTP/WebSocket 全栈验收与 Linux 切换仍在后续阶段。
+
+公司云 MySQL 可通过 `mysqls://` 加密连接，并校验证书和数据库域名；应用、管理员初始化、备份与恢复共用 CA 配置。使用内部 CA 时，按[部署手册](docs/operations/intranet-deployment.md)挂载证书文件。
 
 ### Stage 1A：创建首位管理员
 

@@ -1,6 +1,10 @@
 'use strict';
 
 const mysql = require('mysql2/promise');
+const fs = require('node:fs');
+const path = require('node:path');
+const net = require('node:net');
+const { X509Certificate } = require('node:crypto');
 
 function databaseError(code, message, cause) {
   const error = new Error(message);
@@ -9,7 +13,7 @@ function databaseError(code, message, cause) {
   return error;
 }
 
-function parseMySqlUrl(value) {
+function parseMySqlUrl(value, { sslCaFile = null } = {}) {
   if (typeof value !== 'string' || value.length === 0) {
     throw databaseError('MYSQL_URL_REQUIRED', 'MySQL URL is required');
   }
@@ -18,13 +22,36 @@ function parseMySqlUrl(value) {
   if (!['mysql:', 'mysqls:'].includes(parsed.protocol) || !parsed.hostname || !parsed.pathname || parsed.pathname === '/') {
     throw databaseError('MYSQL_URL_INVALID', 'MySQL URL is invalid');
   }
+  if (parsed.search || parsed.hash) throw databaseError('MYSQL_URL_INVALID', 'MySQL URL options are unsupported');
+  const useTls = parsed.protocol === 'mysqls:';
+  // mysql2 verifies DNS names; IP literals do not take the same identity-validation path.
+  if (useTls && net.isIP(parsed.hostname.replace(/^\[|\]$/g, ''))) {
+    throw databaseError('MYSQL_TLS_CONFIG_INVALID', 'MySQL TLS requires a DNS endpoint for identity verification');
+  }
+  if (sslCaFile && !useTls) throw databaseError('MYSQL_TLS_CONFIG_INVALID', 'MySQL CA configuration requires mysqls://');
+  let ca;
+  if (sslCaFile) {
+    try {
+      if (!path.isAbsolute(sslCaFile)) throw new Error('absolute path required');
+      const stat = fs.statSync(sslCaFile);
+      if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error('invalid CA file');
+      ca = fs.readFileSync(sslCaFile, 'utf8');
+      const certificates = ca.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g);
+      if (!certificates?.length || ca.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g, '').trim()) {
+        throw new Error('invalid CA bundle');
+      }
+      for (const certificate of certificates) new X509Certificate(certificate);
+    } catch {
+      throw databaseError('MYSQL_TLS_CONFIG_INVALID', 'MySQL CA file must be a readable absolute PEM certificate bundle');
+    }
+  }
   return {
     host: parsed.hostname,
     port: parsed.port ? Number(parsed.port) : 3306,
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     database: decodeURIComponent(parsed.pathname.slice(1)),
-    ssl: parsed.protocol === 'mysqls:' ? {} : undefined
+    ssl: useTls ? { rejectUnauthorized: true, verifyIdentity: true, ...(ca ? { ca } : {}) } : undefined
   };
 }
 
@@ -44,11 +71,11 @@ function createExecutor(executor) {
   return { query, many, one };
 }
 
-async function createMySqlDatabase({ url, poolSize = 10 } = {}) {
+async function createMySqlDatabase({ url, poolSize = 10, sslCaFile = null } = {}) {
   if (!Number.isInteger(poolSize) || poolSize < 1 || poolSize > 100) {
     throw databaseError('MYSQL_POOL_SIZE_INVALID', 'MySQL pool size is invalid');
   }
-  const connection = parseMySqlUrl(url);
+  const connection = parseMySqlUrl(url, { sslCaFile });
   const pool = mysql.createPool({
     ...connection,
     waitForConnections: true,

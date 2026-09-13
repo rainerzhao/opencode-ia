@@ -1,0 +1,12 @@
+# Optional overlay for company MySQL endpoints signed by a private CA.
+services:
+  workbench:
+    environment:
+      MYSQL_SSL_CA_FILE: /etc/opencode-workbench/mysql-ca.pem
+    volumes:
+      - type: bind
+        source: ${MYSQL_SSL_CA_FILE_HOST:?set MYSQL_SSL_CA_FILE_HOST}
+        target: /etc/opencode-workbench/mysql-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false

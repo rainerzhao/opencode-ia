@@ -19,7 +19,8 @@ function validateProductionConfig({ env = process.env, projectDir = process.cwd(
   if (env.DATABASE_PATH) throw configError('DATABASE_PATH must not be set with the MySQL production composition');
   if (env.COOKIE_SECURE !== 'true') throw configError('COOKIE_SECURE must be true in production');
   const config = loadConfig({ env, projectDir });
-  try { parseMySqlUrl(config.workbenchDatabaseUrl); } catch { throw configError('WORKBENCH_DATABASE_URL is invalid'); }
+  try { parseMySqlUrl(config.workbenchDatabaseUrl, { sslCaFile: config.mysqlSslCaFile }); }
+  catch { throw configError('MySQL connection or TLS configuration is invalid'); }
   if (!path.isAbsolute(config.opencodeCmd)) throw configError('OPENCODE_CMD must be an absolute executable path');
   const exists = commandExists === undefined
     ? (() => {

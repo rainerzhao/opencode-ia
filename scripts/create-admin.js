@@ -135,7 +135,7 @@ async function main() {
     let admin;
     if (config.workbenchDatabaseUrl) {
       // One connection holds the advisory lock; the second runs the identity transaction.
-      db = await createMySqlDatabase({ url: config.workbenchDatabaseUrl, poolSize: 2 });
+      db = await createMySqlDatabase({ url: config.workbenchDatabaseUrl, poolSize: 2, sslCaFile: config.mysqlSslCaFile });
       await db.assertCapabilities();
       await migrateMySqlDatabase(db);
       admin = await db.withMigrationLock(() => bootstrapAdmin({

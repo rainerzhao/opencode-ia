@@ -127,7 +127,7 @@ async function createMySqlProductionWorkbench({
     error.code = 'MYSQL_URL_REQUIRED';
     throw error;
   }
-  const database = await createMySqlDatabase({ url: config.workbenchDatabaseUrl, poolSize: config.mysqlPoolSize });
+  const database = await createMySqlDatabase({ url: config.workbenchDatabaseUrl, poolSize: config.mysqlPoolSize, sslCaFile: config.mysqlSslCaFile });
   try {
     await database.assertCapabilities();
     await migrateMySqlDatabase(database);

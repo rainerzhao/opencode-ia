@@ -50,4 +50,4 @@ MySQL 不负责保持 Agent 思考过程或替代 Worker 进程。实时输出�
 
 ## 当前实现状态
 
-MySQL 8.4 Docker 数据库基础、迁移锁、UTF-8/UTC、中文 `ngram` 与 schema 已在 Mac 真库验证。应用的用户、Gateway、Skill、内容仓储尚在从 SQLite 异步迁移，因而本文是已确认的目标架构，不表示 Linux 或 MySQL 应用运行时已上线。
+生产应用通过连接串访问公司云 MySQL 8.4，实例高可用和自动备份由数据库平台负责。Mac 使用隔离 Docker 真库验证应用。账号、Gateway、Skill、内容已接入统一 MySQL 组合，迁移、中文检索、管理员 CLI 与 HTTP/WebSocket 已通过本机真库回归。应用及备份恢复支持 `mysqls://` 的证书链与主机名校验和内部 CA 配置；公司云数据库、Linux 和内部模型的实际联调仍待预发布验收。
