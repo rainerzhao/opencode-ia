@@ -14,7 +14,7 @@
 ## Compose 方式
 
 1. 在权限为 `0600` 的受保护环境文件中填写完整的 `WORKBENCH_DATABASE_URL`、`OPENCODE_INSTALL_ROOT`、`OPENCODE_CONFIG_FILE_HOST` 和 `OPENCODE_VERIFIED_VERSION`。生产优先使用云数据库提供的 TLS 连接地址（`mysqls://`）；不要把连接串写入 Compose、镜像或 Git。Provider 配置须为 `0600`，并由容器内 `node` 用户对应的主机 UID（默认 `1000`）拥有，否则启动门禁会拒绝运行。
-2. 将 `deploy/compose.intranet.yaml` 的数据卷和 OpenCode 安装路径替换为内网值；Nginx 域名和 TLS 路径在独立配置中调整。
+2. 将 `deploy/compose.intranet.yaml` 的数据卷和 OpenCode 安装路径替换为内网值；Nginx 域名和 TLS 路径在独立配置中调整。模板仅发布 `127.0.0.1:3000:3000`，供宿主机 Nginx 访问；对外入口为 HTTPS。Compose 配置自动重启、init 子进程回收及 30 秒停止宽限期。
 3. 从部署主机确认公司云 MySQL 健康且网络可达，再运行 `docker compose -f deploy/compose.intranet.yaml config --quiet` 检查必填配置。
 4. 启动唯一的工作台服务：`docker compose -f deploy/compose.intranet.yaml up -d workbench`，检查 `curl -fsS http://127.0.0.1:3000/healthz`。
 5. 首次初始化管理员在受控终端执行 `docker compose -f deploy/compose.intranet.yaml exec workbench npm run admin:create -- --username admin --display-name 管理员`。容器使用与服务相同的 `WORKBENCH_DATABASE_URL`，通过能力检查和迁移后将首位管理员写入公司云 MySQL；密码按提示输入两次。已有账号时拒绝重复初始化，并发初始化由数据库锁串行处理。若服务尚未启动，也可用 `docker compose -f deploy/compose.intranet.yaml run --rm --no-deps workbench npm run admin:create -- --username admin --display-name 管理员`。
@@ -25,6 +25,7 @@
 ## systemd + Nginx 方式
 
 - 创建非 root `opencode` 用户和 `/var/lib/opencode-workbench`，目录仅授予该用户读写；OpenCode 配置须为 `0600` 且归该用户所有。
+- systemd 单元通过 `StateDirectory` 创建服务用户拥有的 `0700` 状态目录、以 `0077` umask 运行，并预创建 Runtime 工作目录。单元已设置 production 模式、数据根和四个 XDG 目录；环境文件覆盖这些值时须保持路径位于可写状态目录内。
 - 将 `deploy/systemd/opencode-workbench.service` 安装到 `/etc/systemd/system/`，将环境变量放到权限为 `0600` 的 `/etc/opencode-workbench/workbench.env`。
 - 首次管理员初始化须在 `opencode` 服务账号的受控终端内，加载与 systemd 相同的环境配置后执行 `npm run admin:create -- --username admin --display-name 管理员`。生产模式不允许缺少 `WORKBENCH_DATABASE_URL`，也不允许同时设置 `DATABASE_PATH`。
 - 将 `deploy/nginx/nginx.conf.snippet` 放入 Nginx `http {}`，再按内网域名和证书调整 `opencode-workbench.conf`。
@@ -32,6 +33,9 @@
 - Prometheus 可抓取内网主机的 `/metrics`；该端点只返回聚合指标，不含账号、会话正文、Provider 或密钥。
 
 ## 升级、回滚和恢复
+
+- Docker 与 systemd 均将 `WORKBENCH_DATA_DIR` 设置为 `/var/lib/opencode-workbench`。其下保存 `content-attachments`、`knowledge`、`skills`、`workspaces`、`skill-installations`、`runtime` 和 `tmp/uploads`；四个 `XDG_*_HOME` 指向其下 `xdg/{data,state,config,cache}`，保存 OpenCode 自身会话数据。代码和前端构建仍位于发布目录。
+- 更新代码或重建容器应挂载同一数据卷，并将云 MySQL 与文件卷纳入配套恢复演练。首次切换已有实例的目录配置前，停服务并备份，将原附件、工作区、Skill 和 OpenCode XDG 数据复制到对应新目录，保留相对路径并核验服务账号权限；不要直接切换路径导致旧数据暂时不可见。新配置不会自动搬运旧数据。
 
 - 发布前保存镜像版本、Git SHA、迁移版本和配置摘要（不含秘密）。
 - 公司云数据库的自动快照、PITR/高可用和保留策略是生产主备份机制；发布前必须确认最近备份可用，并恢复到隔离实例演练。仓库内 `npm run backup:mysql` / `restore:mysql` 只作为跨实例迁移和独立校验手段，不替代云数据库灾备。

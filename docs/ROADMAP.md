@@ -125,6 +125,8 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 
 剩余交付分为两个阶段：
 
+生产持久化目录与网络入口已修正：Docker/systemd 使用独立数据根与持久 XDG 目录，Compose 仅发布宿主机回环端口。Mac 真 MySQL 已验证更换代码目录后下载原附件，真实 OpenCode 1.18.25 已验证新 Worker 可恢复同一 Session 身份；上述证据不包含真实模型上下文生成、Linux 镜像或公司部署验收。
+
 Stage 5D 的首次部署入口已补齐：管理员 CLI 使用与生产服务相同的云 MySQL，运行能力检查、迁移和带锁的首次初始化。Mac 真库已验证并发初始化只产生一个管理员及审计记录，并由 CLI 创建的账号跑通生产组合 HTTP 登录与会话。云数据库 TLS 已接入主机名和 CA 校验、只读 CA 挂载及加密备份恢复；本地证书验收记录见 `docs/dev-loop-runs/2026-09-13-cloud-mysql-tls/`。公司云数据库实际证书/网络、Linux 镜像和公司环境联调仍待完成。
 
 - 🚧 Stage 5D：在公司 Linux 预发布机以非 root 账号部署 Nginx、OpenCode 常驻 Runtime 和工作台，连接公司云 MySQL，接入真实内部 OpenAI 兼容 Provider，跑通登录、多会话、Skill、知识与审计全链路。

@@ -42,6 +42,7 @@ function booleanValue(value, defaultValue, name) {
 
 function loadConfig({ env = process.env, projectDir }) {
   const root = path.resolve(env.WORKBENCH_ROOT || projectDir);
+  const dataRoot = path.resolve(env.WORKBENCH_DATA_DIR || path.join(root, 'data'));
   const opencodeWorkerBasePort = boundedPositiveInteger(
     env.OPENCODE_WORKER_BASE_PORT,
     4319,
@@ -60,6 +61,7 @@ function loadConfig({ env = process.env, projectDir }) {
 
   return Object.freeze({
     projectDir: root,
+    dataRoot,
     workbenchDatabaseUrl: env.WORKBENCH_DATABASE_URL || env.MYSQL_URL || null,
     mysqlPoolSize: boundedPositiveInteger(env.MYSQL_POOL_SIZE, 10, 'MYSQL_POOL_SIZE', 100),
     mysqlSslCaFile: env.MYSQL_SSL_CA_FILE || null,
@@ -69,7 +71,7 @@ function loadConfig({ env = process.env, projectDir }) {
     opencodeTimeoutMs: positiveInteger(env.OPENCODE_TIMEOUT_MS, 120000, 'OPENCODE_TIMEOUT_MS'),
     opencodeMaxOutputBytes: positiveInteger(env.OPENCODE_MAX_OUTPUT_BYTES, 10 * 1024 * 1024, 'OPENCODE_MAX_OUTPUT_BYTES'),
     opencodeCmd: env.OPENCODE_CMD || path.join(env.HOME || '', '.opencode/bin/opencode'),
-    opencodeCwd: path.resolve(env.OPENCODE_CWD || root),
+    opencodeCwd: path.resolve(env.OPENCODE_CWD || (env.WORKBENCH_DATA_DIR ? path.join(dataRoot, 'runtime') : root)),
     opencodeWorkerBasePort,
     opencodeWorkerCount,
     opencodeWorkerCapacity: boundedPositiveInteger(env.OPENCODE_WORKER_CAPACITY, 1, 'OPENCODE_WORKER_CAPACITY', 16),
@@ -133,15 +135,16 @@ function loadConfig({ env = process.env, projectDir }) {
       100
     ),
     gatewayWorkspaceRoot: path.resolve(
-      env.GATEWAY_WORKSPACE_ROOT || path.join(root, 'data/workspaces')
+      env.GATEWAY_WORKSPACE_ROOT || path.join(dataRoot, 'workspaces')
     ),
     skillInstallRoot: path.resolve(
-      env.SKILL_INSTALL_ROOT || path.join(root, 'data/skill-installations')
+      env.SKILL_INSTALL_ROOT || path.join(dataRoot, 'skill-installations')
     ),
-    knowledgeDir: path.resolve(env.KNOWLEDGE_DIR || path.join(root, 'knowledge')),
-    skillsDir: path.resolve(env.SKILLS_DIR || path.join(root, '.opencode/skills')),
-    databasePath: path.resolve(env.DATABASE_PATH || path.join(root, 'data/workbench.db')),
-    uploadTempDir: path.resolve(env.UPLOAD_TEMP_DIR || path.join(root, 'data/tmp/uploads')),
+    knowledgeDir: path.resolve(env.KNOWLEDGE_DIR || (env.WORKBENCH_DATA_DIR ? path.join(dataRoot, 'knowledge') : path.join(root, 'knowledge'))),
+    skillsDir: path.resolve(env.SKILLS_DIR || (env.WORKBENCH_DATA_DIR ? path.join(dataRoot, 'skills') : path.join(root, '.opencode/skills'))),
+    databasePath: path.resolve(env.DATABASE_PATH || path.join(dataRoot, 'workbench.db')),
+    uploadTempDir: path.resolve(env.UPLOAD_TEMP_DIR || path.join(dataRoot, 'tmp/uploads')),
+    contentAttachmentRoot: path.resolve(env.CONTENT_ATTACHMENT_ROOT || path.join(dataRoot, 'content-attachments')),
     fetchAllowedHosts: parseHostList(env.KNOWLEDGE_FETCH_ALLOWED_HOSTS || ''),
     cookieSecure: booleanValue(env.COOKIE_SECURE, env.NODE_ENV === 'production', 'COOKIE_SECURE'),
     sessionTtlSeconds: positiveInteger(env.SESSION_TTL_SECONDS, 8 * 60 * 60, 'SESSION_TTL_SECONDS'),

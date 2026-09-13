@@ -8,7 +8,17 @@ Type=simple
 User=opencode
 Group=opencode
 WorkingDirectory=/opt/opencode-ia
+StateDirectory=opencode-workbench
+StateDirectoryMode=0700
+UMask=0077
+Environment=NODE_ENV=production
+Environment=WORKBENCH_DATA_DIR=/var/lib/opencode-workbench
+Environment=XDG_DATA_HOME=/var/lib/opencode-workbench/xdg/data
+Environment=XDG_STATE_HOME=/var/lib/opencode-workbench/xdg/state
+Environment=XDG_CONFIG_HOME=/var/lib/opencode-workbench/xdg/config
+Environment=XDG_CACHE_HOME=/var/lib/opencode-workbench/xdg/cache
 EnvironmentFile=/etc/opencode-workbench/workbench.env
+ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/opencode-workbench/runtime
 ExecStart=/usr/bin/node /opt/opencode-ia/scripts/start-production.js
 Restart=on-failure
 RestartSec=5

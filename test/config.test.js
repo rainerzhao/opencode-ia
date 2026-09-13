@@ -41,6 +41,20 @@ test('accepts an explicit database path without placing it in source directories
   assert.equal(config.databasePath, '/var/lib/opencode-workbench/workbench.db');
 });
 
+test('an external data root keeps mutable paths stable when the code release changes', () => {
+  const env = { WORKBENCH_DATA_DIR: '/var/lib/workbench' };
+  for (const projectDir of ['/opt/workbench/release-one', '/opt/workbench/release-two']) {
+    const config = loadConfig({ env, projectDir });
+    assert.equal(config.contentAttachmentRoot, '/var/lib/workbench/content-attachments');
+    assert.equal(config.gatewayWorkspaceRoot, '/var/lib/workbench/workspaces');
+    assert.equal(config.skillInstallRoot, '/var/lib/workbench/skill-installations');
+    assert.equal(config.uploadTempDir, '/var/lib/workbench/tmp/uploads');
+    assert.equal(config.knowledgeDir, '/var/lib/workbench/knowledge');
+    assert.equal(config.opencodeCwd, '/var/lib/workbench/runtime');
+    assert.equal(config.staticDir, `${projectDir}/dist/web`);
+  }
+});
+
 test('loads an explicit MySQL production URL and bounded pool size', () => {
   const config = loadConfig({
     env: {

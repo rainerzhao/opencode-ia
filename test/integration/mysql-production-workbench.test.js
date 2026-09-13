@@ -58,7 +58,8 @@ test('starts the MySQL production composition and serves authenticated private C
 
   const env = {
     HOME: root,
-    WORKBENCH_ROOT: root,
+    WORKBENCH_ROOT: path.join(root, 'release-one'),
+    WORKBENCH_DATA_DIR: path.join(root, 'persistent'),
     WORKBENCH_DATABASE_URL: testUrl,
     MYSQL_POOL_SIZE: '4',
     WEB_DIST_DIR: path.join(root, 'web'),
@@ -68,7 +69,7 @@ test('starts the MySQL production composition and serves authenticated private C
     OPENCODE_WORKER_COUNT: '1',
     OPENCODE_WORKER_BASE_PORT: '4591'
   };
-  const workbench = await createMySqlProductionWorkbench({
+  const options = {
     env,
     projectDir: root,
     logger: { log() {}, error() {} },
@@ -82,7 +83,8 @@ test('starts the MySQL production composition and serves authenticated private C
         onExit
       };
     }
-  });
+  };
+  let workbench = await createMySqlProductionWorkbench(options);
   t.after(async () => {
     await workbench.stop().catch(() => {});
     const cleanup = await createMySqlDatabase({ url: testUrl, poolSize: 2 });
@@ -144,4 +146,23 @@ test('starts the MySQL production composition and serves authenticated private C
   const knowledgeDiff = await fetch(`${origin}/api/content/knowledge/${knowledge.id}/diff?from=1&to=2`, { headers: { cookie } });
   assert.equal(knowledgeDiff.status, 200);
   assert.deepEqual((await knowledgeDiff.json()).diff.summary, { additions: 2, removals: 1, unchanged: 1 });
+
+  const form = new FormData();
+  form.append('file', new Blob(['# persistent knowledge attachment']), 'persistent.md');
+  const uploaded = await fetch(`${origin}/api/content/knowledge/${knowledge.id}/attachments`, {
+    method: 'POST', headers: { cookie, 'x-csrf-token': csrfToken }, body: form
+  });
+  assert.equal(uploaded.status, 201);
+  const attachment = (await uploaded.json()).attachment;
+  assert.equal(fs.existsSync(path.join(env.WORKBENCH_DATA_DIR, 'content-attachments')), true);
+  assert.equal(fs.existsSync(path.join(env.WORKBENCH_ROOT, 'data')), false);
+  await closeSocket(socket);
+  await workbench.stop();
+  // A replacement release has a different code directory and the same external DB/data volume.
+  workbench = await createMySqlProductionWorkbench({ ...options,
+    env: { ...env, WORKBENCH_ROOT: path.join(root, 'release-two') } });
+  const restarted = await workbench.start(0, '127.0.0.1');
+  const downloaded = await fetch(`http://127.0.0.1:${restarted.port}/api/content/knowledge/${knowledge.id}/attachments/${attachment.id}`, { headers: { cookie } });
+  assert.equal(downloaded.status, 200);
+  assert.equal(await downloaded.text(), '# persistent knowledge attachment');
 });
