@@ -1,0 +1,63 @@
+name: Linux verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: workbench_ci
+      WORKBENCH_MYSQL_DATABASE: workbench_ci_test
+      WORKBENCH_MYSQL_USER: workbench_test
+      WORKBENCH_MYSQL_PASSWORD: test-only-password
+      WORKBENCH_MYSQL_ROOT_PASSWORD: test-only-root-password
+      WORKBENCH_MYSQL_PORT: '33067'
+      WORKBENCH_TEST_MYSQL_URL: mysql://workbench_test:test-only-password@127.0.0.1:33067/workbench_ci_test
+      WORKBENCH_TLS_ACCEPTANCE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build, check syntax and scan secrets
+        run: |
+          npm run build
+          npm run check
+          npm run security:scan
+      - name: Start disposable MySQL 8.4
+        run: docker compose -f compose.mysql.yaml up -d --wait --wait-timeout 120
+      - name: Test with real MySQL and TLS
+        run: npm test
+      - name: Build Linux application image
+        run: docker build --platform linux/amd64 -f deploy/Dockerfile -t workbench-ci:${{ github.sha }} .
+      - name: Check image identity, writable state and excluded files
+        run: docker run --rm --network none --entrypoint node workbench-ci:${{ github.sha }} scripts/check-container-image.js
+      - name: Verify fail-closed entrypoint
+        shell: bash
+        run: |
+          set +e
+          output=$(docker run --rm --network none workbench-ci:${{ github.sha }} 2>&1)
+          status=$?
+          set -e
+          test "$status" -eq 1
+          [[ "$output" == *"WORKBENCH_DATABASE_URL is required"* ]]
+      - name: Clean disposable database
+        if: always()
+        run: docker compose -f compose.mysql.yaml down --volumes

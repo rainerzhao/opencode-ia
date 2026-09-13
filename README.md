@@ -319,4 +319,6 @@ server.js     兼容的生产模式薄启动入口
 
 ## 参与开发
 
+每次推送和 Pull Request 都会触发 [Linux 验证](https://github.com/rainerzhao/opencode-ia/actions/workflows/linux-verification.yaml)：真实 MySQL/TLS 回归、构建与密钥扫描、Linux 镜像构建和镜像内运行检查。CI 使用临时数据库，无需模型密钥；公司环境和真实模型验收另行执行。
+
 开始修改前先阅读 [ROADMAP](docs/ROADMAP.md) 和 [架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)。提交前必须执行三项验证，并确保没有把真实 API Key、`.env`、运行数据或日志加入 Git。
