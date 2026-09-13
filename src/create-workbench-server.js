@@ -35,6 +35,8 @@ const { createContentStore } = require('./content/content-store');
 const { createConversationContentService } = require('./content/conversation-content-service');
 const { createContentRouter } = require('./modules/content/routes');
 const { createContentAttachmentRouter } = require('./modules/content/attachment-routes');
+const { createRequirementRouter } = require('./modules/requirements/routes');
+const { createRequirementStore } = require('./requirements/requirement-store');
 const { createMetrics } = require('./observability/metrics');
 
 function createWorkbenchServer({
@@ -54,7 +56,7 @@ let db = database;
 let ownsDatabase = false;
 if (repositories) {
   if (!db || typeof db.close !== 'function') throw new TypeError('injected database is required');
-  const requiredRepositories = ['authService', 'requestAuditor', 'gatewayStore', 'skillStore', 'contentStore'];
+  const requiredRepositories = ['authService', 'requestAuditor', 'gatewayStore', 'skillStore', 'contentStore', 'requirementStore'];
   if (requiredRepositories.some((name) => !repositories[name])) {
     throw new TypeError('injected workbench repositories are incomplete');
   }
@@ -91,6 +93,7 @@ const requestAuditor = repositories?.requestAuditor || createRequestAuditor({ db
 const gatewayStore = repositories?.gatewayStore || createGatewayStore(db);
 const skillStore = repositories?.skillStore || createSkillStore(db);
 const contentStore = repositories?.contentStore || createContentStore(db);
+const requirementStore = repositories?.requirementStore || createRequirementStore(db);
 const conversationContentService = createConversationContentService({ gatewayStore, contentStore });
 const skillInstallationFiles = createSkillInstallationFiles({
   root: config.skillInstallRoot || path.join(config.projectDir, 'data/skill-installations')
@@ -240,6 +243,11 @@ app.use('/api/skills', createSkillRouter({
   installationService: skillInstallationService
 }));
 app.use('/api/content', createContentRouter({ store: contentStore, requestAuditor, conversationContentService }));
+app.use('/api/requirements', createRequirementRouter({
+  store: requirementStore,
+  requestAuditor,
+  requireAdmin: authMiddleware.requireRole('admin')
+}));
 
 function apiError(code, message, status = 400) {
   const error = new Error(message);
@@ -1108,7 +1116,8 @@ return {
   sessions,
   authService,
   gatewayService: activeGatewayService,
-  contentStore
+  contentStore,
+  requirementStore
 };
 }
 

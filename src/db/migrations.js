@@ -437,6 +437,57 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX content_attachments_owner_idx ON content_attachments(owner_user_id, created_at);
       CREATE INDEX content_attachments_storage_idx ON content_attachments(storage_key);
     `
+  }),
+  Object.freeze({
+    version: 10,
+    sql: `
+      CREATE TABLE business_units (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (length(name) BETWEEN 1 AND 100),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX business_units_status_name_idx ON business_units(status, name);
+
+      CREATE TABLE requirements (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        bu_id TEXT NOT NULL REFERENCES business_units(id) ON DELETE RESTRICT,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+        scenario TEXT NOT NULL DEFAULT '' CHECK (length(scenario) <= 100),
+        description TEXT NOT NULL DEFAULT '' CHECK (length(description) <= 50000),
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'clarifying', 'in_progress', 'resolved', 'archived')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX requirements_owner_updated_idx ON requirements(owner_user_id, updated_at DESC, id);
+      CREATE INDEX requirements_owner_bu_status_idx ON requirements(owner_user_id, bu_id, status, updated_at DESC);
+
+      CREATE TABLE requirement_interactions (
+        id TEXT PRIMARY KEY,
+        requirement_id TEXT NOT NULL REFERENCES requirements(id) ON DELETE CASCADE,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        channel TEXT NOT NULL CHECK (channel IN ('iim', 'phone', 'meeting', 'manual')),
+        content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 50000),
+        occurred_at TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX requirement_interactions_requirement_occurred_idx
+        ON requirement_interactions(requirement_id, occurred_at DESC, id DESC);
+    `
+  }),
+  Object.freeze({
+    version: 11,
+    sql: `
+      ALTER TABLE requirements ADD COLUMN responsible_user_id TEXT REFERENCES users(id) ON DELETE RESTRICT;
+      UPDATE requirements SET responsible_user_id = owner_user_id WHERE responsible_user_id IS NULL;
+      CREATE INDEX requirements_responsible_updated_idx ON requirements(responsible_user_id, updated_at DESC, id);
+    `
   })
 ]);
 

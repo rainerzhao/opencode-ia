@@ -3,6 +3,9 @@
 const { parseMySqlUrl } = require('../../src/db/mysql-database');
 
 const TABLES_IN_DROP_ORDER = Object.freeze([
+  'requirement_interactions',
+  'requirements',
+  'business_units',
   'conversation_reference_details',
   'content_attachments',
   'content_references',
@@ -51,6 +54,9 @@ async function resetMySqlSchema(db, { url } = {}) {
 async function clearMySqlBusinessData(db, { url } = {}) {
   assertDedicatedMySqlTestUrl(url);
   await db.transaction(async (client) => {
+    await client.query('DELETE FROM requirement_interactions');
+    await client.query('DELETE FROM requirements');
+    await client.query('DELETE FROM business_units');
     for (const table of ['gateway_events', 'gateway_jobs', 'opencode_sessions', 'gateway_workers']) {
       await client.query(`DELETE FROM \`${table}\``);
     }

@@ -1,0 +1,63 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { openDatabase } = require('../../src/db/open-database');
+const { migrateDatabase } = require('../../src/db/migrate');
+let createRequirementStore;
+try { ({ createRequirementStore } = require('../../src/requirements/requirement-store')); } catch (error) { if (error.code !== 'MODULE_NOT_FOUND') throw error; }
+
+function setup() {
+  const db = openDatabase({ filename: ':memory:' });
+  migrateDatabase(db);
+  db.prepare(`INSERT INTO users (id, username, display_name, password_hash, role, status, created_at, updated_at)
+    VALUES ('owner', 'owner', 'Owner', 'hash', 'member', 'active', '2026-09-13T00:00:00.000Z', '2026-09-13T00:00:00.000Z'),
+      ('other', 'other', 'Other', 'hash', 'member', 'active', '2026-09-13T00:00:00.000Z', '2026-09-13T00:00:00.000Z'),
+      ('admin', 'admin', 'Admin', 'hash', 'admin', 'active', '2026-09-13T00:00:00.000Z', '2026-09-13T00:00:00.000Z')`).run();
+  let id = 0;
+  return { db, store: createRequirementStore(db, { idFactory: () => `req-${++id}`, clock: () => '2026-09-13T00:00:00.000Z' }) };
+}
+
+test('requirements are private to their owner including administrators', () => {
+  assert.equal(typeof createRequirementStore, 'function');
+  const { db, store } = setup();
+  const bu = store.createBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', name: '基础设施 BU' });
+  const requirement = store.createRequirement({ ownerUserId: 'owner', title: 'GPU 集群扩容', buId: bu.id, scenario: '训练', description: '需要评估容量' });
+  assert.equal(requirement.ownerUserId, 'owner');
+  assert.equal(requirement.responsibleUserId, 'owner');
+  assert.equal(requirement.status, 'draft');
+  assert.equal(store.getRequirement({ ownerUserId: 'owner', id: requirement.id }).description, '需要评估容量');
+  for (const ownerUserId of ['other', 'admin']) {
+    assert.throws(() => store.getRequirement({ ownerUserId, id: requirement.id }), { code: 'REQUIREMENT_NOT_FOUND' });
+    assert.deepEqual(store.listRequirements({ ownerUserId, query: 'GPU' }).items, []);
+  }
+  db.close();
+});
+
+test('persists original interactions, updates only the owner record, and filters without leaking other records', () => {
+  const { db, store } = setup();
+  const bu = store.createBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', name: '行业 BU' });
+  const requirement = store.createRequirement({ ownerUserId: 'owner', title: '容灾方案', buId: bu.id, description: '原始需求' });
+  const interaction = store.addInteraction({ ownerUserId: 'owner', requirementId: requirement.id, channel: 'phone', content: '  电话纪要原文\n', occurredAt: '2026-09-13T02:30:00.000Z' });
+  assert.equal(interaction.content, '  电话纪要原文\n');
+  const updated = store.updateRequirement({ ownerUserId: 'owner', id: requirement.id, status: 'clarifying', title: '容灾方案（待澄清）' });
+  assert.equal(updated.status, 'clarifying');
+  const detail = store.getRequirement({ ownerUserId: 'owner', id: requirement.id });
+  assert.equal(detail.interactions.length, 1);
+  assert.equal(detail.interactions[0].id, interaction.id);
+  assert.deepEqual(store.listRequirements({ ownerUserId: 'owner', query: '澄清', limit: 1, offset: 0 }).items.map((item) => item.id), [requirement.id]);
+  assert.throws(() => store.addInteraction({ ownerUserId: 'other', requirementId: requirement.id, channel: 'manual', content: 'bad', occurredAt: '2026-09-13T02:30:00.000Z' }), { code: 'REQUIREMENT_NOT_FOUND' });
+  db.close();
+});
+
+test('rejects non-admin BU changes and archiving a BU that still has active requirements', () => {
+  const { db, store } = setup();
+  assert.throws(() => store.createBusinessUnit({ actorUserId: 'owner', actorRole: 'member', name: 'Private BU' }), { code: 'BUSINESS_UNIT_NOT_FOUND' });
+  const bu = store.createBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', name: '云 BU' });
+  const requirement = store.createRequirement({ ownerUserId: 'owner', title: '迁移', buId: bu.id, description: '' });
+  assert.throws(() => store.archiveBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', id: bu.id }), { code: 'BUSINESS_UNIT_IN_USE' });
+  store.updateRequirement({ ownerUserId: 'owner', id: requirement.id, status: 'archived' });
+  assert.equal(store.archiveBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', id: bu.id }).status, 'archived');
+  assert.deepEqual(store.listBusinessUnits({ activeOnly: true }), []);
+  db.close();
+});

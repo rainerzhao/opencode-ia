@@ -12,6 +12,7 @@ const { createRequestAuditor } = require('../../src/audit/request-audit');
 const { createMySqlGatewayStore } = require('../../src/gateway/mysql-gateway-store');
 const { createMySqlContentStore } = require('../../src/content/mysql-content-store');
 const { createMySqlSkillStore } = require('../../src/skills/mysql-skill-store');
+const { createMySqlRequirementStore } = require('../../src/requirements/mysql-requirement-store');
 const { createLoginLimiter } = require('../../src/auth/login-limiter');
 const { createFairQueue } = require('../../src/gateway/fair-queue');
 const { createGatewayService } = require('../../src/gateway/gateway-service');
@@ -154,7 +155,8 @@ async function createMySqlProductionWorkbench({
       requestAuditor,
       gatewayStore: createMySqlGatewayStore(database),
       skillStore: createMySqlSkillStore(database),
-      contentStore: createMySqlContentStore(database)
+      contentStore: createMySqlContentStore(database),
+      requirementStore: createMySqlRequirementStore(database)
     };
     let gatewayService;
     const createWorker = createWorkerFactory({ config, env, logger, workerFactory });

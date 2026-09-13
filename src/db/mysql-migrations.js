@@ -229,6 +229,39 @@ const MYSQL_MIGRATIONS = Object.freeze([
   Object.freeze({ version: 9, statements: [
     `ALTER TABLE content_attachments DROP INDEX storage_key,
       ADD INDEX content_attachments_storage_idx (storage_key)`
+  ] }),
+  Object.freeze({ version: 10, statements: [
+    `CREATE TABLE business_units (
+      id VARCHAR(200) PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE,
+      status ENUM('active','archived') NOT NULL DEFAULT 'active', created_by_user_id VARCHAR(200) NULL,
+      created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL,
+      CONSTRAINT business_units_creator_fk FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+      INDEX business_units_status_name_idx (status, name)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE requirements (
+      id VARCHAR(200) PRIMARY KEY, owner_user_id VARCHAR(200) NOT NULL, bu_id VARCHAR(200) NOT NULL,
+      title VARCHAR(200) NOT NULL, scenario VARCHAR(100) NOT NULL DEFAULT '', description MEDIUMTEXT NOT NULL,
+      status ENUM('draft','clarifying','in_progress','resolved','archived') NOT NULL DEFAULT 'draft',
+      created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL,
+      CONSTRAINT requirements_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT requirements_bu_fk FOREIGN KEY (bu_id) REFERENCES business_units(id) ON DELETE RESTRICT,
+      INDEX requirements_owner_updated_idx (owner_user_id, updated_at DESC, id),
+      INDEX requirements_owner_bu_status_idx (owner_user_id, bu_id, status, updated_at DESC)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE requirement_interactions (
+      id VARCHAR(200) PRIMARY KEY, requirement_id VARCHAR(200) NOT NULL, owner_user_id VARCHAR(200) NOT NULL,
+      channel ENUM('iim','phone','meeting','manual') NOT NULL, content MEDIUMTEXT NOT NULL,
+      occurred_at DATETIME(3) NOT NULL, recorded_at DATETIME(3) NOT NULL,
+      CONSTRAINT requirement_interactions_requirement_fk FOREIGN KEY (requirement_id) REFERENCES requirements(id) ON DELETE CASCADE,
+      CONSTRAINT requirement_interactions_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX requirement_interactions_requirement_occurred_idx (requirement_id, occurred_at DESC, id DESC)
+    ) ENGINE=InnoDB`
+  ] }),
+  Object.freeze({ version: 11, statements: [
+    `ALTER TABLE requirements ADD COLUMN responsible_user_id VARCHAR(200) NULL AFTER owner_user_id`,
+    `UPDATE requirements SET responsible_user_id = owner_user_id WHERE responsible_user_id IS NULL`,
+    `ALTER TABLE requirements ADD CONSTRAINT requirements_responsible_fk FOREIGN KEY (responsible_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+      ADD INDEX requirements_responsible_updated_idx (responsible_user_id, updated_at DESC, id)`
   ] })
 ]);
 

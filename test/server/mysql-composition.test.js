@@ -48,6 +48,10 @@ test('accepts an injected asynchronous repository set without opening or migrati
     },
     contentStore: {
       createSolutionFromConversation() {}, createKnowledgeAttachment() {}, getKnowledgeAttachment() {}
+    },
+    requirementStore: {
+      listBusinessUnits() { return []; }, createBusinessUnit() {}, archiveBusinessUnit() {}, listRequirements() { return { items: [], total: 0, limit: 20, offset: 0 }; },
+      createRequirement() {}, getRequirement() {}, updateRequirement() {}, addInteraction() {}
     }
   };
   fs.mkdirSync(config.staticDir, { recursive: true });
