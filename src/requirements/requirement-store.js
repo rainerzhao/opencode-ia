@@ -8,12 +8,19 @@ function validId(value, code) { if (typeof value !== 'string' || !/^[A-Za-z0-9_-
 function now(clock) { const value = clock(); if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) throw new TypeError('clock returned an invalid ISO timestamp'); return value; }
 function unit(row) { return row && ({ id: row.id, name: row.name, status: row.status, createdByUserId: row.created_by_user_id, createdAt: row.created_at, updatedAt: row.updated_at }); }
 function interaction(row) { return row && ({ id: row.id, requirementId: row.requirement_id, channel: row.channel, content: row.content, occurredAt: row.occurred_at, recordedAt: row.recorded_at }); }
+function link(row) { return row && ({ id: row.id, requirementId: row.requirement_id, resourceType: row.resource_type, resourceId: row.resource_id, versionId: row.version_id, title: row.title, createdAt: row.created_at }); }
 function summary(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, responsibleUserId: row.responsible_user_id, buId: row.bu_id, buName: row.bu_name, title: row.title, scenario: row.scenario, description: row.description, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at }); }
 
 function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () => new Date().toISOString() } = {}) {
   if (!db || typeof db.prepare !== 'function') throw new TypeError('requirement database is required');
   const selectRequirement = db.prepare(`SELECT r.*, b.name AS bu_name FROM requirements r JOIN business_units b ON b.id = r.bu_id WHERE r.id = ? AND r.owner_user_id = ?`);
   const interactions = db.prepare('SELECT * FROM requirement_interactions WHERE requirement_id = ? ORDER BY occurred_at DESC, id DESC');
+  const links = db.prepare(`SELECT l.*, COALESCE(c.title, kv.title, sv.title) AS title
+    FROM requirement_links l
+    LEFT JOIN conversations c ON l.resource_type = 'conversation' AND c.id = l.resource_id
+    LEFT JOIN knowledge_versions kv ON l.resource_type = 'knowledge' AND kv.id = l.version_id
+    LEFT JOIN solution_versions sv ON l.resource_type = 'solution' AND sv.id = l.version_id
+    WHERE l.requirement_id = ? ORDER BY l.created_at DESC, l.id DESC`);
   const activeUnit = db.prepare("SELECT * FROM business_units WHERE id = ? AND status = 'active'");
 
   function mustOwn(id, ownerUserId) { const row = selectRequirement.get(validId(id, 'INVALID_REQUIREMENT_ID'), validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR')); if (!row) throw failure('REQUIREMENT_NOT_FOUND', 'requirement was not found'); return row; }
@@ -46,7 +53,7 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     });
     return summary(selectRequirement.get(id, owner));
   }
-  function getRequirement({ ownerUserId, id } = {}) { const item = summary(mustOwn(id, ownerUserId)); return { ...item, interactions: interactions.all(item.id).map(interaction) }; }
+  function getRequirement({ ownerUserId, id } = {}) { const item = summary(mustOwn(id, ownerUserId)); return { ...item, interactions: interactions.all(item.id).map(interaction), links: links.all(item.id).map(link) }; }
   function updateRequirement({ ownerUserId, id, ...body } = {}) {
     const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const existing = mustOwn(id, owner); const input = normalizeRequirement(body, { patch: true });
     if (input.buId && !activeUnit.get(input.buId)) throw failure('BUSINESS_UNIT_NOT_FOUND', 'business unit was not found');
@@ -59,6 +66,27 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     db.prepare('INSERT INTO requirement_interactions (id, requirement_id, owner_user_id, channel, content, occurred_at, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, requirement.id, owner, input.channel, input.content, input.occurredAt, now(clock));
     return interaction(db.prepare('SELECT * FROM requirement_interactions WHERE id = ?').get(id));
   }
+  function source(ownerUserId, resourceType, resourceId) {
+    if (!['conversation', 'knowledge', 'solution'].includes(resourceType)) throw failure('INVALID_REQUIREMENT_LINK', 'requirement link is invalid');
+    const resource = validId(resourceId, 'INVALID_REQUIREMENT_LINK');
+    if (resourceType === 'conversation') {
+      const found = db.prepare("SELECT id, title FROM conversations WHERE id = ? AND owner_user_id = ? AND status = 'active'").get(resource, ownerUserId);
+      return found ? { resourceId: found.id, versionId: null, title: found.title } : null;
+    }
+    const table = resourceType === 'knowledge' ? 'knowledge_documents' : 'solutions'; const versions = resourceType === 'knowledge' ? 'knowledge_versions' : 'solution_versions';
+    const found = db.prepare(`SELECT d.id AS resource_id, v.id AS version_id, v.title FROM ${table} d JOIN ${versions} v ON v.id = d.current_version_id WHERE d.id = ? AND d.owner_user_id = ?`).get(resource, ownerUserId);
+    return found ? { resourceId: found.resource_id, versionId: found.version_id, title: found.title } : null;
+  }
+  function addRequirementLink({ ownerUserId, requirementId, resourceType, resourceId } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const requirement = mustOwn(requirementId, owner); const target = source(owner, resourceType, resourceId); if (!target) throw failure('REQUIREMENT_LINK_TARGET_NOT_FOUND', 'link target was not found');
+    const id = validId(idFactory(), 'INVALID_REQUIREMENT_LINK'); try { db.prepare('INSERT INTO requirement_links (id, requirement_id, owner_user_id, resource_type, resource_id, version_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, requirement.id, owner, resourceType, target.resourceId, target.versionId, now(clock)); }
+    catch (error) { if (String(error.message).includes('UNIQUE')) throw failure('REQUIREMENT_LINK_EXISTS', 'requirement link already exists'); throw error; }
+    return link(links.all(requirement.id).find((item) => item.id === id));
+  }
+  function removeRequirementLink({ ownerUserId, requirementId, linkId } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const requirement = mustOwn(requirementId, owner); const result = db.prepare('DELETE FROM requirement_links WHERE id = ? AND requirement_id = ? AND owner_user_id = ?').run(validId(linkId, 'INVALID_REQUIREMENT_LINK'), requirement.id, owner);
+    if (result.changes !== 1) throw failure('REQUIREMENT_LINK_NOT_FOUND', 'requirement link was not found');
+  }
   function listRequirements({ ownerUserId, query, ...filters } = {}) {
     const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const input = normalizeRequirementQuery({ ...filters, ...(query === undefined ? {} : { q: query }) }); const clauses = ['r.owner_user_id = ?']; const values = [owner];
     if (input.buId) { clauses.push('r.bu_id = ?'); values.push(input.buId); }
@@ -68,7 +96,7 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     const rows = db.prepare(`SELECT r.*, b.name AS bu_name FROM requirements r JOIN business_units b ON b.id = r.bu_id WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT ? OFFSET ?`).all(...values, input.limit, input.offset).map(summary);
     return { items: rows, total, limit: input.limit, offset: input.offset };
   }
-  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createRequirement, getRequirement, updateRequirement, addInteraction, listRequirements });
+  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
 }
 
 module.exports = { createRequirementStore };

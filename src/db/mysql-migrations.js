@@ -262,6 +262,18 @@ const MYSQL_MIGRATIONS = Object.freeze([
     `UPDATE requirements SET responsible_user_id = owner_user_id WHERE responsible_user_id IS NULL`,
     `ALTER TABLE requirements ADD CONSTRAINT requirements_responsible_fk FOREIGN KEY (responsible_user_id) REFERENCES users(id) ON DELETE RESTRICT,
       ADD INDEX requirements_responsible_updated_idx (responsible_user_id, updated_at DESC, id)`
+  ] }),
+  Object.freeze({ version: 12, statements: [
+    `CREATE TABLE requirement_links (
+      id VARCHAR(200) PRIMARY KEY, requirement_id VARCHAR(200) NOT NULL, owner_user_id VARCHAR(200) NOT NULL,
+      resource_type ENUM('conversation','knowledge','solution') NOT NULL, resource_id VARCHAR(200) NOT NULL,
+      version_id VARCHAR(200) NULL, created_at DATETIME(3) NOT NULL,
+      CONSTRAINT requirement_links_requirement_fk FOREIGN KEY (requirement_id) REFERENCES requirements(id) ON DELETE CASCADE,
+      CONSTRAINT requirement_links_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY requirement_links_unique_resource (requirement_id, resource_type, resource_id),
+      INDEX requirement_links_requirement_idx (requirement_id, created_at DESC, id),
+      INDEX requirement_links_owner_resource_idx (owner_user_id, resource_type, resource_id)
+    ) ENGINE=InnoDB`
   ] })
 ]);
 

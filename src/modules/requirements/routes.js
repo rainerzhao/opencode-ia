@@ -10,7 +10,8 @@ function mapError(error) {
   const statuses = {
     REQUIREMENT_NOT_FOUND: 404, BUSINESS_UNIT_NOT_FOUND: 404, BUSINESS_UNIT_EXISTS: 409, BUSINESS_UNIT_IN_USE: 409,
     INVALID_REQUIREMENT_INPUT: 400, INVALID_REQUIREMENT_ID: 400, INVALID_REQUIREMENT_ACTOR: 400,
-    INVALID_BUSINESS_UNIT: 400, INVALID_REQUIREMENT_INTERACTION: 400
+    INVALID_BUSINESS_UNIT: 400, INVALID_REQUIREMENT_INTERACTION: 400, INVALID_REQUIREMENT_LINK: 400,
+    REQUIREMENT_LINK_TARGET_NOT_FOUND: 404, REQUIREMENT_LINK_NOT_FOUND: 404, REQUIREMENT_LINK_EXISTS: 409
   };
   if (statuses[error.code]) error.status = statuses[error.code]; return error;
 }
@@ -45,6 +46,14 @@ function createRequirementRouter({ store, requestAuditor, requireAdmin }) {
   router.post('/:requirementId/interactions', asyncRoute(async (req, res) => {
     const input = normalizeInteraction(req.body); const interaction = await store.addInteraction({ ownerUserId: req.auth.user.id, requirementId: requirementId(req.params.requirementId), ...input });
     audit(req, requestAuditor, 'requirement.interaction.create', 'requirement_interaction', interaction.id, { requirementId: interaction.requirementId, channel: interaction.channel }); res.status(201).json({ interaction });
+  }));
+  router.post('/:requirementId/links', asyncRoute(async (req, res) => {
+    const link = await store.addRequirementLink({ ownerUserId: req.auth.user.id, requirementId: requirementId(req.params.requirementId), resourceType: req.body?.resourceType, resourceId: req.body?.resourceId });
+    audit(req, requestAuditor, 'requirement.link.create', 'requirement_link', link.id, { requirementId: link.requirementId, resourceType: link.resourceType, resourceId: link.resourceId, versionId: link.versionId }); res.status(201).json({ link });
+  }));
+  router.delete('/:requirementId/links/:linkId', asyncRoute(async (req, res) => {
+    const id = requirementId(req.params.requirementId); const linkId = requirementId(req.params.linkId);
+    await store.removeRequirementLink({ ownerUserId: req.auth.user.id, requirementId: id, linkId }); audit(req, requestAuditor, 'requirement.link.remove', 'requirement_link', linkId, { requirementId: id }); res.status(204).end();
   }));
   return router;
 }

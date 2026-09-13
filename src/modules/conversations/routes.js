@@ -35,6 +35,14 @@ function mapStoreError(error) {
   return error;
 }
 
+function historyNumber(value, { fallback, min, max } = {}) {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) throw routeError('INVALID_EVENT_SEQUENCE', 'event cursor is invalid', 400);
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < min || number > max) throw routeError('INVALID_EVENT_SEQUENCE', 'event cursor is invalid', 400);
+  return number;
+}
+
 function createConversationRouter({ store, requestAuditor }) {
   if (!store || !requestAuditor) throw new TypeError('conversation route dependencies are required');
   const router = express.Router();
@@ -58,6 +66,18 @@ function createConversationRouter({ store, requestAuditor }) {
         metadata: { visibility: 'private' }
       });
       res.status(201).json({ conversation });
+  }));
+
+  router.get('/:conversationId/events', asyncRoute(async (req, res) => {
+    const id = conversationId(req.params.conversationId);
+    const afterSequence = historyNumber(req.query.afterSequence, { fallback: 0, min: 0, max: Number.MAX_SAFE_INTEGER });
+    const limit = historyNumber(req.query.limit, { fallback: 100, min: 1, max: 1000 });
+    const latestSequence = await store.getLatestEventSequence({ conversationId: id, ownerUserId: req.auth.user.id });
+    if (latestSequence === null) throw routeError('CONVERSATION_NOT_FOUND', 'conversation was not found', 404);
+    const events = await store.listEventsAfter({ conversationId: id, ownerUserId: req.auth.user.id, afterSequence, limit });
+    if (events === null) throw routeError('CONVERSATION_NOT_FOUND', 'conversation was not found', 404);
+    const nextAfterSequence = events.at(-1)?.sequence || afterSequence;
+    res.json({ events, nextAfterSequence, hasMore: nextAfterSequence < latestSequence });
   }));
 
   router.get('/:conversationId', asyncRoute(async (req, res) => {

@@ -50,3 +50,13 @@ test('requires admin for BU writes and does not put original interaction text in
   assert.equal(interaction.status, 201); assert.equal(calls.at(-1).ownerUserId, 'owner');
   assert.deepEqual(events.at(-1), { action: 'requirement.interaction.create', targetType: 'requirement_interaction', targetId: 'int-1', metadata: { requirementId: 'req-1', channel: 'phone' } });
 });
+
+test('adds an owned asset link while auditing only immutable relation metadata', async (t) => {
+  const calls = []; const events = []; const store = {
+    async listBusinessUnits() { return []; }, async listRequirements() { return { items: [], total: 0, limit: 20, offset: 0 }; }, async createBusinessUnit() {}, async archiveBusinessUnit() {}, async createRequirement() {}, async getRequirement() {}, async updateRequirement() {}, async addInteraction() {}, async removeRequirementLink() {},
+    async addRequirementLink(input) { calls.push(input); return { id: 'link-1', requirementId: input.requirementId, resourceType: input.resourceType, resourceId: input.resourceId, versionId: 'version-1' }; }
+  };
+  const server = serverFor(store, events); t.after(() => new Promise((resolve) => server.close(resolve))); await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve)); const base = `http://127.0.0.1:${server.address().port}`;
+  const response = await fetch(`${base}/req-1/links`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-user': 'owner' }, body: JSON.stringify({ resourceType: 'knowledge', resourceId: 'knowledge-1' }) }); assert.equal(response.status, 201); assert.deepEqual(calls[0], { ownerUserId: 'owner', requirementId: 'req-1', resourceType: 'knowledge', resourceId: 'knowledge-1' });
+  assert.deepEqual(events[0], { action: 'requirement.link.create', targetType: 'requirement_link', targetId: 'link-1', metadata: { requirementId: 'req-1', resourceType: 'knowledge', resourceId: 'knowledge-1', versionId: 'version-1' } });
+});

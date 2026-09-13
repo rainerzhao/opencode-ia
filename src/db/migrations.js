@@ -489,6 +489,23 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX requirements_responsible_updated_idx ON requirements(responsible_user_id, updated_at DESC, id);
     `
   })
+  , Object.freeze({
+    version: 12,
+    sql: `
+      CREATE TABLE requirement_links (
+        id TEXT PRIMARY KEY,
+        requirement_id TEXT NOT NULL REFERENCES requirements(id) ON DELETE CASCADE,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        resource_type TEXT NOT NULL CHECK (resource_type IN ('conversation', 'knowledge', 'solution')),
+        resource_id TEXT NOT NULL,
+        version_id TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (requirement_id, resource_type, resource_id)
+      ) STRICT;
+      CREATE INDEX requirement_links_requirement_idx ON requirement_links(requirement_id, created_at DESC, id);
+      CREATE INDEX requirement_links_owner_resource_idx ON requirement_links(owner_user_id, resource_type, resource_id);
+    `
+  })
 ]);
 
 module.exports = { MIGRATIONS };
