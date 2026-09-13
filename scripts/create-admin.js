@@ -7,6 +7,9 @@ const { loadConfig } = require('../src/config');
 const { openDatabase } = require('../src/db/open-database');
 const { migrateDatabase } = require('../src/db/migrate');
 const { bootstrapAdmin } = require('../src/bootstrap/bootstrap-admin');
+const { createMySqlDatabase } = require('../src/db/mysql-database');
+const { migrateMySqlDatabase } = require('../src/db/mysql-migrate');
+const { createMySqlIdentityRepositories } = require('../src/auth/mysql-identity-repositories');
 
 function cliError(code, message) {
   const error = new Error(message);
@@ -118,14 +121,31 @@ async function main() {
 
     const projectDir = path.resolve(__dirname, '..');
     const config = loadConfig({ env: process.env, projectDir });
-    db = openDatabase({ filename: config.databasePath });
-    migrateDatabase(db);
-    const admin = await bootstrapAdmin({
-      db,
+    if (process.env.NODE_ENV === 'production' && !process.env.WORKBENCH_DATABASE_URL) {
+      throw cliError('BOOTSTRAP_DATABASE_CONFIG', '生产初始化必须配置 WORKBENCH_DATABASE_URL。');
+    }
+    if (config.workbenchDatabaseUrl && process.env.DATABASE_PATH) {
+      throw cliError('BOOTSTRAP_DATABASE_CONFIG', 'MySQL 初始化不能同时配置 DATABASE_PATH。');
+    }
+    const input = {
       username: options.username,
       displayName: options.displayName,
       password
-    });
+    };
+    let admin;
+    if (config.workbenchDatabaseUrl) {
+      // One connection holds the advisory lock; the second runs the identity transaction.
+      db = await createMySqlDatabase({ url: config.workbenchDatabaseUrl, poolSize: 2 });
+      await db.assertCapabilities();
+      await migrateMySqlDatabase(db);
+      admin = await db.withMigrationLock(() => bootstrapAdmin({
+        ...input, db, repositoryFactory: createMySqlIdentityRepositories
+      }));
+    } else {
+      db = openDatabase({ filename: config.databasePath });
+      migrateDatabase(db);
+      admin = await bootstrapAdmin({ ...input, db });
+    }
     process.stdout.write(`管理员创建成功：${admin.username}\n`);
   } catch (error) {
     const safeMessages = {
@@ -137,12 +157,15 @@ async function main() {
       INVALID_DISPLAY_NAME: '显示名必须包含 1–80 个字符。',
       BOOTSTRAP_ALREADY_COMPLETE: '系统已经存在账号，不能再次执行首位管理员初始化。',
       DATABASE_MIGRATION_FAILED: '数据库迁移失败，未创建管理员。',
+      BOOTSTRAP_DATABASE_CONFIG: error.message,
+      MYSQL_UNAVAILABLE: 'MySQL 无法连接，未创建管理员。',
+      MYSQL_CAPABILITY_MISMATCH: 'MySQL 版本或能力不满足部署要求，未创建管理员。',
       INTERRUPTED: error.message
     };
     process.stderr.write(`${safeMessages[error.code] || '管理员创建失败。'}\n`);
     process.exitCode = error.code === 'INVALID_ARGUMENT' || error.code === 'PASSWORD_ARGUMENT_FORBIDDEN' ? 2 : 1;
   } finally {
-    db?.close();
+    await db?.close();
   }
 }
 

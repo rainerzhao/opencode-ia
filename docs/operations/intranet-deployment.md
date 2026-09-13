@@ -16,13 +16,14 @@
 2. 将 `deploy/compose.intranet.yaml` 的数据卷和 OpenCode 安装路径替换为内网值；Nginx 域名和 TLS 路径在独立配置中调整。
 3. 从部署主机确认公司云 MySQL 健康且网络可达，再运行 `docker compose -f deploy/compose.intranet.yaml config --quiet` 检查必填配置。
 4. 启动唯一的工作台服务：`docker compose -f deploy/compose.intranet.yaml up -d workbench`，检查 `curl -fsS http://127.0.0.1:3000/healthz`。
-5. 首次初始化管理员使用受控终端执行 `npm run admin:create`；密码不写入命令参数、镜像或 Git。
+5. 首次初始化管理员在受控终端执行 `docker compose -f deploy/compose.intranet.yaml exec workbench npm run admin:create -- --username admin --display-name 管理员`。容器使用与服务相同的 `WORKBENCH_DATABASE_URL`，通过能力检查和迁移后将首位管理员写入公司云 MySQL；密码按提示输入两次。已有账号时拒绝重复初始化，并发初始化由数据库锁串行处理。若服务尚未启动，也可用 `docker compose -f deploy/compose.intranet.yaml run --rm --no-deps workbench npm run admin:create -- --username admin --display-name 管理员`。
 6. 镜像入口使用 `npm run start:production` 的同一受检启动器，启动服务前强制执行生产配置和 Provider 门禁；任一检查失败都不会打开 HTTP 端口。运维人员仍可单独执行 `npm run preflight:production` 和 `npm run preflight:opencode` 进行预检。
 
 ## systemd + Nginx 方式
 
 - 创建非 root `opencode` 用户和 `/var/lib/opencode-workbench`，目录仅授予该用户读写；OpenCode 配置须为 `0600` 且归该用户所有。
 - 将 `deploy/systemd/opencode-workbench.service` 安装到 `/etc/systemd/system/`，将环境变量放到权限为 `0600` 的 `/etc/opencode-workbench/workbench.env`。
+- 首次管理员初始化须在 `opencode` 服务账号的受控终端内，加载与 systemd 相同的环境配置后执行 `npm run admin:create -- --username admin --display-name 管理员`。生产模式不允许缺少 `WORKBENCH_DATABASE_URL`，也不允许同时设置 `DATABASE_PATH`。
 - 将 `deploy/nginx/nginx.conf.snippet` 放入 Nginx `http {}`，再按内网域名和证书调整 `opencode-workbench.conf`。
 - 启动顺序：确认公司云 MySQL 健康且网络可达 → `systemctl start opencode-workbench` → 受检启动器自动执行两项门禁和数据库能力/迁移检查 → 检查 `/healthz` → 通过 HTTPS 登录验收 WebSocket。
 - Prometheus 可抓取内网主机的 `/metrics`；该端点只返回聚合指标，不含账号、会话正文、Provider 或密钥。

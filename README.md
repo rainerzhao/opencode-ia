@@ -231,6 +231,8 @@ npm run admin:create -- --username admin --display-name 管理员
 
 密码会隐藏输入两次，并使用 `scrypt` 和独立随机盐保存。
 
+首次部署到公司云 MySQL 时，这条命令会使用与工作台相同的 `WORKBENCH_DATABASE_URL` 完成数据库检查、迁移和管理员初始化；并发执行也只能创建一个首位管理员。生产环境缺少连接串或数据库连接失败时会直接报错。容器内的具体操作见[内网部署手册](docs/operations/intranet-deployment.md)。
+
 ### Stage 1B–1E：认证、业务权限与 React 浏览器体验
 
 当前已提供并接入前端的能力：

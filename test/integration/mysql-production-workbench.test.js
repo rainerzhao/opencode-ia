@@ -9,8 +9,7 @@ const WebSocket = require('ws');
 const { createMySqlDatabase } = require('../../src/db/mysql-database');
 const { migrateMySqlDatabase } = require('../../src/db/mysql-migrate');
 const { clearMySqlBusinessData } = require('../fixtures/mysql-test-database');
-const { createMySqlIdentityRepositories } = require('../../src/auth/mysql-identity-repositories');
-const { bootstrapAdmin } = require('../../src/bootstrap/bootstrap-admin');
+const { runAdminCli } = require('../fixtures/admin-cli');
 const { createMySqlProductionWorkbench } = require('../../apps/server');
 
 const testUrl = process.env.WORKBENCH_TEST_MYSQL_URL;
@@ -91,14 +90,9 @@ test('starts the MySQL production composition and serves authenticated private C
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  await bootstrapAdmin({
-    db: workbench.database,
-    repositoryFactory: createMySqlIdentityRepositories,
-    username: 'mysql.production.admin',
-    displayName: 'MySQL Production Admin',
-    password: ADMIN_PASSWORD,
-    idFactory: () => 'mysql-production-admin'
-  });
+  const initialized = await runAdminCli({ root, url: testUrl, username: 'mysql.production.admin', password: ADMIN_PASSWORD });
+  assert.equal(initialized.code, 0, initialized.stderr);
+  assert.equal(fs.existsSync(path.join(root, 'data/workbench.db')), false);
   const address = await workbench.start(0, '127.0.0.1');
   const origin = `http://127.0.0.1:${address.port}`;
   const health = await fetch(`${origin}/healthz`);

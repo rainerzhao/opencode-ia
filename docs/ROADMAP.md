@@ -1,6 +1,6 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-12
+更新时间：2026-09-13
 
 ## 当前结论
 
@@ -124,6 +124,8 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 已加入预发布配置模板：`deploy/Dockerfile`、连接公司云 MySQL 的 `deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。生产 Compose 只运行工作台，不承担数据库实例、高可用或自动备份。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置；Stage 5B 新增聚合 `/metrics`；Stage 5C 新增 `npm run preflight:opencode` 和 [内部 Provider 联调清单](operations/internal-provider.md)。Stage 5D1 已把两项门禁接入 Docker/systemd 受检启动器，生产服务在门禁失败时不会打开端口，并为 Docker build context 排除本机配置、数据库、Git 与交接材料。模板、门禁和指标不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 剩余交付分为两个阶段：
+
+Stage 5D 的首次部署入口已补齐：管理员 CLI 使用与生产服务相同的云 MySQL，运行能力检查、迁移和带锁的首次初始化。Mac 真库已验证并发初始化只产生一个管理员及审计记录，并由 CLI 创建的账号跑通生产组合 HTTP 登录与会话。云数据库 TLS、Linux 镜像和公司环境联调仍待完成。
 
 - 🚧 Stage 5D：在公司 Linux 预发布机以非 root 账号部署 Nginx、OpenCode 常驻 Runtime 和工作台，连接公司云 MySQL，接入真实内部 OpenAI 兼容 Provider，跑通登录、多会话、Skill、知识与审计全链路。
 - ⏳ Stage 5E：完成 15–20 用户容量、长时间运行、Runtime/MySQL/进程故障、备份恢复、升级回滚、安全检查与上线清单，由人工确认残余风险后再开放访问。
