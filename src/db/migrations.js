@@ -505,6 +505,39 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX requirement_links_requirement_idx ON requirement_links(requirement_id, created_at DESC, id);
       CREATE INDEX requirement_links_owner_resource_idx ON requirement_links(owner_user_id, resource_type, resource_id);
     `
+  }),
+  Object.freeze({
+    version: 13,
+    sql: `
+      CREATE TABLE requirement_field_templates (
+        id TEXT PRIMARY KEY,
+        field_key TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (field_key GLOB '[a-z]*' AND length(field_key) BETWEEN 1 AND 64),
+        label TEXT NOT NULL CHECK (length(label) BETWEEN 1 AND 100),
+        field_type TEXT NOT NULL CHECK (field_type IN ('text', 'number', 'select', 'boolean')),
+        options_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(options_json)),
+        required INTEGER NOT NULL DEFAULT 0 CHECK (required IN (0, 1)),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+        schema_version INTEGER NOT NULL DEFAULT 1 CHECK (schema_version >= 1),
+        created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX requirement_field_templates_status_key_idx ON requirement_field_templates(status, field_key);
+      CREATE TABLE requirement_field_values (
+        id TEXT PRIMARY KEY,
+        requirement_id TEXT NOT NULL REFERENCES requirements(id) ON DELETE CASCADE,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        template_id TEXT NOT NULL REFERENCES requirement_field_templates(id) ON DELETE RESTRICT,
+        template_schema_version INTEGER NOT NULL CHECK (template_schema_version >= 1),
+        template_snapshot_json TEXT NOT NULL CHECK (json_valid(template_snapshot_json)),
+        value_json TEXT NOT NULL CHECK (json_valid(value_json)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (requirement_id, template_id)
+      ) STRICT;
+      CREATE INDEX requirement_field_values_requirement_idx ON requirement_field_values(requirement_id, created_at, id);
+      CREATE INDEX requirement_field_values_owner_template_idx ON requirement_field_values(owner_user_id, template_id);
+    `
   })
 ]);
 

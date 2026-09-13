@@ -61,3 +61,23 @@ test('rejects non-admin BU changes and archiving a BU that still has active requ
   assert.deepEqual(store.listBusinessUnits({ activeOnly: true }), []);
   db.close();
 });
+
+test('only administrators govern templates and requirement values stay owner-private with their schema version', () => {
+  const { db, store } = setup();
+  const template = store.createFieldTemplate({
+    actorUserId: 'admin', actorRole: 'admin', key: 'priority', label: '优先级', type: 'select', options: ['P0', 'P1'], required: true
+  });
+  assert.equal(template.schemaVersion, 1);
+  assert.throws(() => store.createFieldTemplate({ actorUserId: 'owner', actorRole: 'member', key: 'region', label: '区域', type: 'text' }), { code: 'REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND' });
+  const bu = store.createBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', name: '字段 BU' });
+  assert.throws(() => store.createRequirement({ ownerUserId: 'owner', title: '缺少必填字段', buId: bu.id }), { code: 'REQUIRED_REQUIREMENT_FIELD_VALUE' });
+  const requirement = store.createRequirement({ ownerUserId: 'owner', title: '受控字段', buId: bu.id, fieldValues: [{ templateId: template.id, value: 'P1' }] });
+  const detail = store.getRequirement({ ownerUserId: 'owner', id: requirement.id });
+  assert.deepEqual(detail.fieldValues, [{ templateId: template.id, key: 'priority', label: '优先级', type: 'select', schemaVersion: 1, value: 'P1' }]);
+  assert.throws(() => store.updateRequirement({ ownerUserId: 'owner', id: requirement.id, fieldValues: [{ templateId: template.id, value: 'P2' }] }), { code: 'INVALID_REQUIREMENT_FIELD_VALUE' });
+  assert.throws(() => store.getRequirement({ ownerUserId: 'other', id: requirement.id }), { code: 'REQUIREMENT_NOT_FOUND' });
+  assert.equal(store.archiveFieldTemplate({ actorUserId: 'admin', actorRole: 'admin', id: template.id }).status, 'archived');
+  assert.throws(() => store.updateRequirement({ ownerUserId: 'owner', id: requirement.id, fieldValues: [{ templateId: template.id, value: 'P0' }] }), { code: 'REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND' });
+  assert.equal(store.getRequirement({ ownerUserId: 'owner', id: requirement.id }).fieldValues[0].value, 'P1');
+  db.close();
+});

@@ -11,7 +11,9 @@ function mapError(error) {
     REQUIREMENT_NOT_FOUND: 404, BUSINESS_UNIT_NOT_FOUND: 404, BUSINESS_UNIT_EXISTS: 409, BUSINESS_UNIT_IN_USE: 409,
     INVALID_REQUIREMENT_INPUT: 400, INVALID_REQUIREMENT_ID: 400, INVALID_REQUIREMENT_ACTOR: 400,
     INVALID_BUSINESS_UNIT: 400, INVALID_REQUIREMENT_INTERACTION: 400, INVALID_REQUIREMENT_LINK: 400,
-    REQUIREMENT_LINK_TARGET_NOT_FOUND: 404, REQUIREMENT_LINK_NOT_FOUND: 404, REQUIREMENT_LINK_EXISTS: 409
+    REQUIREMENT_LINK_TARGET_NOT_FOUND: 404, REQUIREMENT_LINK_NOT_FOUND: 404, REQUIREMENT_LINK_EXISTS: 409,
+    INVALID_REQUIREMENT_FIELD_TEMPLATE: 400, INVALID_REQUIREMENT_FIELD_VALUE: 400, INVALID_REQUIREMENT_FIELD_VALUES: 400,
+    REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND: 404, REQUIREMENT_FIELD_TEMPLATE_EXISTS: 409, REQUIRED_REQUIREMENT_FIELD_VALUE: 400
   };
   if (statuses[error.code]) error.status = statuses[error.code]; return error;
 }
@@ -28,6 +30,19 @@ function createRequirementRouter({ store, requestAuditor, requireAdmin }) {
   router.delete('/business-units/:businessUnitId', requireAdmin, asyncRoute(async (req, res) => {
     const businessUnit = await store.archiveBusinessUnit({ actorUserId: req.auth.user.id, actorRole: req.auth.user.role, id: requirementId(req.params.businessUnitId) });
     audit(req, requestAuditor, 'requirement.business_unit.archive', 'business_unit', businessUnit.id, { status: businessUnit.status }); res.status(204).end();
+  }));
+  router.get('/field-templates', asyncRoute(async (_req, res) => res.json({ fieldTemplates: await store.listFieldTemplates({ activeOnly: true }) })));
+  router.post('/field-templates', requireAdmin, asyncRoute(async (req, res) => {
+    const fieldTemplate = await store.createFieldTemplate({ actorUserId: req.auth.user.id, actorRole: req.auth.user.role, ...req.body });
+    audit(req, requestAuditor, 'requirement.field_template.create', 'requirement_field_template', fieldTemplate.id, { key: fieldTemplate.key, type: fieldTemplate.type, schemaVersion: fieldTemplate.schemaVersion }); res.status(201).json({ fieldTemplate });
+  }));
+  router.patch('/field-templates/:templateId', requireAdmin, asyncRoute(async (req, res) => {
+    const fieldTemplate = await store.updateFieldTemplate({ actorUserId: req.auth.user.id, actorRole: req.auth.user.role, id: requirementId(req.params.templateId), ...req.body });
+    audit(req, requestAuditor, 'requirement.field_template.update', 'requirement_field_template', fieldTemplate.id, { key: fieldTemplate.key, type: fieldTemplate.type, schemaVersion: fieldTemplate.schemaVersion }); res.json({ fieldTemplate });
+  }));
+  router.delete('/field-templates/:templateId', requireAdmin, asyncRoute(async (req, res) => {
+    const fieldTemplate = await store.archiveFieldTemplate({ actorUserId: req.auth.user.id, actorRole: req.auth.user.role, id: requirementId(req.params.templateId) });
+    audit(req, requestAuditor, 'requirement.field_template.archive', 'requirement_field_template', fieldTemplate.id, { status: fieldTemplate.status }); res.status(204).end();
   }));
   router.get('/', asyncRoute(async (req, res) => {
     const query = normalizeRequirementQuery(req.query || {});

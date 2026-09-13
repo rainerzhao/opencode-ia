@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { normalizeRequirement, normalizeInteraction, normalizeRequirementQuery } = require('./requirement-input');
+const { normalizeFieldTemplate, normalizeFieldValue } = require('./requirement-fields');
 
 function failure(code, message) { const error = new Error(message); error.code = code; return error; }
 function validId(value, code) { if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(value)) throw failure(code, 'identifier is invalid'); return value; }
@@ -9,6 +10,8 @@ function now(clock) { const value = clock(); if (typeof value !== 'string' || Nu
 function unit(row) { return row && ({ id: row.id, name: row.name, status: row.status, createdByUserId: row.created_by_user_id, createdAt: row.created_at, updatedAt: row.updated_at }); }
 function interaction(row) { return row && ({ id: row.id, requirementId: row.requirement_id, channel: row.channel, content: row.content, occurredAt: row.occurred_at, recordedAt: row.recorded_at }); }
 function link(row) { return row && ({ id: row.id, requirementId: row.requirement_id, resourceType: row.resource_type, resourceId: row.resource_id, versionId: row.version_id, title: row.title, createdAt: row.created_at }); }
+function template(row) { return row && ({ id: row.id, key: row.field_key, label: row.label, type: row.field_type, options: JSON.parse(row.options_json), required: Boolean(row.required), status: row.status, schemaVersion: row.schema_version, createdAt: row.created_at, updatedAt: row.updated_at }); }
+function fieldValue(row) { const schema = JSON.parse(row.template_snapshot_json); return { templateId: row.template_id, key: schema.key, label: schema.label, type: schema.type, schemaVersion: row.template_schema_version, value: JSON.parse(row.value_json) }; }
 function summary(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, responsibleUserId: row.responsible_user_id, buId: row.bu_id, buName: row.bu_name, title: row.title, scenario: row.scenario, description: row.description, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at }); }
 
 function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () => new Date().toISOString() } = {}) {
@@ -22,9 +25,12 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     LEFT JOIN solution_versions sv ON l.resource_type = 'solution' AND sv.id = l.version_id
     WHERE l.requirement_id = ? ORDER BY l.created_at DESC, l.id DESC`);
   const activeUnit = db.prepare("SELECT * FROM business_units WHERE id = ? AND status = 'active'");
+  const activeTemplate = db.prepare("SELECT * FROM requirement_field_templates WHERE id = ? AND status = 'active'");
+  const selectTemplate = db.prepare('SELECT * FROM requirement_field_templates WHERE id = ?');
+  const valuesFor = db.prepare('SELECT * FROM requirement_field_values WHERE requirement_id = ? ORDER BY created_at, id');
 
   function mustOwn(id, ownerUserId) { const row = selectRequirement.get(validId(id, 'INVALID_REQUIREMENT_ID'), validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR')); if (!row) throw failure('REQUIREMENT_NOT_FOUND', 'requirement was not found'); return row; }
-  function mustAdmin(actor) { if (actor?.actorRole !== 'admin') throw failure('BUSINESS_UNIT_NOT_FOUND', 'business unit was not found'); return validId(actor.actorUserId, 'INVALID_REQUIREMENT_ACTOR'); }
+  function mustAdmin(actor, code = 'BUSINESS_UNIT_NOT_FOUND') { if (actor?.actorRole !== 'admin') throw failure(code, 'resource was not found'); return validId(actor.actorUserId, 'INVALID_REQUIREMENT_ACTOR'); }
   function transaction(action) { db.exec('BEGIN IMMEDIATE'); try { const result = action(); db.exec('COMMIT'); return result; } catch (error) { db.exec('ROLLBACK'); throw error; } }
 
   function createBusinessUnit({ actorUserId, actorRole, name } = {}) {
@@ -44,21 +50,57 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
       db.prepare("UPDATE business_units SET status = 'archived', updated_at = ? WHERE id = ?").run(now(clock), unitId); return unit(db.prepare('SELECT * FROM business_units WHERE id = ?').get(unitId));
     });
   }
+  function createFieldTemplate({ actorUserId, actorRole, ...body } = {}) {
+    const creator = mustAdmin({ actorUserId, actorRole }, 'REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND'); const input = normalizeFieldTemplate(body);
+    const id = validId(idFactory(), 'INVALID_REQUIREMENT_FIELD_TEMPLATE'); const time = now(clock);
+    try { db.prepare("INSERT INTO requirement_field_templates (id, field_key, label, field_type, options_json, required, status, schema_version, created_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?)").run(id, input.key, input.label, input.type, JSON.stringify(input.options), Number(input.required), creator, time, time); }
+    catch (error) { if (String(error.message).includes('UNIQUE')) throw failure('REQUIREMENT_FIELD_TEMPLATE_EXISTS', 'requirement field template already exists'); throw error; }
+    return template(selectTemplate.get(id));
+  }
+  function listFieldTemplates({ activeOnly = false } = {}) { return db.prepare(`SELECT * FROM requirement_field_templates ${activeOnly ? "WHERE status = 'active'" : ''} ORDER BY field_key, id`).all().map(template); }
+  function updateFieldTemplate({ actorUserId, actorRole, id, ...body } = {}) {
+    mustAdmin({ actorUserId, actorRole }, 'REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND'); const existing = selectTemplate.get(validId(id, 'INVALID_REQUIREMENT_FIELD_TEMPLATE')); if (!existing) throw failure('REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND', 'requirement field template was not found');
+    const patch = normalizeFieldTemplate(body, { patch: true }); const old = template(existing); const next = normalizeFieldTemplate({ key: patch.key ?? old.key, label: patch.label ?? old.label, type: patch.type ?? old.type, options: patch.options ?? old.options, required: patch.required ?? old.required }); const changed = ['key', 'label', 'type', 'options', 'required'].some((key) => JSON.stringify(next[key]) !== JSON.stringify(old[key]));
+    db.prepare('UPDATE requirement_field_templates SET field_key = ?, label = ?, field_type = ?, options_json = ?, required = ?, schema_version = ?, updated_at = ? WHERE id = ?').run(next.key, next.label, next.type, JSON.stringify(next.options), Number(next.required), existing.schema_version + (changed ? 1 : 0), now(clock), existing.id);
+    return template(selectTemplate.get(existing.id));
+  }
+  function archiveFieldTemplate({ actorUserId, actorRole, id } = {}) {
+    mustAdmin({ actorUserId, actorRole }, 'REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND'); const item = selectTemplate.get(validId(id, 'INVALID_REQUIREMENT_FIELD_TEMPLATE')); if (!item) throw failure('REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND', 'requirement field template was not found');
+    db.prepare("UPDATE requirement_field_templates SET status = 'archived', updated_at = ? WHERE id = ?").run(now(clock), item.id); return template(selectTemplate.get(item.id));
+  }
+  function replaceFieldValues({ requirementId, ownerUserId, entries, time, enforceRequired = false }) {
+    if (entries === undefined && !enforceRequired) return;
+    const requested = entries || [];
+    const normalized = requested.map((entry) => {
+      const row = activeTemplate.get(entry.templateId); if (!row) throw failure('REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND', 'requirement field template was not found');
+      const item = template(row); const value = normalizeFieldValue(item, entry.value);
+      return { item, value };
+    });
+    const required = db.prepare("SELECT id FROM requirement_field_templates WHERE status = 'active' AND required = 1").all();
+    if (required.some((row) => !normalized.some((entry) => entry.item.id === row.id))) throw failure('REQUIRED_REQUIREMENT_FIELD_VALUE', 'required requirement field value is missing');
+    db.prepare('DELETE FROM requirement_field_values WHERE requirement_id = ? AND owner_user_id = ?').run(requirementId, ownerUserId);
+    const insert = db.prepare('INSERT INTO requirement_field_values (id, requirement_id, owner_user_id, template_id, template_schema_version, template_snapshot_json, value_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const entry of normalized) insert.run(validId(idFactory(), 'INVALID_REQUIREMENT_FIELD_VALUE'), requirementId, ownerUserId, entry.item.id, entry.item.schemaVersion, JSON.stringify({ key: entry.item.key, label: entry.item.label, type: entry.item.type, options: entry.item.options, required: entry.item.required }), JSON.stringify(entry.value), time, time);
+  }
   function createRequirement({ ownerUserId, ...body } = {}) {
     const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const input = normalizeRequirement(body);
     const id = validId(idFactory(), 'INVALID_REQUIREMENT_ID'); const time = now(clock);
     transaction(() => {
       if (!activeUnit.get(input.buId)) throw failure('BUSINESS_UNIT_NOT_FOUND', 'business unit was not found');
       db.prepare('INSERT INTO requirements (id, owner_user_id, responsible_user_id, bu_id, title, scenario, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, owner, owner, input.buId, input.title, input.scenario, input.description, input.status, time, time);
+      replaceFieldValues({ requirementId: id, ownerUserId: owner, entries: input.fieldValues, time, enforceRequired: true });
     });
     return summary(selectRequirement.get(id, owner));
   }
-  function getRequirement({ ownerUserId, id } = {}) { const item = summary(mustOwn(id, ownerUserId)); return { ...item, interactions: interactions.all(item.id).map(interaction), links: links.all(item.id).map(link) }; }
+  function getRequirement({ ownerUserId, id } = {}) { const item = summary(mustOwn(id, ownerUserId)); return { ...item, interactions: interactions.all(item.id).map(interaction), links: links.all(item.id).map(link), fieldValues: valuesFor.all(item.id).map(fieldValue) }; }
   function updateRequirement({ ownerUserId, id, ...body } = {}) {
     const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const existing = mustOwn(id, owner); const input = normalizeRequirement(body, { patch: true });
     if (input.buId && !activeUnit.get(input.buId)) throw failure('BUSINESS_UNIT_NOT_FOUND', 'business unit was not found');
-    const fields = Object.keys(input); const values = fields.map((key) => input[key]);
-    db.prepare(`UPDATE requirements SET ${fields.map((key) => `${key === 'buId' ? 'bu_id' : key} = ?`).join(', ')}, updated_at = ? WHERE id = ? AND owner_user_id = ?`).run(...values, now(clock), existing.id, owner);
+    const { fieldValues, ...fieldsInput } = input; const fields = Object.keys(fieldsInput); const values = fields.map((key) => fieldsInput[key]); const time = now(clock);
+    transaction(() => {
+      if (fields.length) db.prepare(`UPDATE requirements SET ${fields.map((key) => `${key === 'buId' ? 'bu_id' : key} = ?`).join(', ')}, updated_at = ? WHERE id = ? AND owner_user_id = ?`).run(...values, time, existing.id, owner);
+      if (fieldValues !== undefined) replaceFieldValues({ requirementId: existing.id, ownerUserId: owner, entries: fieldValues, time });
+    });
     return summary(selectRequirement.get(existing.id, owner));
   }
   function addInteraction({ ownerUserId, requirementId, ...body } = {}) {
@@ -96,7 +138,7 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     const rows = db.prepare(`SELECT r.*, b.name AS bu_name FROM requirements r JOIN business_units b ON b.id = r.bu_id WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT ? OFFSET ?`).all(...values, input.limit, input.offset).map(summary);
     return { items: rows, total, limit: input.limit, offset: input.offset };
   }
-  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
+  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createFieldTemplate, listFieldTemplates, updateFieldTemplate, archiveFieldTemplate, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
 }
 
 module.exports = { createRequirementStore };

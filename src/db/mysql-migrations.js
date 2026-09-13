@@ -274,6 +274,28 @@ const MYSQL_MIGRATIONS = Object.freeze([
       INDEX requirement_links_requirement_idx (requirement_id, created_at DESC, id),
       INDEX requirement_links_owner_resource_idx (owner_user_id, resource_type, resource_id)
     ) ENGINE=InnoDB`
+  ] }),
+  Object.freeze({ version: 13, statements: [
+    `CREATE TABLE requirement_field_templates (
+      id VARCHAR(200) PRIMARY KEY, field_key VARCHAR(64) NOT NULL UNIQUE, label VARCHAR(100) NOT NULL,
+      field_type ENUM('text','number','select','boolean') NOT NULL, options_json JSON NOT NULL,
+      required BOOLEAN NOT NULL DEFAULT FALSE, status ENUM('active','archived') NOT NULL DEFAULT 'active',
+      schema_version INT UNSIGNED NOT NULL DEFAULT 1, created_by_user_id VARCHAR(200) NULL,
+      created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL,
+      CONSTRAINT requirement_field_templates_creator_fk FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+      INDEX requirement_field_templates_status_key_idx (status, field_key)
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE requirement_field_values (
+      id VARCHAR(200) PRIMARY KEY, requirement_id VARCHAR(200) NOT NULL, owner_user_id VARCHAR(200) NOT NULL,
+      template_id VARCHAR(200) NOT NULL, template_schema_version INT UNSIGNED NOT NULL, template_snapshot_json JSON NOT NULL, value_json JSON NOT NULL,
+      created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL,
+      CONSTRAINT requirement_field_values_requirement_fk FOREIGN KEY (requirement_id) REFERENCES requirements(id) ON DELETE CASCADE,
+      CONSTRAINT requirement_field_values_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT requirement_field_values_template_fk FOREIGN KEY (template_id) REFERENCES requirement_field_templates(id) ON DELETE RESTRICT,
+      UNIQUE KEY requirement_field_values_unique_template (requirement_id, template_id),
+      INDEX requirement_field_values_requirement_idx (requirement_id, created_at, id),
+      INDEX requirement_field_values_owner_template_idx (owner_user_id, template_id)
+    ) ENGINE=InnoDB`
   ] })
 ]);
 

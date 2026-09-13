@@ -2,6 +2,7 @@
 
 const statuses = new Set(['draft', 'clarifying', 'in_progress', 'resolved', 'archived']);
 const channels = new Set(['iim', 'phone', 'meeting', 'manual']);
+const { normalizeFieldValueEntries } = require('./requirement-fields');
 
 function invalid() {
   const error = new Error('requirement input is invalid');
@@ -34,7 +35,7 @@ function status(value) {
 }
 
 function normalizeRequirement(body, { patch = false } = {}) {
-  fields(body, ['title', 'buId', 'scenario', 'description', 'status']);
+  fields(body, ['title', 'buId', 'scenario', 'description', 'status', 'fieldValues']);
   if (patch && !Object.keys(body).length) throw invalid();
   const validators = {
     title: (value) => text(value, 200),
@@ -45,7 +46,7 @@ function normalizeRequirement(body, { patch = false } = {}) {
   };
   const values = patch ? body : { scenario: '', description: '', status: 'draft', ...body };
   if (!patch && (!Object.hasOwn(values, 'title') || !Object.hasOwn(values, 'buId'))) throw invalid();
-  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, validators[key](value)]));
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, key === 'fieldValues' ? normalizeFieldValueEntries(value) : validators[key](value)]));
 }
 
 function timestamp(value) {
