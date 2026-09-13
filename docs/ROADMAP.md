@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0–4 已完成 Mac 应用级验收；MySQL 单一数据层已完成代码级装配、真实 MySQL HTTP/WebSocket 冒烟和恢复演练；Stage 5A–5C 已完成部署前置能力，Stage 5D–5E 必须在公司 Linux 预发布机继续验收** 的状态。
+项目当前处于 **Stage 0–4 已完成 Mac 应用级验收；MySQL 单一数据层已完成真实 HTTP/WebSocket 和恢复演练；Stage 5A–5C 及 5D1 Linux 镜像构建与基础运行检查已通过，Stage 5D–5E 的公司环境联调与生产验收仍待完成** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -17,7 +17,7 @@ Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、
 | Stage 2 OpenCode Gateway | ✅ Mac 验收完成 | 常驻 OpenCode 服务、会话映射、公平调度 | 不再每条消息冷启动，多人多会话可控 |
 | Stage 3 知识与方案 | ✅ Mac 验收完成 | 检索、版本、私有到发布流程、来源追溯、附件和恢复 | 知识可查、可审、可撤回、可追溯、可恢复 |
 | Stage 4 Skill 中心 | ✅ Mac 验收完成 | 草稿、校验、发布、安装、启用、版本、回滚、停用、归档 | 成员能安全生产并共享 Skill |
-| Stage 5 Linux 生产化 | 🚧 5A 配置门禁、5B 可观测性、5C Provider 联调门禁完成 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
+| Stage 5 Linux 生产化 | 🚧 5A–5C 与 5D1 Linux CI 通过；公司联调待验收 | 内网部署、内部模型、备份、监控、压测 | 真实环境达到上线检查表要求 |
 
 ## Stage 0：安全可演示基线
 
@@ -124,6 +124,8 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 已加入预发布配置模板：`deploy/Dockerfile`、连接公司云 MySQL 的 `deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。生产 Compose 只运行工作台，不承担数据库实例、高可用或自动备份。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置；Stage 5B 新增聚合 `/metrics`；Stage 5C 新增 `npm run preflight:opencode` 和 [内部 Provider 联调清单](operations/internal-provider.md)。Stage 5D1 已把两项门禁接入 Docker/systemd 受检启动器，生产服务在门禁失败时不会打开端口，并为 Docker build context 排除本机配置、数据库、Git 与交接材料。模板、门禁和指标不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 剩余交付分为两个阶段：
+
+Linux 基础构建验收已取得独立证据：[首次 CI](https://github.com/rainerzhao/opencode-ia/actions/runs/34756682602) 在 Ubuntu 24.04 上通过 MySQL/TLS 回归、目标 Dockerfile 构建、镜像非 root/持久目录/排除项检查及缺少配置启动拒绝。此项关闭 5D1 的镜像证据缺口；工作流不使用内部模型密钥，未验证公司 OpenCode 服务链路，也未发布镜像到仓库。
 
 生产持久化目录与网络入口已修正：Docker/systemd 使用独立数据根与持久 XDG 目录，Compose 仅发布宿主机回环端口。Mac 真 MySQL 已验证更换代码目录后下载原附件，真实 OpenCode 1.18.25 已验证新 Worker 可恢复同一 Session 身份；上述证据不包含真实模型上下文生成、Linux 镜像或公司部署验收。
 

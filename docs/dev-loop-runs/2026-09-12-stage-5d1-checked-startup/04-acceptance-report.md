@@ -2,7 +2,11 @@
 
 ## Verdict
 
-IN_PROGRESS
+PASS_WITH_NOTES：受检启动阶段已于 2026-09-13 补齐 Linux 镜像构建与内容检查；公司预发布仍由 Stage 5D/5E 单独验收。
+
+## Follow-up evidence (2026-09-13)
+
+后续提交 `7db3d0da7f46e0f6fc6809d7ac0eca0888c6a6f4` 在 [Linux CI](https://github.com/rainerzhao/opencode-ia/actions/runs/34756682602) 成功构建目标 Linux/amd64 镜像，并实际执行非 root、前端产物、持久目录写入、本机文件排除及缺少配置启动拒绝检查。本机镜像代理 403 仍可能存在，但已不阻止本阶段取得独立 Linux 构建证据。
 
 ## Evidence
 
@@ -15,5 +19,5 @@ IN_PROGRESS
 
 ## Pending
 
-- Linux/amd64 镜像构建与镜像内容检查。
+- Linux/amd64 镜像构建与镜像内容检查已由上述 Linux CI 补齐。
 - 公司 Linux 上的云数据库网络/TLS（含可能的内部 CA）和真实内部 Provider/OpenCode 验收。

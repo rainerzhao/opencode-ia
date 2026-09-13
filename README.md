@@ -94,7 +94,7 @@ DEMO_PORT=4321 npm run demo
 | 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
 | MySQL 单一数据层 | ✅ Mac 真库已验收 | MySQL-only 生产组合、真实 MySQL HTTP/WebSocket 冒烟及 SQL/附件恢复演练已通过；Linux 切换仍待预发布验收 |
 | 知识与方案闭环 | ✅ Stage 3 已完成 Mac 验收 | 对话可人工沉淀为私有方案，再转换为私有知识；支持来源、附件、预览、导入导出、版本差异和历史版本恢复 |
-| 内网生产服务 | 🚧 预发布模板 | 已提供连接外部云 MySQL 的 Compose、systemd、Nginx 和探活契约；Linux 真机、内部模型与生产验收待进行 |
+| 内网生产服务 | 🚧 Linux CI 已通过 | 云 MySQL/TLS、Linux 镜像构建和基础运行检查通过；公司环境、内部模型与生产验收待进行 |
 
 多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
 
@@ -226,7 +226,7 @@ Linux 预发布启动前可执行 `npm run preflight:production`：它会拒绝 
 
 公司云 MySQL 可通过 `mysqls://` 加密连接，并校验证书和数据库域名；应用、管理员初始化、备份与恢复共用 CA 配置。使用内部 CA 时，按[部署手册](docs/operations/intranet-deployment.md)挂载证书文件。
 
-部署模板将附件、受管工作区、Skill 安装包及 OpenCode 运行数据保存在独立持久目录，更新代码时继续使用同一份数据；已验证更换代码目录后附件可读取，以及真实 OpenCode Worker 重启后保留 Session 身份。Compose 通过宿主机回环端口接入 Nginx。Linux 镜像和公司环境仍需实际验收。
+部署模板将附件、受管工作区、Skill 安装包及 OpenCode 运行数据保存在独立持久目录，更新代码时继续使用同一份数据；已验证更换代码目录后附件可读取，以及真实 OpenCode Worker 重启后保留 Session 身份。Compose 通过宿主机回环端口接入 Nginx。Linux 镜像已通过 CI 构建与基础检查，公司环境仍需实际验收。
 
 ### Stage 1A：创建首位管理员
 
