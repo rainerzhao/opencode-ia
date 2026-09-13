@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { normalizeRequirement, normalizeInteraction, normalizeRequirementQuery } = require('./requirement-input');
 const { normalizeFieldTemplate, normalizeFieldValue } = require('./requirement-fields');
+const { parseDraftOutput } = require('./requirement-drafts');
 
 function failure(code, message) { const error = new Error(message); error.code = code; return error; }
 function validId(value, code) { if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(value)) throw failure(code, 'identifier is invalid'); return value; }
@@ -12,6 +13,7 @@ function interaction(row) { return row && ({ id: row.id, requirementId: row.requ
 function link(row) { return row && ({ id: row.id, requirementId: row.requirement_id, resourceType: row.resource_type, resourceId: row.resource_id, versionId: row.version_id, title: row.title, createdAt: row.created_at }); }
 function template(row) { return row && ({ id: row.id, key: row.field_key, label: row.label, type: row.field_type, options: JSON.parse(row.options_json), required: Boolean(row.required), status: row.status, schemaVersion: row.schema_version, createdAt: row.created_at, updatedAt: row.updated_at }); }
 function fieldValue(row) { const schema = JSON.parse(row.template_snapshot_json); return { templateId: row.template_id, key: schema.key, label: schema.label, type: schema.type, schemaVersion: row.template_schema_version, value: JSON.parse(row.value_json) }; }
+function draft(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, sourceConversationId: row.source_conversation_id, sourceFirstSequence: row.source_first_sequence, sourceLastSequence: row.source_last_sequence, sourceSha256: row.source_sha256, gatewayJobId: row.gateway_job_id, status: row.status, draft: row.draft_json ? JSON.parse(row.draft_json) : null, errorCode: row.error_code, confirmedRequirementId: row.confirmed_requirement_id, createdAt: row.created_at, updatedAt: row.updated_at, resolvedAt: row.resolved_at }); }
 function summary(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, responsibleUserId: row.responsible_user_id, buId: row.bu_id, buName: row.bu_name, title: row.title, scenario: row.scenario, description: row.description, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at }); }
 
 function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () => new Date().toISOString() } = {}) {
@@ -28,6 +30,7 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
   const activeTemplate = db.prepare("SELECT * FROM requirement_field_templates WHERE id = ? AND status = 'active'");
   const selectTemplate = db.prepare('SELECT * FROM requirement_field_templates WHERE id = ?');
   const valuesFor = db.prepare('SELECT * FROM requirement_field_values WHERE requirement_id = ? ORDER BY created_at, id');
+  const draftByOwner = db.prepare('SELECT * FROM requirement_drafts WHERE id = ? AND owner_user_id = ?');
 
   function mustOwn(id, ownerUserId) { const row = selectRequirement.get(validId(id, 'INVALID_REQUIREMENT_ID'), validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR')); if (!row) throw failure('REQUIREMENT_NOT_FOUND', 'requirement was not found'); return row; }
   function mustAdmin(actor, code = 'BUSINESS_UNIT_NOT_FOUND') { if (actor?.actorRole !== 'admin') throw failure(code, 'resource was not found'); return validId(actor.actorUserId, 'INVALID_REQUIREMENT_ACTOR'); }
@@ -81,6 +84,49 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     db.prepare('DELETE FROM requirement_field_values WHERE requirement_id = ? AND owner_user_id = ?').run(requirementId, ownerUserId);
     const insert = db.prepare('INSERT INTO requirement_field_values (id, requirement_id, owner_user_id, template_id, template_schema_version, template_snapshot_json, value_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     for (const entry of normalized) insert.run(validId(idFactory(), 'INVALID_REQUIREMENT_FIELD_VALUE'), requirementId, ownerUserId, entry.item.id, entry.item.schemaVersion, JSON.stringify({ key: entry.item.key, label: entry.item.label, type: entry.item.type, options: entry.item.options, required: entry.item.required }), JSON.stringify(entry.value), time, time);
+  }
+  function ownedDraft(id, ownerUserId) { const row = draftByOwner.get(validId(id, 'INVALID_REQUIREMENT_DRAFT'), validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR')); if (!row) throw failure('REQUIREMENT_DRAFT_NOT_FOUND', 'requirement draft was not found'); return row; }
+  function createRequirementDraft({ ownerUserId, sourceConversationId, sourceFirstSequence, sourceLastSequence, sourceSha256, gatewayJobId } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const conversationId = validId(sourceConversationId, 'INVALID_REQUIREMENT_DRAFT'); const jobId = validId(gatewayJobId, 'INVALID_REQUIREMENT_DRAFT');
+    if (!Number.isSafeInteger(sourceFirstSequence) || !Number.isSafeInteger(sourceLastSequence) || sourceFirstSequence < 1 || sourceLastSequence < sourceFirstSequence || sourceLastSequence - sourceFirstSequence >= 1000 || typeof sourceSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sourceSha256)) throw failure('INVALID_REQUIREMENT_DRAFT', 'requirement draft is invalid');
+    const conversation = db.prepare("SELECT id FROM conversations WHERE id = ? AND owner_user_id = ? AND status = 'active'").get(conversationId, owner); const job = db.prepare('SELECT id FROM gateway_jobs WHERE id = ? AND conversation_id = ? AND user_id = ?').get(jobId, conversationId, owner);
+    if (!conversation || !job) throw failure('REQUIREMENT_DRAFT_SOURCE_NOT_FOUND', 'requirement draft source was not found'); const id = validId(idFactory(), 'INVALID_REQUIREMENT_DRAFT'); const time = now(clock);
+    db.prepare("INSERT INTO requirement_drafts (id, owner_user_id, source_conversation_id, source_first_sequence, source_last_sequence, source_sha256, gateway_job_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'generating', ?, ?)").run(id, owner, conversationId, sourceFirstSequence, sourceLastSequence, sourceSha256, jobId, time, time); return draft(draftByOwner.get(id, owner));
+  }
+  function getRequirementDraft({ ownerUserId, id } = {}) { return draft(ownedDraft(id, ownerUserId)); }
+  function findRequirementDraftByGatewayJob({ ownerUserId, gatewayJobId } = {}) { const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const jobId = validId(gatewayJobId, 'INVALID_REQUIREMENT_DRAFT'); return draft(db.prepare('SELECT * FROM requirement_drafts WHERE owner_user_id = ? AND gateway_job_id = ?').get(owner, jobId)); }
+  function listRequirementDrafts({ ownerUserId } = {}) { const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); return db.prepare('SELECT * FROM requirement_drafts WHERE owner_user_id = ? ORDER BY updated_at DESC, id DESC').all(owner).map(draft); }
+  function resolveRequirementDraft({ ownerUserId, id, draft: output } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const existing = ownedDraft(id, owner); if (existing.status !== 'generating') return draft(existing); const parsed = parseDraftOutput(JSON.stringify(output)); const time = now(clock);
+    db.prepare("UPDATE requirement_drafts SET status = 'ready', draft_json = ?, error_code = NULL, updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ? AND status = 'generating'").run(JSON.stringify(parsed), time, time, existing.id, owner); return draft(draftByOwner.get(existing.id, owner));
+  }
+  function failRequirementDraft({ ownerUserId, id, errorCode } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const existing = ownedDraft(id, owner); if (existing.status !== 'generating') return draft(existing); if (typeof errorCode !== 'string' || !/^[A-Z0-9_]{1,100}$/.test(errorCode)) throw failure('INVALID_REQUIREMENT_DRAFT', 'requirement draft is invalid'); const time = now(clock);
+    db.prepare("UPDATE requirement_drafts SET status = 'failed', error_code = ?, updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ? AND status = 'generating'").run(errorCode, time, time, existing.id, owner); return draft(draftByOwner.get(existing.id, owner));
+  }
+  function rejectRequirementDraft({ ownerUserId, id } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const existing = ownedDraft(id, owner); if (!['generating', 'ready', 'failed'].includes(existing.status)) return draft(existing); const time = now(clock);
+    db.prepare("UPDATE requirement_drafts SET status = 'rejected', updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ?").run(time, time, existing.id, owner); return draft(draftByOwner.get(existing.id, owner));
+  }
+  function confirmRequirementDraft({ ownerUserId, id, buId, title, scenario, description, status, fieldValues } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR');
+    return transaction(() => {
+      const existing = ownedDraft(id, owner);
+      if (existing.status === 'confirmed') {
+        const requirement = summary(selectRequirement.get(existing.confirmed_requirement_id, owner));
+        if (!requirement) throw failure('REQUIREMENT_DRAFT_NOT_FOUND', 'requirement draft was not found');
+        return { draft: draft(existing), requirement };
+      }
+      if (existing.status !== 'ready') throw failure('REQUIREMENT_DRAFT_NOT_READY', 'requirement draft is not ready');
+      const output = JSON.parse(existing.draft_json);
+      const input = normalizeRequirement({ title: title ?? output.title, buId, scenario: scenario ?? output.scenario, description: description ?? output.description, status: status ?? 'draft', fieldValues: fieldValues ?? output.fieldValues });
+      const requirementId = validId(idFactory(), 'INVALID_REQUIREMENT_ID'); const time = now(clock);
+      if (!activeUnit.get(input.buId)) throw failure('BUSINESS_UNIT_NOT_FOUND', 'business unit was not found');
+      db.prepare('INSERT INTO requirements (id, owner_user_id, responsible_user_id, bu_id, title, scenario, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(requirementId, owner, owner, input.buId, input.title, input.scenario, input.description, input.status, time, time);
+      replaceFieldValues({ requirementId, ownerUserId: owner, entries: input.fieldValues, time, enforceRequired: true });
+      db.prepare("UPDATE requirement_drafts SET status = 'confirmed', confirmed_requirement_id = ?, updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ? AND status = 'ready'").run(requirementId, time, time, existing.id, owner);
+      return { draft: draft(draftByOwner.get(existing.id, owner)), requirement: summary(selectRequirement.get(requirementId, owner)) };
+    });
   }
   function createRequirement({ ownerUserId, ...body } = {}) {
     const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const input = normalizeRequirement(body);
@@ -138,7 +184,7 @@ function createRequirementStore(db, { idFactory = crypto.randomUUID, clock = () 
     const rows = db.prepare(`SELECT r.*, b.name AS bu_name FROM requirements r JOIN business_units b ON b.id = r.bu_id WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT ? OFFSET ?`).all(...values, input.limit, input.offset).map(summary);
     return { items: rows, total, limit: input.limit, offset: input.offset };
   }
-  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createFieldTemplate, listFieldTemplates, updateFieldTemplate, archiveFieldTemplate, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
+  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createFieldTemplate, listFieldTemplates, updateFieldTemplate, archiveFieldTemplate, createRequirementDraft, getRequirementDraft, findRequirementDraftByGatewayJob, listRequirementDrafts, resolveRequirementDraft, failRequirementDraft, rejectRequirementDraft, confirmRequirementDraft, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
 }
 
 module.exports = { createRequirementStore };

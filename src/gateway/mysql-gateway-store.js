@@ -98,6 +98,7 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     });
   }
   async function getJob({ id, userId } = {}) { const row = await db.one(`SELECT * FROM gateway_jobs WHERE id = ?${userId ? ' AND user_id = ?' : ''}`, userId ? [id, userId] : [id]); return job(row); }
+  async function listEventsForJob({ id, userId } = {}) { const target = await getJob({ id, userId }); if (!target) return null; return (await db.many('SELECT * FROM gateway_events WHERE job_id = ? ORDER BY sequence', [target.id])).map(event); }
   async function listQueuedJobs() { return (await db.many("SELECT * FROM gateway_jobs WHERE status = 'queued' ORDER BY created_at, id")).map(job); }
   async function listJobMetadata() {
     return (await db.many('SELECT id, conversation_id AS conversationId, user_id AS userId, worker_id AS workerId, status, created_at AS createdAt, started_at AS startedAt, finished_at AS finishedAt FROM gateway_jobs ORDER BY created_at DESC, id DESC LIMIT 200')).map((row) => ({ ...row, createdAt: date(row, 'createdAt'), startedAt: date(row, 'startedAt'), finishedAt: date(row, 'finishedAt') }));
@@ -155,7 +156,7 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
   async function getJobByIdempotency({ userId, idempotencyKey }) {
     return job(await db.one('SELECT * FROM gateway_jobs WHERE user_id = ? AND idempotency_key = ?', [userId, idempotencyKey]));
   }
-  return Object.freeze({ appendEvent: (input) => db.transaction((tx) => insertEvent(tx, input)), archiveConversation, attachJobBinding, bindOpenCodeSession, createConversation, createJob, getJob, getJobByIdempotency, getLatestEventSequence, getOpenCodeSession: async ({ conversationId }) => session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId])), getOwnedConversation, listConversationMetadata, listConversations, listEventsAfter, listJobMetadata, listQueuedJobs, listRecoveringSessions, markWorkerSessionsRecovering, recoverOnStartup, setSessionRecoveryStatus, transitionJob: transition, updateConversation, upsertWorker });
+  return Object.freeze({ appendEvent: (input) => db.transaction((tx) => insertEvent(tx, input)), archiveConversation, attachJobBinding, bindOpenCodeSession, createConversation, createJob, getJob, getJobByIdempotency, getLatestEventSequence, getOpenCodeSession: async ({ conversationId }) => session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId])), getOwnedConversation, listConversationMetadata, listConversations, listEventsAfter, listEventsForJob, listJobMetadata, listQueuedJobs, listRecoveringSessions, markWorkerSessionsRecovering, recoverOnStartup, setSessionRecoveryStatus, transitionJob: transition, updateConversation, upsertWorker });
 }
 
 module.exports = { createMySqlGatewayStore };

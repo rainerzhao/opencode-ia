@@ -81,3 +81,33 @@ test('only administrators govern templates and requirement values stay owner-pri
   assert.equal(store.getRequirement({ ownerUserId: 'owner', id: requirement.id }).fieldValues[0].value, 'P1');
   db.close();
 });
+
+test('keeps an OpenCode requirement draft private and records confirmation separately from its source', () => {
+  const { db, store } = setup();
+  db.prepare(`INSERT INTO conversations (id, owner_user_id, title, status, created_at, updated_at) VALUES ('conv-1', 'owner', '原始沟通', 'active', '2026-09-14T00:00:00.000Z', '2026-09-14T00:00:00.000Z')`).run();
+  db.prepare(`INSERT INTO gateway_jobs (id, conversation_id, user_id, idempotency_key, input_text, status, created_at, updated_at) VALUES ('job-1', 'conv-1', 'owner', 'draft-1', '整理需求', 'completed', '2026-09-14T00:00:00.000Z', '2026-09-14T00:00:00.000Z')`).run();
+  const draft = store.createRequirementDraft({ ownerUserId: 'owner', sourceConversationId: 'conv-1', sourceFirstSequence: 1, sourceLastSequence: 4, sourceSha256: 'a'.repeat(64), gatewayJobId: 'job-1' });
+  assert.equal(draft.status, 'generating');
+  assert.throws(() => store.getRequirementDraft({ ownerUserId: 'other', id: draft.id }), { code: 'REQUIREMENT_DRAFT_NOT_FOUND' });
+  const ready = store.resolveRequirementDraft({ ownerUserId: 'owner', id: draft.id, draft: { title: '需求', scenario: '', description: '', fieldValues: [], needsClarification: ['确认范围'] } });
+  assert.equal(ready.status, 'ready');
+  assert.equal(ready.sourceConversationId, 'conv-1');
+  assert.equal(ready.draft.needsClarification[0], '确认范围');
+  assert.equal(store.rejectRequirementDraft({ ownerUserId: 'owner', id: draft.id }).status, 'rejected');
+  db.close();
+});
+
+test('confirms a ready draft exactly once by creating a private requirement through normal validation', () => {
+  const { db, store } = setup();
+  const bu = store.createBusinessUnit({ actorUserId: 'admin', actorRole: 'admin', name: '确认 BU' });
+  db.prepare(`INSERT INTO conversations (id, owner_user_id, title, status, created_at, updated_at) VALUES ('conv-confirm', 'owner', '对话', 'active', '2026-09-14T00:00:00.000Z', '2026-09-14T00:00:00.000Z')`).run();
+  db.prepare(`INSERT INTO gateway_jobs (id, conversation_id, user_id, idempotency_key, input_text, status, created_at, updated_at) VALUES ('job-confirm', 'conv-confirm', 'owner', 'draft-confirm', '整理需求', 'completed', '2026-09-14T00:00:00.000Z', '2026-09-14T00:00:00.000Z')`).run();
+  const draft = store.createRequirementDraft({ ownerUserId: 'owner', sourceConversationId: 'conv-confirm', sourceFirstSequence: 1, sourceLastSequence: 1, sourceSha256: 'b'.repeat(64), gatewayJobId: 'job-confirm' });
+  store.resolveRequirementDraft({ ownerUserId: 'owner', id: draft.id, draft: { title: 'AI 草稿', scenario: '', description: '待确认', fieldValues: [], needsClarification: [] } });
+  const first = store.confirmRequirementDraft({ ownerUserId: 'owner', id: draft.id, buId: bu.id });
+  assert.equal(first.requirement.title, 'AI 草稿');
+  assert.equal(first.draft.status, 'confirmed');
+  assert.equal(store.confirmRequirementDraft({ ownerUserId: 'owner', id: draft.id, buId: bu.id }).requirement.id, first.requirement.id);
+  assert.equal(store.listRequirements({ ownerUserId: 'owner' }).total, 1);
+  db.close();
+});

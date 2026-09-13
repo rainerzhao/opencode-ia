@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { toIsoTimestamp, toMySqlTimestamp } = require('../users/mysql-user-store');
 const { normalizeRequirement, normalizeInteraction, normalizeRequirementQuery } = require('./requirement-input');
 const { normalizeFieldTemplate, normalizeFieldValue } = require('./requirement-fields');
+const { parseDraftOutput } = require('./requirement-drafts');
 
 function failure(code, message) { const error = new Error(message); error.code = code; return error; }
 function validId(value, code) { if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(value)) throw failure(code, 'identifier is invalid'); return value; }
@@ -15,6 +16,7 @@ function link(row) { return row && ({ id: row.id, requirementId: row.requirement
 function json(value) { return typeof value === 'string' ? JSON.parse(value) : value; }
 function template(row) { return row && ({ id: row.id, key: row.field_key, label: row.label, type: row.field_type, options: json(row.options_json), required: Boolean(row.required), status: row.status, schemaVersion: row.schema_version, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }); }
 function fieldValue(row) { const schema = json(row.template_snapshot_json); return { templateId: row.template_id, key: schema.key, label: schema.label, type: schema.type, schemaVersion: row.template_schema_version, value: json(row.value_json) }; }
+function draft(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, sourceConversationId: row.source_conversation_id, sourceFirstSequence: Number(row.source_first_sequence), sourceLastSequence: Number(row.source_last_sequence), sourceSha256: row.source_sha256, gatewayJobId: row.gateway_job_id, status: row.status, draft: row.draft_json ? json(row.draft_json) : null, errorCode: row.error_code, confirmedRequirementId: row.confirmed_requirement_id, createdAt: date(row.created_at), updatedAt: date(row.updated_at), resolvedAt: date(row.resolved_at) }); }
 function summary(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, responsibleUserId: row.responsible_user_id, buId: row.bu_id, buName: row.bu_name, title: row.title, scenario: row.scenario, description: row.description, status: row.status, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }); }
 
 function createMySqlRequirementStore(db, { idFactory = crypto.randomUUID, clock = () => new Date().toISOString() } = {}) {
@@ -72,6 +74,44 @@ function createMySqlRequirementStore(db, { idFactory = crypto.randomUUID, clock 
     await executor.query('DELETE FROM requirement_field_values WHERE requirement_id = ? AND owner_user_id = ?', [requirementId, ownerUserId]);
     for (const entry of normalized) await executor.query('INSERT INTO requirement_field_values (id, requirement_id, owner_user_id, template_id, template_schema_version, template_snapshot_json, value_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [validId(idFactory(), 'INVALID_REQUIREMENT_FIELD_VALUE'), requirementId, ownerUserId, entry.item.id, entry.item.schemaVersion, JSON.stringify({ key: entry.item.key, label: entry.item.label, type: entry.item.type, options: entry.item.options, required: entry.item.required }), JSON.stringify(entry.value), time, time]);
   }
+  async function ownedDraft(id, ownerUserId, executor = db) { const row = await executor.one('SELECT * FROM requirement_drafts WHERE id = ? AND owner_user_id = ?', [validId(id, 'INVALID_REQUIREMENT_DRAFT'), validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR')]); if (!row) throw failure('REQUIREMENT_DRAFT_NOT_FOUND', 'requirement draft was not found'); return row; }
+  async function createRequirementDraft({ ownerUserId, sourceConversationId, sourceFirstSequence, sourceLastSequence, sourceSha256, gatewayJobId } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const conversationId = validId(sourceConversationId, 'INVALID_REQUIREMENT_DRAFT'); const jobId = validId(gatewayJobId, 'INVALID_REQUIREMENT_DRAFT');
+    if (!Number.isSafeInteger(sourceFirstSequence) || !Number.isSafeInteger(sourceLastSequence) || sourceFirstSequence < 1 || sourceLastSequence < sourceFirstSequence || sourceLastSequence - sourceFirstSequence >= 1000 || typeof sourceSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sourceSha256)) throw failure('INVALID_REQUIREMENT_DRAFT', 'requirement draft is invalid');
+    return db.transaction(async (tx) => {
+      const conversation = await tx.one("SELECT id FROM conversations WHERE id = ? AND owner_user_id = ? AND status = 'active' FOR UPDATE", [conversationId, owner]); const job = await tx.one('SELECT id FROM gateway_jobs WHERE id = ? AND conversation_id = ? AND user_id = ? FOR UPDATE', [jobId, conversationId, owner]); if (!conversation || !job) throw failure('REQUIREMENT_DRAFT_SOURCE_NOT_FOUND', 'requirement draft source was not found');
+      const id = validId(idFactory(), 'INVALID_REQUIREMENT_DRAFT'); const time = timestamp(clock); await tx.query("INSERT INTO requirement_drafts (id, owner_user_id, source_conversation_id, source_first_sequence, source_last_sequence, source_sha256, gateway_job_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'generating', ?, ?)", [id, owner, conversationId, sourceFirstSequence, sourceLastSequence, sourceSha256, jobId, time, time]); return draft(await tx.one('SELECT * FROM requirement_drafts WHERE id = ?', [id]));
+    });
+  }
+  async function getRequirementDraft({ ownerUserId, id } = {}) { return draft(await ownedDraft(id, ownerUserId)); }
+  async function findRequirementDraftByGatewayJob({ ownerUserId, gatewayJobId } = {}) { const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const jobId = validId(gatewayJobId, 'INVALID_REQUIREMENT_DRAFT'); return draft(await db.one('SELECT * FROM requirement_drafts WHERE owner_user_id = ? AND gateway_job_id = ?', [owner, jobId])); }
+  async function listRequirementDrafts({ ownerUserId } = {}) { const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); return (await db.many('SELECT * FROM requirement_drafts WHERE owner_user_id = ? ORDER BY updated_at DESC, id DESC', [owner])).map(draft); }
+  async function resolveRequirementDraft({ ownerUserId, id, draft: output } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); return db.transaction(async (tx) => { const existing = await ownedDraft(id, owner, tx); if (existing.status !== 'generating') return draft(existing); const parsed = parseDraftOutput(JSON.stringify(output)); const time = timestamp(clock); await tx.query("UPDATE requirement_drafts SET status = 'ready', draft_json = ?, error_code = NULL, updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ? AND status = 'generating'", [JSON.stringify(parsed), time, time, existing.id, owner]); return draft(await tx.one('SELECT * FROM requirement_drafts WHERE id = ?', [existing.id])); });
+  }
+  async function failRequirementDraft({ ownerUserId, id, errorCode } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); if (typeof errorCode !== 'string' || !/^[A-Z0-9_]{1,100}$/.test(errorCode)) throw failure('INVALID_REQUIREMENT_DRAFT', 'requirement draft is invalid'); return db.transaction(async (tx) => { const existing = await ownedDraft(id, owner, tx); if (existing.status !== 'generating') return draft(existing); const time = timestamp(clock); await tx.query("UPDATE requirement_drafts SET status = 'failed', error_code = ?, updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ? AND status = 'generating'", [errorCode, time, time, existing.id, owner]); return draft(await tx.one('SELECT * FROM requirement_drafts WHERE id = ?', [existing.id])); });
+  }
+  async function rejectRequirementDraft({ ownerUserId, id } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); return db.transaction(async (tx) => { const existing = await ownedDraft(id, owner, tx); if (!['generating', 'ready', 'failed'].includes(existing.status)) return draft(existing); const time = timestamp(clock); await tx.query("UPDATE requirement_drafts SET status = 'rejected', updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ?", [time, time, existing.id, owner]); return draft(await tx.one('SELECT * FROM requirement_drafts WHERE id = ?', [existing.id])); });
+  }
+  async function confirmRequirementDraft({ ownerUserId, id, buId, title, scenario, description, status, fieldValues } = {}) {
+    const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR');
+    return db.transaction(async (tx) => {
+      const existing = await ownedDraft(id, owner, tx);
+      if (existing.status === 'confirmed') {
+        const requirement = summary(await owned(existing.confirmed_requirement_id, owner, tx));
+        return { draft: draft(existing), requirement };
+      }
+      if (existing.status !== 'ready') throw failure('REQUIREMENT_DRAFT_NOT_READY', 'requirement draft is not ready');
+      const output = json(existing.draft_json); const input = normalizeRequirement({ title: title ?? output.title, buId, scenario: scenario ?? output.scenario, description: description ?? output.description, status: status ?? 'draft', fieldValues: fieldValues ?? output.fieldValues });
+      await activeUnit(input.buId, tx, { lock: true }); const requirementId = validId(idFactory(), 'INVALID_REQUIREMENT_ID'); const time = timestamp(clock);
+      await tx.query('INSERT INTO requirements (id, owner_user_id, responsible_user_id, bu_id, title, scenario, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [requirementId, owner, owner, input.buId, input.title, input.scenario, input.description, input.status, time, time]);
+      await replaceFieldValues({ requirementId, ownerUserId: owner, entries: input.fieldValues, time, executor: tx, enforceRequired: true });
+      await tx.query("UPDATE requirement_drafts SET status = 'confirmed', confirmed_requirement_id = ?, updated_at = ?, resolved_at = ? WHERE id = ? AND owner_user_id = ? AND status = 'ready'", [requirementId, time, time, existing.id, owner]);
+      return { draft: draft(await tx.one('SELECT * FROM requirement_drafts WHERE id = ?', [existing.id])), requirement: summary(await owned(requirementId, owner, tx)) };
+    });
+  }
   async function createRequirement({ ownerUserId, ...body } = {}) {
     const owner = validId(ownerUserId, 'INVALID_REQUIREMENT_ACTOR'); const input = normalizeRequirement(body);
     const id = validId(idFactory(), 'INVALID_REQUIREMENT_ID'); const time = timestamp(clock);
@@ -128,7 +168,7 @@ function createMySqlRequirementStore(db, { idFactory = crypto.randomUUID, clock 
     const where = clauses.join(' AND '); const total = Number((await db.one(`SELECT COUNT(*) AS count FROM requirements r WHERE ${where}`, values))?.count || 0);
     const rows = await db.many(`SELECT r.*, b.name AS bu_name FROM requirements r JOIN business_units b ON b.id = r.bu_id WHERE ${where} ORDER BY r.updated_at DESC, r.id DESC LIMIT ? OFFSET ?`, [...values, input.limit, input.offset]); return { items: rows.map(summary), total, limit: input.limit, offset: input.offset };
   }
-  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createFieldTemplate, listFieldTemplates, updateFieldTemplate, archiveFieldTemplate, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
+  return Object.freeze({ createBusinessUnit, listBusinessUnits, archiveBusinessUnit, createFieldTemplate, listFieldTemplates, updateFieldTemplate, archiveFieldTemplate, createRequirementDraft, getRequirementDraft, findRequirementDraftByGatewayJob, listRequirementDrafts, resolveRequirementDraft, failRequirementDraft, rejectRequirementDraft, confirmRequirementDraft, createRequirement, getRequirement, updateRequirement, addInteraction, addRequirementLink, removeRequirementLink, listRequirements });
 }
 
 module.exports = { createMySqlRequirementStore };

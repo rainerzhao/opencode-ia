@@ -13,13 +13,15 @@ function mapError(error) {
     INVALID_BUSINESS_UNIT: 400, INVALID_REQUIREMENT_INTERACTION: 400, INVALID_REQUIREMENT_LINK: 400,
     REQUIREMENT_LINK_TARGET_NOT_FOUND: 404, REQUIREMENT_LINK_NOT_FOUND: 404, REQUIREMENT_LINK_EXISTS: 409,
     INVALID_REQUIREMENT_FIELD_TEMPLATE: 400, INVALID_REQUIREMENT_FIELD_VALUE: 400, INVALID_REQUIREMENT_FIELD_VALUES: 400,
-    REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND: 404, REQUIREMENT_FIELD_TEMPLATE_EXISTS: 409, REQUIRED_REQUIREMENT_FIELD_VALUE: 400
+    REQUIREMENT_FIELD_TEMPLATE_NOT_FOUND: 404, REQUIREMENT_FIELD_TEMPLATE_EXISTS: 409, REQUIRED_REQUIREMENT_FIELD_VALUE: 400,
+    REQUIREMENT_DRAFT_NOT_FOUND: 404, REQUIREMENT_DRAFT_SOURCE_NOT_FOUND: 404, REQUIREMENT_DRAFT_NOT_READY: 409,
+    INVALID_REQUIREMENT_DRAFT: 400, INVALID_REQUIREMENT_DRAFT_REQUEST: 400, INVALID_REQUIREMENT_DRAFT_OUTPUT: 422
   };
   if (statuses[error.code]) error.status = statuses[error.code]; return error;
 }
 function audit(req, auditor, action, targetType, targetId, metadata) { auditor.record(req, { action, targetType, targetId, metadata }); }
 
-function createRequirementRouter({ store, requestAuditor, requireAdmin }) {
+function createRequirementRouter({ store, requestAuditor, requireAdmin, draftService = null }) {
   if (!store || !requestAuditor || typeof requireAdmin !== 'function') throw new TypeError('requirement route dependencies are required');
   const router = express.Router();
   router.get('/business-units', asyncRoute(async (_req, res) => res.json({ businessUnits: await store.listBusinessUnits({ activeOnly: true }) })));
@@ -44,6 +46,24 @@ function createRequirementRouter({ store, requestAuditor, requireAdmin }) {
     const fieldTemplate = await store.archiveFieldTemplate({ actorUserId: req.auth.user.id, actorRole: req.auth.user.role, id: requirementId(req.params.templateId) });
     audit(req, requestAuditor, 'requirement.field_template.archive', 'requirement_field_template', fieldTemplate.id, { status: fieldTemplate.status }); res.status(204).end();
   }));
+  if (draftService) {
+    router.get('/drafts', asyncRoute(async (req, res) => res.json({ drafts: await store.listRequirementDrafts({ ownerUserId: req.auth.user.id }) })));
+    router.post('/drafts', asyncRoute(async (req, res) => {
+      const draft = await draftService.request({ ownerUserId: req.auth.user.id, ...req.body });
+      audit(req, requestAuditor, 'requirement.draft.request', 'requirement_draft', draft.id, { sourceConversationId: draft.sourceConversationId, status: draft.status }); res.status(202).json({ draft });
+    }));
+    router.get('/drafts/:draftId', asyncRoute(async (req, res) => {
+      const draft = await draftService.reconcile({ ownerUserId: req.auth.user.id, id: requirementId(req.params.draftId) }); res.json({ draft });
+    }));
+    router.post('/drafts/:draftId/confirm', asyncRoute(async (req, res) => {
+      const result = await draftService.confirm({ ownerUserId: req.auth.user.id, id: requirementId(req.params.draftId), ...req.body });
+      audit(req, requestAuditor, 'requirement.draft.confirm', 'requirement_draft', result.draft.id, { requirementId: result.requirement.id }); res.status(201).json(result);
+    }));
+    router.post('/drafts/:draftId/reject', asyncRoute(async (req, res) => {
+      const draft = await store.rejectRequirementDraft({ ownerUserId: req.auth.user.id, id: requirementId(req.params.draftId) });
+      audit(req, requestAuditor, 'requirement.draft.reject', 'requirement_draft', draft.id, { status: draft.status }); res.json({ draft });
+    }));
+  }
   router.get('/', asyncRoute(async (req, res) => {
     const query = normalizeRequirementQuery(req.query || {});
     res.json(await store.listRequirements({ ownerUserId: req.auth.user.id, ...query, query: query.query }));

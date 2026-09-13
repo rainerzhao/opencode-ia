@@ -296,6 +296,22 @@ const MYSQL_MIGRATIONS = Object.freeze([
       INDEX requirement_field_values_requirement_idx (requirement_id, created_at, id),
       INDEX requirement_field_values_owner_template_idx (owner_user_id, template_id)
     ) ENGINE=InnoDB`
+  ] }),
+  Object.freeze({ version: 14, statements: [
+    `CREATE TABLE requirement_drafts (
+      id VARCHAR(200) PRIMARY KEY, owner_user_id VARCHAR(200) NOT NULL, source_conversation_id VARCHAR(200) NOT NULL,
+      source_first_sequence BIGINT UNSIGNED NOT NULL, source_last_sequence BIGINT UNSIGNED NOT NULL,
+      source_sha256 CHAR(64) NOT NULL, gateway_job_id VARCHAR(200) NULL UNIQUE,
+      status ENUM('generating','ready','failed','confirmed','rejected') NOT NULL, draft_json JSON NULL, error_code VARCHAR(100) NULL,
+      confirmed_requirement_id VARCHAR(200) NULL, created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL, resolved_at DATETIME(3) NULL,
+      CONSTRAINT requirement_drafts_owner_fk FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT requirement_drafts_conversation_fk FOREIGN KEY (source_conversation_id) REFERENCES conversations(id) ON DELETE RESTRICT,
+      CONSTRAINT requirement_drafts_job_fk FOREIGN KEY (gateway_job_id) REFERENCES gateway_jobs(id) ON DELETE SET NULL,
+      CONSTRAINT requirement_drafts_requirement_fk FOREIGN KEY (confirmed_requirement_id) REFERENCES requirements(id) ON DELETE RESTRICT,
+      CONSTRAINT requirement_drafts_range_ck CHECK (source_last_sequence >= source_first_sequence AND source_last_sequence - source_first_sequence < 1000),
+      INDEX requirement_drafts_owner_updated_idx (owner_user_id, updated_at DESC, id),
+      INDEX requirement_drafts_gateway_job_idx (gateway_job_id)
+    ) ENGINE=InnoDB`
   ] })
 ]);
 

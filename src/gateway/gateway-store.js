@@ -411,6 +411,11 @@ function createGatewayStore(db, {
     if (!row || (userId && row.user_id !== userId)) return null;
     return toJob(row);
   }
+  function listEventsForJob({ id, userId } = {}) {
+    const job = getJob({ id, userId });
+    if (!job) return null;
+    return db.prepare('SELECT * FROM gateway_events WHERE job_id = ? ORDER BY sequence').all(job.id).map(toGatewayEvent);
+  }
 
   function getJobByIdempotency({ userId, idempotencyKey }) {
     return toJob(jobByIdempotency.get(userId, idempotencyKey));
@@ -673,6 +678,7 @@ function createGatewayStore(db, {
     createConversation,
     createJob,
     getJob,
+    listEventsForJob,
     getJobByIdempotency,
     getLatestEventSequence,
     getOpenCodeSession,

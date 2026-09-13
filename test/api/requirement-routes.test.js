@@ -7,10 +7,10 @@ const http = require('node:http');
 let createRequirementRouter;
 try { ({ createRequirementRouter } = require('../../src/modules/requirements/routes')); } catch (error) { if (error.code !== 'MODULE_NOT_FOUND') throw error; }
 
-function serverFor(store, events) {
+function serverFor(store, events, draftService = null) {
   const app = express(); app.use(express.json());
   app.use((req, _res, next) => { req.auth = { user: { id: req.get('x-user') || 'owner', role: req.get('x-role') || 'member' } }; req.requestId = 'request-1'; next(); });
-  app.use(createRequirementRouter({ store, requestAuditor: { record(_req, event) { events.push(event); } }, requireAdmin: (req, _res, next) => req.auth.user.role === 'admin' ? next() : next(Object.assign(new Error('forbidden'), { code: 'FORBIDDEN', status: 403 })) }));
+  app.use(createRequirementRouter({ store, requestAuditor: { record(_req, event) { events.push(event); } }, requireAdmin: (req, _res, next) => req.auth.user.role === 'admin' ? next() : next(Object.assign(new Error('forbidden'), { code: 'FORBIDDEN', status: 403 })), draftService }));
   app.use((error, _req, res, _next) => res.status(error.status || 500).json({ error: { code: error.code || 'INTERNAL' } }));
   return http.createServer(app);
 }
@@ -70,4 +70,20 @@ test('allows only an administrator to govern field templates and never audits pr
   const denied = await fetch(`${base}/field-templates`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: 'priority', label: '优先级', type: 'select', options: ['P0'] }) }); assert.equal(denied.status, 403);
   const created = await fetch(`${base}/field-templates`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-role': 'admin', 'x-user': 'admin' }, body: JSON.stringify({ key: 'priority', label: '优先级', type: 'select', options: ['P0'] }) }); assert.equal(created.status, 201); assert.equal(calls[0].actorUserId, 'admin'); assert.deepEqual(events[0], { action: 'requirement.field_template.create', targetType: 'requirement_field_template', targetId: 'field-1', metadata: { key: 'priority', type: 'select', schemaVersion: 1 } });
   const requirement = await fetch(`${base}/`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-user': 'owner' }, body: JSON.stringify({ title: '字段需求', buId: 'bu-1', fieldValues: [{ templateId: 'field-1', value: 'P0' }] }) }); assert.equal(requirement.status, 201); assert.deepEqual(events.at(-1), { action: 'requirement.create', targetType: 'requirement', targetId: 'req-1', metadata: { buId: 'bu-1', status: 'draft' } }); assert.deepEqual(calls.at(-1).fieldValues, [{ templateId: 'field-1', value: 'P0' }]);
+});
+
+test('starts, reads, confirms and rejects an owner-only requirement draft without auditing private draft text', async (t) => {
+  const events = []; const store = {
+    async listBusinessUnits() { return []; }, async listRequirements() { return { items: [], total: 0, limit: 20, offset: 0 }; }, async createBusinessUnit() {}, async archiveBusinessUnit() {}, async createRequirement() {}, async getRequirement() {}, async updateRequirement() {}, async addInteraction() {}, async addRequirementLink() {}, async removeRequirementLink() {}, async listFieldTemplates() { return []; }, async createFieldTemplate() {}, async updateFieldTemplate() {}, async archiveFieldTemplate() {},
+    async listRequirementDrafts() { return []; }, async rejectRequirementDraft(input) { return { id: input.id, status: 'rejected' }; }
+  };
+  const draftService = {
+    async request(input) { return { id: 'draft-1', ownerUserId: input.ownerUserId, sourceConversationId: input.conversationId, status: 'generating' }; },
+    async reconcile(input) { return { id: input.id, status: 'ready', draft: { title: '私人草稿' } }; },
+    async confirm(input) { return { draft: { id: input.id, status: 'confirmed' }, requirement: { id: 'req-1' } }; }
+  };
+  const server = serverFor(store, events, draftService); t.after(() => new Promise((resolve) => server.close(resolve))); await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve)); const base = `http://127.0.0.1:${server.address().port}`;
+  const create = await fetch(`${base}/drafts`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-user': 'owner' }, body: JSON.stringify({ idempotencyKey: 'draft-key', conversationId: 'conv-1', sourceFirstSequence: 1, sourceLastSequence: 2 }) }); assert.equal(create.status, 202); assert.deepEqual(events[0], { action: 'requirement.draft.request', targetType: 'requirement_draft', targetId: 'draft-1', metadata: { sourceConversationId: 'conv-1', status: 'generating' } });
+  const read = await fetch(`${base}/drafts/draft-1`, { headers: { 'x-user': 'owner' } }); assert.equal(read.status, 200); assert.equal((await read.json()).draft.draft.title, '私人草稿');
+  const confirm = await fetch(`${base}/drafts/draft-1/confirm`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-user': 'owner' }, body: JSON.stringify({ buId: 'bu-1' }) }); assert.equal(confirm.status, 201); assert.deepEqual(events.at(-1), { action: 'requirement.draft.confirm', targetType: 'requirement_draft', targetId: 'draft-1', metadata: { requirementId: 'req-1' } });
 });

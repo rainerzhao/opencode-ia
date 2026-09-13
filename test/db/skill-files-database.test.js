@@ -39,7 +39,7 @@ test('upgrades a populated Stage 4A database with the Skill package file schema'
   insertUser(db);
   insertVersion(db);
 
-  assert.deepEqual(migrateDatabase(db), { appliedVersions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13] });
+  assert.deepEqual(migrateDatabase(db), { appliedVersions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] });
   assert.equal(
     db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'skill_files'").get().name,
     'skill_files'

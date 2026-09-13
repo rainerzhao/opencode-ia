@@ -538,6 +538,29 @@ const MIGRATIONS = Object.freeze([
       CREATE INDEX requirement_field_values_requirement_idx ON requirement_field_values(requirement_id, created_at, id);
       CREATE INDEX requirement_field_values_owner_template_idx ON requirement_field_values(owner_user_id, template_id);
     `
+  }),
+  Object.freeze({
+    version: 14,
+    sql: `
+      CREATE TABLE requirement_drafts (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        source_conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE RESTRICT,
+        source_first_sequence INTEGER NOT NULL CHECK (source_first_sequence >= 1),
+        source_last_sequence INTEGER NOT NULL CHECK (source_last_sequence >= source_first_sequence AND source_last_sequence - source_first_sequence < 1000),
+        source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+        gateway_job_id TEXT REFERENCES gateway_jobs(id) ON DELETE SET NULL UNIQUE,
+        status TEXT NOT NULL CHECK (status IN ('generating', 'ready', 'failed', 'confirmed', 'rejected')),
+        draft_json TEXT CHECK (draft_json IS NULL OR json_valid(draft_json)),
+        error_code TEXT,
+        confirmed_requirement_id TEXT REFERENCES requirements(id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        resolved_at TEXT
+      ) STRICT;
+      CREATE INDEX requirement_drafts_owner_updated_idx ON requirement_drafts(owner_user_id, updated_at DESC, id);
+      CREATE INDEX requirement_drafts_gateway_job_idx ON requirement_drafts(gateway_job_id);
+    `
   })
 ]);
 

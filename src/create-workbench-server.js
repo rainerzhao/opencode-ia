@@ -37,6 +37,7 @@ const { createContentRouter } = require('./modules/content/routes');
 const { createContentAttachmentRouter } = require('./modules/content/attachment-routes');
 const { createRequirementRouter } = require('./modules/requirements/routes');
 const { createRequirementStore } = require('./requirements/requirement-store');
+const { createRequirementDraftService } = require('./requirements/requirement-draft-service');
 const { createMetrics } = require('./observability/metrics');
 
 function createWorkbenchServer({
@@ -117,6 +118,11 @@ const activeGatewayService = gatewayService || gatewayServiceFactory?.({
   store: gatewayStore,
   workspacePreparer
 });
+const requirementDraftService = activeGatewayService ? createRequirementDraftService({
+  store: requirementStore,
+  gatewayStore,
+  gatewayService: activeGatewayService
+}) : null;
 const activeSkillRuntimeValidator = skillRuntimeValidator || (
   typeof activeGatewayService?.validateSkillPackage === 'function'
     ? createOpenCodeSkillRuntimeValidator({ gatewayService: activeGatewayService })
@@ -246,7 +252,8 @@ app.use('/api/content', createContentRouter({ store: contentStore, requestAudito
 app.use('/api/requirements', createRequirementRouter({
   store: requirementStore,
   requestAuditor,
-  requireAdmin: authMiddleware.requireRole('admin')
+  requireAdmin: authMiddleware.requireRole('admin'),
+  draftService: requirementDraftService
 }));
 
 function apiError(code, message, status = 400) {
