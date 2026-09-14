@@ -122,6 +122,16 @@ async function main() {
                 .trim();
               return { parts: [{ type: 'text', text: marker }] };
             }
+            if (text.includes('整理一份“需求草稿”')) {
+              const marker = '允许的受控字段模板：';
+              let templates = [];
+              try { templates = JSON.parse(text.slice(text.lastIndexOf(marker) + marker.length)); } catch {}
+              const fieldValues = templates.filter((item) => item.required).map((item) => ({
+                templateId: item.templateId,
+                value: item.type === 'number' ? 1 : item.type === 'select' ? item.options[0] : item.type === 'boolean' ? false : '待人工确认'
+              }));
+              return { parts: [{ type: 'text', text: JSON.stringify({ title: 'Demo 需求草稿', scenario: '隔离演示', description: '由本地 Demo 的结构化样本生成，需人工确认。', fieldValues, needsClarification: ['确认业务影响范围'] }) }] };
+            }
             return { parts: [{ type: 'text', text: `【Demo 模拟回复】${text.trim()}` }] };
           },
           async abortSession() { return {}; }

@@ -39,6 +39,8 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
   const [notice, setNotice] = useState('');
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
   const socketRef = useRef();
   const activeRef = useRef(activeId);
   const statesRef = useRef(states);
@@ -153,6 +155,25 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
     } catch (error) { setNotice(error.message); } finally { setSaving(false); }
   }
 
+  async function requestRequirementDraft() {
+    if (!activeId) return;
+    setDrafting(true); setDraftNotice('');
+    try {
+      const history = await request(`/api/conversations/${encodeURIComponent(activeId)}/events?afterSequence=0&limit=1000`);
+      const events = history.events || [];
+      if (!events.length) { setDraftNotice('当前对话尚无已保存事件，暂时不能生成草稿。'); return; }
+      const result = await request('/api/requirements/drafts', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: globalThis.crypto?.randomUUID?.() || `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          conversationId: activeId, sourceFirstSequence: events[0].sequence, sourceLastSequence: events.at(-1).sequence
+        })
+      });
+      setDraftNotice(`已将本对话事件 ${events[0].sequence}–${events.at(-1).sequence} 交给 OpenCode 生成私有草稿。草稿完成后可在“需求与场景”确认。`);
+      if (result.draft?.status === 'failed') setDraftNotice('草稿生成未通过结构校验，未创建任何需求。请补充事实后重试。');
+    } catch (error) { setDraftNotice(error.message); } finally { setDrafting(false); }
+  }
+
   return <section className="conversation-workspace">
     <ConversationList conversations={conversations} activeId={activeId} busy={creating} onCreate={createConversation} onSelect={(id) => { activeRef.current = id; setActiveId(id); setNotice(''); }} />
     <div className="panel chat">
@@ -162,6 +183,6 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
       <form onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="输入你的问题…" aria-label="对话内容" disabled={!activeId} /><button disabled={!activeId || connection !== 'connected'}>发送</button></form>
       <p className="chat-notice" role="status">{notice}</p>
     </div>
-    {current.messages.length > 0 && <aside className="panel solution-capture"><p className="eyebrow">人工确认后沉淀</p><h3>沉淀为方案</h3><p className="muted">对话不会自动公开，保存后默认仅本人可见。</p><form className="stack" onSubmit={saveSolution}><input name="title" placeholder="方案标题" required /><textarea name="description" placeholder="补充问题背景或约束" /><button disabled={saving}>{saving ? '保存中…' : '保存私有方案'}</button></form></aside>}
+    {current.messages.length > 0 && <aside className="capture-stack"><section className="panel draft-capture"><p className="eyebrow">经 OpenCode Runtime</p><h3>生成需求草稿</h3><p className="muted">仅使用当前对话中明确选择的事件范围（全部已保存事件）；AI 不会自动创建或公开需求。</p><button type="button" onClick={requestRequirementDraft} disabled={drafting || !activeId}>{drafting ? '正在请求…' : '生成需求草稿'}</button><p className="draft-notice" role="status">{draftNotice}</p></section><section className="panel solution-capture"><p className="eyebrow">人工确认后沉淀</p><h3>沉淀为方案</h3><p className="muted">对话不会自动公开，保存后默认仅本人可见。</p><form className="stack" onSubmit={saveSolution}><input name="title" placeholder="方案标题" required /><textarea name="description" placeholder="补充问题背景或约束" /><button disabled={saving}>{saving ? '保存中…' : '保存私有方案'}</button></form></section></aside>}
   </section>;
 }

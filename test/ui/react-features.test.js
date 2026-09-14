@@ -59,6 +59,48 @@ test('requirement workbench makes private BU work discoverable and recordable', 
   });
 });
 
+test('requirement workbench keeps AI drafts private until a member confirms or rejects them', async () => {
+  await withViteModule('features/requirements/RequirementsPage.jsx', ({ RequirementsPage }) => {
+    const html = renderToStaticMarkup(React.createElement(RequirementsPage, {
+      initialRequirements: [], initialBusinessUnits: [{ id: 'bu-1', name: '零售 BU' }], initialFieldTemplates: [],
+      initialDrafts: [{ id: 'draft-1', sourceConversationId: 'conversation-1', status: 'ready', draft: { title: '门店网络改造', scenario: '', description: '', fieldValues: [], needsClarification: ['确认 SLA'] } }]
+    }));
+    assert.match(html, /AI 需求草稿/);
+    assert.match(html, /确认并建立私有需求/);
+    assert.match(html, /拒绝草稿/);
+    assert.match(html, /确认 SLA/);
+  });
+});
+
+test('requirement draft inbox reconciles generating drafts through its private detail endpoint', async () => {
+  await withViteModule('features/requirements/RequirementsPage.jsx', async ({ reconcileDrafts }) => {
+    const calls = [];
+    const drafts = await reconcileDrafts([
+      { id: 'draft-generating', status: 'generating' },
+      { id: 'draft-ready', status: 'ready' }
+    ], async (pathname) => {
+      calls.push(pathname);
+      return { draft: { id: 'draft-generating', status: 'ready', draft: { title: '已整理的草稿' } } };
+    });
+    assert.deepEqual(calls, ['/api/requirements/drafts/draft-generating']);
+    assert.equal(drafts[0].status, 'ready');
+    assert.equal(drafts[1].status, 'ready');
+  });
+});
+
+test('requirement detail shows its own linked assets and a controlled linking entry point', async () => {
+  await withViteModule('features/requirements/RequirementsPage.jsx', ({ RequirementsPage }) => {
+    const html = renderToStaticMarkup(React.createElement(RequirementsPage, {
+      initialRequirements: [{ id: 'req-1', title: '门店网络改造', buName: '零售 BU', status: 'draft', updatedAt: '2026-09-14T08:00:00.000Z', links: [{ id: 'link-1', resourceType: 'conversation', resourceId: 'conversation-1', title: '网络沟通' }] }],
+      initialBusinessUnits: [], initialFieldTemplates: [], initialDrafts: [],
+      initialAssets: { conversations: [{ id: 'conversation-1', title: '网络沟通' }], knowledge: [], solutions: [] }
+    }));
+    assert.match(html, /关联资产/);
+    assert.match(html, /网络沟通/);
+    assert.match(html, /关联私有资产/);
+  });
+});
+
 test('administrator can reach every account recovery control', async () => {
   await withViteModule('features/admin/AdminPage.jsx', ({ AdminPage }) => {
     const html = renderToStaticMarkup(React.createElement(AdminPage, {
@@ -351,6 +393,20 @@ test('chat page exposes private conversation navigation and running controls', a
     assert.match(html, />客户方案复盘</);
     assert.match(html, />正在运行</);
     assert.match(html, />停止任务</);
+  });
+});
+
+test('chat can explicitly request a private requirement draft from bounded conversation events', async () => {
+  await withViteModule('features/chat/ChatPage.jsx', ({ ChatPage }) => {
+    const html = renderToStaticMarkup(React.createElement(ChatPage, {
+      initialConversations: [{ id: 'conversation-1', title: '门店网络沟通' }],
+      initialActiveConversationId: 'conversation-1',
+      initialMessages: [{ id: 'message-1', role: 'assistant', text: '已记录约束' }],
+      initialConnection: 'connected'
+    }));
+    assert.match(html, /生成需求草稿/);
+    assert.match(html, /仅使用当前对话中明确选择的事件范围/);
+    assert.match(html, /AI 不会自动创建或公开需求/);
   });
 });
 
