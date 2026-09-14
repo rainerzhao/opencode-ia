@@ -14,17 +14,19 @@ const { createGatewayService } = require('../../src/gateway/gateway-service');
 const { createFairQueue } = require('../../src/gateway/fair-queue');
 const { createWorkerPool } = require('../../src/gateway/worker-pool');
 const { createWorkerProcess } = require('../../src/gateway/worker-process');
+const { loadCapacityAcceptanceProfile } = require('../../src/gateway/capacity-acceptance-profile');
 
 // Opt-in sends 45 synthetic prompts through the user's configured OpenCode model.
 // Default CI mode exercises the same authenticated HTTP/WS/Gateway path with a fake model.
 const real = process.env.WORKBENCH_REAL_ACCEPTANCE === '1';
 const multiSession = process.env.WORKBENCH_MULTI_SESSION_ACCEPTANCE === '1';
+const profile = loadCapacityAcceptanceProfile(process.env);
 const workerCount = multiSession ? 1 : 2;
 // Fifteen persistent sessions submit together, while provider-facing execution
 // slots remain a separately governed resource. Five slots keep all five users
 // active without assuming the configured model API safely sustains 15 streams.
-const capacity = multiSession ? 5 : 1;
-const globalRunning = multiSession ? 5 : 2;
+const capacity = multiSession ? profile.executionSlots : 1;
+const globalRunning = multiSession ? profile.executionSlots : 2;
 const userRunning = 1;
 
 async function until(check, timeout = real ? 240_000 : 10_000) {
@@ -37,7 +39,7 @@ async function until(check, timeout = real ? 240_000 : 10_000) {
   assert.fail('acceptance deadline exceeded');
 }
 
-test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OPENCODE' : 'SIMULATED MODEL'})`, { timeout: real ? 900_000 : 30_000 }, async (t) => {
+test(`${profile.users} users × ${profile.conversationsPerUser} private conversations × ${profile.rounds} solution rounds (${real ? 'REAL OPENCODE' : 'SIMULATED MODEL'})`, { timeout: real ? 900_000 : 60_000 }, async (t) => {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-five-users-'));
   let gateway;
   let maxRunning = 0;
@@ -109,22 +111,25 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
   });
   await gateway.start();
   const members = [];
-  for (let user = 0; user < 5; user++) members.push(await fixture.createMember({ username: `load.member.${user}` }));
-  const tracks = await Promise.all(members.flatMap((member, user) => Array.from({ length: 3 }, async (_, conversation) => {
-    const response = await fetch(`${fixture.origin}/api/conversations`, { method: 'POST', headers: authHeaders(member, { json: true }), body: JSON.stringify({ title: `方案 ${user}-${conversation}` }) });
-    assert.equal(response.status, 201);
-    const { conversation: record } = await response.json();
+  for (let user = 0; user < profile.users; user++) members.push(await fixture.createMember({ username: `load.member.${user}` }));
+  const tracks = [];
+  for (const [user, member] of members.entries()) {
     const ws = new WebSocket(fixture.origin.replace('http:', 'ws:'), { headers: { cookie: member.cookie } });
     const messages = [];
     ws.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
     ws.on('error', () => {});
     t.after(() => ws.terminate());
     await until(() => messages.some((message) => message.type === 'connected'));
-    ws.send(JSON.stringify({ type: 'subscribe', conversationId: record.id, afterSequence: 0 }));
-    await until(() => messages.some((message) => message.type === 'conversation.snapshot'));
-    return { ws, messages, member, record, marker: `CASE_${crypto.randomBytes(8).toString('hex')}` };
-  })));
-  for (let round = 0; round < 3; round++) {
+    for (let conversation = 0; conversation < profile.conversationsPerUser; conversation++) {
+      const response = await fetch(`${fixture.origin}/api/conversations`, { method: 'POST', headers: authHeaders(member, { json: true }), body: JSON.stringify({ title: `方案 ${user}-${conversation}` }) });
+      assert.equal(response.status, 201);
+      const { conversation: record } = await response.json();
+      ws.send(JSON.stringify({ type: 'subscribe', conversationId: record.id, afterSequence: 0 }));
+      await until(() => messages.some((message) => message.type === 'conversation.snapshot' && message.conversationId === record.id));
+      tracks.push({ ws, messages, member, record, marker: `CASE_${crypto.randomBytes(8).toString('hex')}` });
+    }
+  }
+  for (let round = 0; round < profile.rounds; round++) {
     const since = Date.now();
     for (const track of tracks) {
       const text = round === 0
@@ -139,27 +144,27 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
       maxQueued = Math.max(maxQueued, snapshot.queue.totalQueued);
       const counts = new Map();
       for (const track of tracks) {
-        const failed = track.messages.find((event) => event.type === 'error' || ['job.failed', 'job.interrupted', 'job.timed_out'].includes(event.type));
+        const failed = track.messages.find((event) => event.conversationId === track.record.id && (event.type === 'error' || ['job.failed', 'job.interrupted', 'job.timed_out'].includes(event.type)));
         assert.ok(!failed, `round ${round + 1}: ${failed?.code || failed?.type || ''} ${failed?.data?.errorCode || ''}`);
-        const current = track.messages.filter((event) => event.type === 'job.started').at(-1);
-        if (current && !track.messages.some((event) => event.jobId === current.jobId && event.type === 'job.completed')) counts.set(track.member.user.id, (counts.get(track.member.user.id) || 0) + 1);
+        const current = track.messages.filter((event) => event.conversationId === track.record.id && event.type === 'job.started').at(-1);
+        if (current && !track.messages.some((event) => event.conversationId === track.record.id && event.jobId === current.jobId && event.type === 'job.completed')) counts.set(track.member.user.id, (counts.get(track.member.user.id) || 0) + 1);
       }
       maxUserRunning = Math.max(maxUserRunning, ...counts.values());
-      return tracks.every((track) => track.messages.filter((event) => event.type === 'job.completed').length === round + 1);
+      return tracks.every((track) => track.messages.filter((event) => event.conversationId === track.record.id && event.type === 'job.completed').length === round + 1);
     });
     samples.push(Date.now() - since);
     for (const track of tracks) {
-      const completed = track.messages.filter((event) => event.type === 'job.completed').at(-1);
+      const completed = track.messages.filter((event) => event.conversationId === track.record.id && event.type === 'job.completed').at(-1);
       const answer = track.messages.filter((event) => event.jobId === completed.jobId && event.type === 'message.delta').map((event) => event.data.text).join('');
       assert.ok(answer.includes(track.marker), `round ${round + 1}: context marker lost; answer characters=${answer.length}`);
       for (const other of tracks) if (other !== track) assert.ok(!answer.includes(other.marker), 'cross-conversation context leak');
     }
-    t.diagnostic(`round ${round + 1}: 15/15 completed, context markers isolated, ${samples.at(-1)} ms`);
+    t.diagnostic(`round ${round + 1}: ${tracks.length}/${tracks.length} completed, context markers isolated, ${samples.at(-1)} ms`);
   }
   for (let index = 0; index < members.length; index++) {
     const member = members[index];
     const response = await fetch(`${fixture.origin}/api/conversations`, { headers: authHeaders(member) });
-    assert.equal((await response.json()).conversations.length, 3);
+    assert.equal((await response.json()).conversations.length, profile.conversationsPerUser);
     const other = tracks.find((track) => track.member !== member);
     const denied = await fetch(`${fixture.origin}/api/conversations/${other.record.id}`, { headers: authHeaders(member) });
     assert.equal(denied.status, 404);
@@ -167,5 +172,5 @@ test(`5 users × 3 private conversations × 3 solution rounds (${real ? 'REAL OP
   assert.equal(maxRunning, globalRunning);
   assert.ok(maxUserRunning <= userRunning);
   assert.ok(maxQueued > 0);
-  t.diagnostic(JSON.stringify({ mode: real ? 'real' : 'simulated', workerCount, capacity, users: 5, conversations: 15, rounds: 3, completed: 45, maxRunning, maxUserRunning, maxQueued, roundMilliseconds: samples }));
+  t.diagnostic(JSON.stringify({ profile: profile.name, mode: real ? 'real' : 'simulated', workerCount, capacity, users: profile.users, webSockets: profile.users * profile.connectionsPerUser, conversations: tracks.length, rounds: profile.rounds, completed: tracks.length * profile.rounds, maxRunning, maxUserRunning, maxQueued, roundMilliseconds: samples }));
 });

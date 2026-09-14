@@ -118,7 +118,7 @@ const activeGatewayService = gatewayService || gatewayServiceFactory?.({
   store: gatewayStore,
   workspacePreparer
 });
-const requirementDraftService = activeGatewayService ? createRequirementDraftService({
+const requirementDraftService = typeof activeGatewayService?.submit === 'function' ? createRequirementDraftService({
   store: requirementStore,
   gatewayStore,
   gatewayService: activeGatewayService

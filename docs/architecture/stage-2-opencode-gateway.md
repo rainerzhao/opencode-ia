@@ -21,7 +21,7 @@
 
 账号、持久 Conversation 和 Runtime 是独立维度。少量常驻 OpenCode Runtime 应能承载多个用户的多个 Session；不把一个 Session 等同于一个进程，也不把每个 Runtime 只能执行一个任务作为最终架构。需要先验证 OpenCode 1.18.25 同 Runtime 多 Session 并发，再配置每 Runtime 执行槽、全局配额与每用户配额。一个 Conversation 内保持串行，不同 Conversation 可并发。会话映射独立不代表工具沙箱：必须另行验证文件、权限和产物隔离，未验证前不宣称完整安全隔离。
 
-产品验收使用 5 个真实登录账号，每人 3 个私人 Conversation，完成 3 轮方案讨论，检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型，显式开启真实模式才调用当前 OpenCode 模型；真实 5×3×3 已完成。对 Codex、WorkBuddy 仅参考用户体验与可靠性要求，不假定其未公开内部实现。
+产品验收使用每账号一条浏览器 WebSocket、每人 3 个私人 Conversation，完成 3 轮方案讨论，检查跨轮上下文、串话、越权读取、运行与排队状态。`test/integration/five-users-multiround.test.js` 默认使用模拟模型；`npm run test:capacity:20` 显式执行 20 账号、20 WebSocket、60 Conversation、180 请求的 Gateway 容量回归。它用 5 个执行槽和每用户 1 个执行槽验证排队，而不将 20 个在线用户误报为 20 个模型流。显式开启真实模式才调用当前 OpenCode 模型；真实 5×3×3 已完成，真实 20×3×3 需要已配置的内部 Provider 后另行验收。对 Codex、WorkBuddy 仅参考用户体验与可靠性要求，不假定其未公开内部实现。
 
 后续顺序：Stage 4 团队 Skill 中心 → Stage 5 Linux 生产化；Stage 3 知识与方案发布闭环仍按路线图推进。
 
