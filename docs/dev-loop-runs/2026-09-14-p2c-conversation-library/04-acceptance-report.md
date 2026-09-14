@@ -9,6 +9,7 @@ PASS_WITH_NOTES
 - owner-only 搜索、分页、归档、恢复；跨账号恢复为 404，恢复审计不含标题。
 - 归档 Conversation 不能继续发送新提示，恢复后才回到 active。
 - React 构建与 27 项相关 API/UI 测试通过。
+- 隔离 Demo 390px 浏览器：`scrollWidth=clientWidth=390`，无横向溢出；见 [窄屏截图](artifacts/screenshots/conversation-library-mobile.png)。
 
 ## Boundary
 
