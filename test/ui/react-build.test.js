@@ -31,6 +31,7 @@ test('keeps React source grouped by product feature instead of one legacy script
     'apps/web/src/features/admin/AdminPage.jsx',
     'apps/web/src/features/chat/ChatPage.jsx',
     'apps/web/src/features/knowledge/KnowledgePage.jsx',
+    'apps/web/src/features/requirements/RequirementsPage.jsx',
     'apps/web/src/features/solutions/SolutionsPage.jsx',
     'apps/web/src/features/skills/SkillsPage.jsx',
     'apps/web/src/shell/WorkbenchShell.jsx',

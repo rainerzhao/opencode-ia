@@ -41,6 +41,24 @@ async function withViteModule(relativePath, callback) {
   }
 }
 
+test('requirement workbench makes private BU work discoverable and recordable', async () => {
+  await withViteModule('features/requirements/RequirementsPage.jsx', ({ RequirementsPage }) => {
+    const html = renderToStaticMarkup(React.createElement(RequirementsPage, {
+      initialRequirements: [{ id: 'req-1', title: '门店网络改造', buName: '零售 BU', status: 'clarifying', updatedAt: '2026-09-14T08:00:00.000Z' }],
+      initialBusinessUnits: [{ id: 'bu-1', name: '零售 BU' }],
+      initialFieldTemplates: []
+    }));
+    assert.match(html, /我的需求流/);
+    assert.match(html, /默认私有/);
+    assert.match(html, /门店网络改造/);
+    assert.match(html, /placeholder="搜索需求、场景或沟通背景"/);
+    assert.match(html, />新建需求</);
+    assert.match(html, /原始沟通记录/);
+    assert.match(html, /记录沟通/);
+    assert.match(html, /下一步行动/);
+  });
+});
+
 test('administrator can reach every account recovery control', async () => {
   await withViteModule('features/admin/AdminPage.jsx', ({ AdminPage }) => {
     const html = renderToStaticMarkup(React.createElement(AdminPage, {
@@ -58,6 +76,19 @@ test('administrator can reach every account recovery control', async () => {
     assert.match(html, />重置密码</);
     assert.match(html, />撤销会话</);
     assert.match(html, />停用</);
+  });
+});
+
+test('administrator can configure the BU and controlled fields that private requirements use', async () => {
+  await withViteModule('features/admin/AdminPage.jsx', ({ AdminPage }) => {
+    const html = renderToStaticMarkup(React.createElement(AdminPage, {
+      user: { id: 'admin-1' }, initialBusinessUnits: [{ id: 'bu-1', name: '零售 BU' }], initialFieldTemplates: [{ id: 'field-1', key: 'priority', label: '优先级', type: 'select', options: ['高'], required: false }]
+    }));
+    assert.match(html, /需求配置/);
+    assert.match(html, /新增业务单元/);
+    assert.match(html, /零售 BU/);
+    assert.match(html, /新增统一字段/);
+    assert.match(html, /优先级/);
   });
 });
 
