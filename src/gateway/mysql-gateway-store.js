@@ -56,12 +56,14 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     catch (cause) { if (cause?.code === 'ER_NO_REFERENCED_ROW_2') throw error('USER_NOT_FOUND', 'user was not found'); throw cause; }
     return conversation(await db.one('SELECT * FROM conversations WHERE id = ?', [id]));
   }
-  async function listConversations({ ownerUserId, status = 'active', limit = 50, offset = 0 }) {
+  async function listConversations({ ownerUserId, status = 'active', q = '', limit = 50, offset = 0 }) {
     const owner = required(ownerUserId, 'INVALID_USER_ID', 'user id is invalid');
     if (status !== 'active' && status !== 'archived') throw error('INVALID_CONVERSATION_STATUS', 'conversation status is invalid');
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw error('INVALID_LIMIT', 'conversation limit is invalid');
     if (!Number.isInteger(offset) || offset < 0) throw error('INVALID_OFFSET', 'conversation offset is invalid');
-    return (await db.many('SELECT * FROM conversations WHERE owner_user_id = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?', [owner, status, limit, offset])).map(conversation);
+    const query = optional(q, 'INVALID_CONVERSATION_QUERY', 'conversation query is invalid', { max: 200 }) || '';
+    const escaped = query.replace(/[\\%_]/g, '\\$&');
+    return (await db.many(query ? "SELECT * FROM conversations WHERE owner_user_id = ? AND status = ? AND title LIKE ? ESCAPE '\\\\' ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?" : 'SELECT * FROM conversations WHERE owner_user_id = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?', query ? [owner, status, `%${escaped}%`, limit, offset] : [owner, status, limit, offset])).map(conversation);
   }
   async function getOwnedConversation({ id, ownerUserId }) { return conversation(await owned(db, id, ownerUserId)); }
   async function updateConversation({ id, ownerUserId, title }) {
@@ -76,6 +78,12 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
     const target = await owned(db, id, ownerUserId);
     if (!target) throw error('CONVERSATION_NOT_FOUND', 'conversation was not found');
     if (target.status !== 'archived') await db.query("UPDATE conversations SET status = 'archived', updated_at = ? WHERE id = ?", [timestamp(clock), id]);
+    return conversation(await db.one('SELECT * FROM conversations WHERE id = ?', [id]));
+  }
+  async function restoreConversation({ id, ownerUserId }) {
+    const target = await owned(db, id, ownerUserId);
+    if (!target) throw error('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (target.status === 'archived') await db.query("UPDATE conversations SET status = 'active', updated_at = ? WHERE id = ?", [timestamp(clock), id]);
     return conversation(await db.one('SELECT * FROM conversations WHERE id = ?', [id]));
   }
   async function listConversationMetadata({ limit = 200, offset = 0 } = {}) {
@@ -156,7 +164,7 @@ function createMySqlGatewayStore(db, { idFactory = crypto.randomUUID, clock = ()
   async function getJobByIdempotency({ userId, idempotencyKey }) {
     return job(await db.one('SELECT * FROM gateway_jobs WHERE user_id = ? AND idempotency_key = ?', [userId, idempotencyKey]));
   }
-  return Object.freeze({ appendEvent: (input) => db.transaction((tx) => insertEvent(tx, input)), archiveConversation, attachJobBinding, bindOpenCodeSession, createConversation, createJob, getJob, getJobByIdempotency, getLatestEventSequence, getOpenCodeSession: async ({ conversationId }) => session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId])), getOwnedConversation, listConversationMetadata, listConversations, listEventsAfter, listEventsForJob, listJobMetadata, listQueuedJobs, listRecoveringSessions, markWorkerSessionsRecovering, recoverOnStartup, setSessionRecoveryStatus, transitionJob: transition, updateConversation, upsertWorker });
+  return Object.freeze({ appendEvent: (input) => db.transaction((tx) => insertEvent(tx, input)), archiveConversation, restoreConversation, attachJobBinding, bindOpenCodeSession, createConversation, createJob, getJob, getJobByIdempotency, getLatestEventSequence, getOpenCodeSession: async ({ conversationId }) => session(await db.one('SELECT * FROM opencode_sessions WHERE conversation_id = ?', [conversationId])), getOwnedConversation, listConversationMetadata, listConversations, listEventsAfter, listEventsForJob, listJobMetadata, listQueuedJobs, listRecoveringSessions, markWorkerSessionsRecovering, recoverOnStartup, setSessionRecoveryStatus, transitionJob: transition, updateConversation, upsertWorker });
 }
 
 module.exports = { createMySqlGatewayStore };

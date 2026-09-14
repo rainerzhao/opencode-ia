@@ -138,3 +138,27 @@ test('records actor-attributed conversation mutations without private titles', a
   assert.equal(events.every((item) => item.actorUserId === member.user.id), true);
   assert.equal(JSON.stringify(events).includes('private title'), false);
 });
+
+test('searches, paginates, archives and restores only the owner conversation library', async (t) => {
+  const fixture = await createAuthenticatedWorkbench(t);
+  const owner = await fixture.createMember({ username: 'conversation.library.owner' });
+  const sibling = await fixture.createMember({ username: 'conversation.library.sibling' });
+  const created = [];
+  for (const title of ['GPU 采购方案', 'GPU 网络验收', '财务预算讨论']) {
+    created.push((await jsonRequest(fixture.origin, owner, '/api/conversations', { method: 'POST', body: JSON.stringify({ title }) })).body.conversation);
+  }
+  const searched = await jsonRequest(fixture.origin, owner, '/api/conversations?q=GPU&limit=1&offset=0');
+  assert.equal(searched.body.conversations.length, 1);
+  assert.equal(searched.body.hasMore, true);
+  assert.match(searched.body.conversations[0].title, /GPU/);
+  await jsonRequest(fixture.origin, owner, `/api/conversations/${created[0].id}`, { method: 'DELETE' });
+  const archived = await jsonRequest(fixture.origin, owner, '/api/conversations?status=archived&q=GPU');
+  assert.equal(archived.body.conversations[0].id, created[0].id);
+  const hidden = await jsonRequest(fixture.origin, sibling, `/api/conversations/${created[0].id}/restore`, { method: 'POST' });
+  assert.equal(hidden.response.status, 404);
+  const restored = await jsonRequest(fixture.origin, owner, `/api/conversations/${created[0].id}/restore`, { method: 'POST' });
+  assert.equal(restored.response.status, 200);
+  assert.equal(restored.body.conversation.status, 'active');
+  const audit = fixture.db.prepare("SELECT metadata_json FROM audit_logs WHERE action = 'conversation.restore'").get();
+  assert.equal(audit.metadata_json.includes('GPU'), false);
+});

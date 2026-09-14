@@ -396,6 +396,17 @@ test('chat page exposes private conversation navigation and running controls', a
   });
 });
 
+test('archived conversation library entries cannot accept a new prompt before restore', async () => {
+  await withViteModule('features/chat/ChatPage.jsx', ({ ChatPage }) => {
+    const html = renderToStaticMarkup(React.createElement(ChatPage, {
+      initialConversations: [{ id: 'conversation-archived', title: '已归档沟通', status: 'archived' }],
+      initialActiveConversationId: 'conversation-archived', initialConnection: 'connected'
+    }));
+    assert.match(html, /恢复当前对话/);
+    assert.match(html, /aria-label="对话内容" disabled=""/);
+  });
+});
+
 test('chat can explicitly request a private requirement draft from bounded conversation events', async () => {
   await withViteModule('features/chat/ChatPage.jsx', ({ ChatPage }) => {
     const html = renderToStaticMarkup(React.createElement(ChatPage, {

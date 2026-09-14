@@ -31,6 +31,10 @@ export function applyGatewayEvent(state, event) {
 
 export function ChatPage({ initialMessages = [], initialConversations = [], initialActiveConversationId = initialConversations[0]?.id || null, initialExecutionStatus = 'idle', initialActiveJobId = null, initialConnection = 'reconnecting' }) {
   const [conversations, setConversations] = useState(initialConversations);
+  const [conversationStatus, setConversationStatus] = useState(() => initialConversations.find((item) => item.id === initialActiveConversationId)?.status || 'active');
+  const [conversationQuery, setConversationQuery] = useState('');
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const [conversationOffset, setConversationOffset] = useState(0);
   const [activeId, setActiveId] = useState(initialActiveConversationId);
   const [states, setStates] = useState(() => initialActiveConversationId ? { [initialActiveConversationId]: emptyState(initialMessages, initialExecutionStatus, initialActiveJobId) } : {});
   const [input, setInput] = useState('');
@@ -98,13 +102,15 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
     return () => { closedByPage = true; clearTimeout(timer); socketRef.current?.close(); };
   }, []);
 
-  useEffect(() => {
-    if (initialConversations.length) return;
-    request('/api/conversations').then(({ conversations: items = [] }) => {
-      setConversations(items);
-      if (!activeRef.current && items[0]) { activeRef.current = items[0].id; setActiveId(items[0].id); }
-    }).catch((error) => setNotice(error.message));
-  }, []);
+  async function loadConversations({ status = conversationStatus, query = conversationQuery, offset = 0, append = false } = {}) {
+    try {
+      const params = new URLSearchParams({ status, limit: '20', offset: String(offset) }); if (query) params.set('q', query);
+      const result = await request(`/api/conversations?${params}`); const items = result.conversations || [];
+      setConversations((current) => append ? [...current, ...items] : items); setHasMoreConversations(result.hasMore === true); setConversationOffset(offset + items.length);
+      if (status === 'active' && !append && !activeRef.current && items[0]) { activeRef.current = items[0].id; setActiveId(items[0].id); }
+    } catch (error) { setNotice(error.message); }
+  }
+  useEffect(() => { if (!initialConversations.length) loadConversations(); }, []);
 
   useEffect(() => {
     if (protocol !== 'gateway.v1' || !activeId || socketRef.current?.readyState !== WebSocket.OPEN) return;
@@ -123,11 +129,21 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
     } catch (error) { setNotice(error.message); } finally { setCreating(false); }
   }
 
+  function changeConversationLibrary(status, query = conversationQuery) {
+    setConversationStatus(status); setConversationQuery(query); setHasMoreConversations(false); setConversationOffset(0); loadConversations({ status, query, offset: 0 });
+  }
+  async function archiveConversation(id) {
+    try { setCreating(true); await request(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }); if (id === activeRef.current) { activeRef.current = null; setActiveId(null); } await loadConversations({ status: conversationStatus, query: conversationQuery, offset: 0 }); setNotice('对话已归档；历史保留且不会自动重放任务。'); } catch (error) { setNotice(error.message); } finally { setCreating(false); }
+  }
+  async function restoreConversation(id) {
+    try { setCreating(true); const { conversation } = await request(`/api/conversations/${encodeURIComponent(id)}/restore`, { method: 'POST' }); setConversationStatus('active'); setConversationQuery(''); await loadConversations({ status: 'active', query: '', offset: 0 }); activeRef.current = conversation.id; setActiveId(conversation.id); setNotice('对话已恢复为私有进行中状态。'); } catch (error) { setNotice(error.message); } finally { setCreating(false); }
+  }
+
   function send(event) {
     event.preventDefault();
     const text = input.trim();
     const socket = socketRef.current;
-    if (!text || !activeId || socket?.readyState !== WebSocket.OPEN) return;
+    if (!text || !activeId || selectedIsArchived || socket?.readyState !== WebSocket.OPEN) return;
     if (protocol === 'gateway.v1') socket.send(JSON.stringify({ type: 'prompt', conversationId: activeId, text, idempotencyKey: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` }));
     else {
       update(activeId, (state) => ({ ...state, status: 'running', messages: [...state.messages, { id: `legacy-user:${Date.now()}`, role: 'user', text }] }));
@@ -144,6 +160,7 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
   }
 
   const current = states[activeId] || emptyState(initialMessages, initialExecutionStatus);
+  const selectedIsArchived = conversations.find((item) => item.id === activeId)?.status === 'archived';
 
   async function saveSolution(event) {
     event.preventDefault();
@@ -175,12 +192,12 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
   }
 
   return <section className="conversation-workspace">
-    <ConversationList conversations={conversations} activeId={activeId} busy={creating} onCreate={createConversation} onSelect={(id) => { activeRef.current = id; setActiveId(id); setNotice(''); }} />
+    <ConversationList conversations={conversations} activeId={activeId} busy={creating} status={conversationStatus} query={conversationQuery} hasMore={hasMoreConversations} onCreate={createConversation} onQuery={(query) => changeConversationLibrary(conversationStatus, query)} onStatus={(status) => changeConversationLibrary(status)} onLoadMore={() => loadConversations({ offset: conversationOffset, append: true })} onArchive={archiveConversation} onRestore={restoreConversation} onSelect={(id) => { activeRef.current = id; setActiveId(id); setNotice(''); }} />
     <div className="panel chat">
       <ExecutionStatus connection={connection} executionStatus={current.status} activeJobId={current.activeJobId} onCancel={cancel} />
       {(current.recoveryBoundary || current.status === 'interrupted') && <p className="recovery-banner">任务不会自动重放，请确认上下文后重新发送。</p>}
       <div className="message-list">{current.messages.length ? current.messages.map((message) => <p className={message.role} key={message.id || `${message.role}:${message.text}`}>{message.text}</p>) : <div className="empty"><b>{activeId ? '与 OpenCode 开始一次对话' : '先新建一个私人对话'}</b><span>模型、Agent、Skill 与工具执行统一经过服务端安全边界</span></div>}</div>
-      <form onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="输入你的问题…" aria-label="对话内容" disabled={!activeId} /><button disabled={!activeId || connection !== 'connected'}>发送</button></form>
+      <form onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="输入你的问题…" aria-label="对话内容" disabled={!activeId || selectedIsArchived} /><button disabled={!activeId || selectedIsArchived || connection !== 'connected'}>发送</button></form>
       <p className="chat-notice" role="status">{notice}</p>
     </div>
     {current.messages.length > 0 && <aside className="capture-stack"><section className="panel draft-capture"><p className="eyebrow">经 OpenCode Runtime</p><h3>生成需求草稿</h3><p className="muted">仅使用当前对话中明确选择的事件范围（全部已保存事件）；AI 不会自动创建或公开需求。</p><button type="button" onClick={requestRequirementDraft} disabled={drafting || !activeId}>{drafting ? '正在请求…' : '生成需求草稿'}</button><p className="draft-notice" role="status">{draftNotice}</p></section><section className="panel solution-capture"><p className="eyebrow">人工确认后沉淀</p><h3>沉淀为方案</h3><p className="muted">对话不会自动公开，保存后默认仅本人可见。</p><form className="stack" onSubmit={saveSolution}><input name="title" placeholder="方案标题" required /><textarea name="description" placeholder="补充问题背景或约束" /><button disabled={saving}>{saving ? '保存中…' : '保存私有方案'}</button></form></section></aside>}

@@ -135,6 +135,12 @@ function createGatewayStore(db, {
     ORDER BY updated_at DESC, id DESC
     LIMIT ? OFFSET ?
   `);
+  const searchConversationsStatement = db.prepare(`
+    SELECT * FROM conversations
+    WHERE owner_user_id = ? AND status = ? AND title LIKE ? ESCAPE '\\'
+    ORDER BY updated_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `);
   const jobById = db.prepare('SELECT * FROM gateway_jobs WHERE id = ?');
   const jobByIdempotency = db.prepare(`
     SELECT * FROM gateway_jobs WHERE user_id = ? AND idempotency_key = ?
@@ -226,7 +232,7 @@ function createGatewayStore(db, {
     return toConversation(conversationById.get(id));
   }
 
-  function listConversations({ ownerUserId, status = 'active', limit = 50, offset = 0 }) {
+  function listConversations({ ownerUserId, status = 'active', q = '', limit = 50, offset = 0 }) {
     const owner = requiredString(ownerUserId, 'INVALID_USER_ID', 'user id is invalid');
     if (status !== 'active' && status !== 'archived') {
       throw storeError('INVALID_CONVERSATION_STATUS', 'conversation status is invalid');
@@ -237,7 +243,9 @@ function createGatewayStore(db, {
     if (!Number.isInteger(offset) || offset < 0) {
       throw storeError('INVALID_OFFSET', 'conversation offset is invalid');
     }
-    return listConversationsStatement.all(owner, status, limit, offset).map(toConversation);
+    const query = optionalString(q, 'INVALID_CONVERSATION_QUERY', 'conversation query is invalid', { max: 200 }) || '';
+    const escaped = query.replace(/[\\%_]/g, '\\$&');
+    return (query ? searchConversationsStatement.all(owner, status, `%${escaped}%`, limit, offset) : listConversationsStatement.all(owner, status, limit, offset)).map(toConversation);
   }
 
   function getOwnedConversation({ id, ownerUserId }) {
@@ -267,6 +275,13 @@ function createGatewayStore(db, {
     if (conversation.status === 'archived') return toConversation(conversation);
     db.prepare(`UPDATE conversations SET status = 'archived', updated_at = ? WHERE id = ?`)
       .run(clock(), id);
+    return toConversation(conversationById.get(id));
+  }
+
+  function restoreConversation({ id, ownerUserId }) {
+    const conversation = conversationByOwner.get(id, ownerUserId);
+    if (!conversation) throw storeError('CONVERSATION_NOT_FOUND', 'conversation was not found');
+    if (conversation.status === 'archived') db.prepare(`UPDATE conversations SET status = 'active', updated_at = ? WHERE id = ?`).run(clock(), id);
     return toConversation(conversationById.get(id));
   }
 
@@ -674,6 +689,7 @@ function createGatewayStore(db, {
     appendEvent,
     attachJobBinding,
     archiveConversation,
+    restoreConversation,
     bindOpenCodeSession,
     createConversation,
     createJob,
