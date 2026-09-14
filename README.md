@@ -1,59 +1,63 @@
 # OpenCode 团队 AI 工作台
 
-> 面向集团各 BU，让日常沟通成为可跟进的需求，让解决方案成为可复用的团队资产。
+> 面向集团各 BU 的云解决方案工作台：把日常沟通沉淀为可追溯的需求，把个人经验沉淀为默认私有、可复用的团队资产。
 
-OpenCode 团队 AI 工作台是一套面向内部团队的 AI 协作平台。成员无需各自配置模型、密钥和运行环境，通过浏览器登录后，就能使用统一的 AI 能力处理工作、管理个人知识、沉淀解决方案，并逐步共建团队 Skill 资产。
+OpenCode 团队 AI 工作台面向不超过 20 人的内部解决方案团队。成员通过统一入口记录客户沟通、管理需求、持续与 AI 协作，并沉淀知识、方案和 Skill；管理员负责账号、统一字段和运行状态，而不是查看成员的私人正文。
 
-**研发进展（2026-09-14）：** “需求与场景”已完成可用闭环：管理员可在账号管理内配置 BU 与团队统一字段；成员以默认私有方式创建、筛选、查看和编辑需求，记录 IIM/电话/会议原始纪要及受控字段值。成员可明确选择自己的对话事件范围，经现有 OpenCode Gateway 生成结构化草稿；草稿会在需求页回收状态，只有成员选择 BU、修改并确认后才会建立新的私有需求。需求还可关联自己仍有权限的 Conversation、知识和方案，关联不会改变原资产的可见性。容量回归已覆盖 20 个登录用户、每人 3 个持久 Conversation、共 180 个多轮任务；它使用模拟模型验证工作台调度与隔离，不是公司模型或生产容量结论。字段定义有版本，管理员维护模板也不会获得成员私人正文或字段值。公司内部模型、云 MySQL 和 Linux 环境仍未验收。[查看当前目标与交付阶段](docs/PRODUCT_GOAL.md)。下方“当前可以体验”描述的是现有页面，不代表公司生产已经上线。
+## 项目状态
 
-## 它在 Agent 世界中的位置
+**当前处于“Mac 应用验收完成，内网预发布待验收”阶段。**
 
-理解这个项目，可以先用一句话建立共同认知：**Agent = Model + Harness**。模型提供理解和生成能力，Harness 负责把模型接入上下文、工具、Skill 和持续运行的 Agent Loop，让 AI 能够真正执行任务。
+| 范围 | 状态 | 说明 |
+| --- | --- | --- |
+| 产品底座、常驻 Gateway、知识/方案、Skill 中心 | ✅ Mac 已验收 | 已完成账号权限、默认私有、多会话、资产沉淀和团队 Skill 生命周期闭环。 |
+| 需求与场景工作台 | ✅ 本机 Demo 已验收 | 已支持 BU、统一字段、沟通记录、AI 草稿人工确认、资产关联和私有会话资料库。 |
+| 20 用户调度 | ✅ 模拟路径已验收 | 已回归 20 登录用户、60 个持久会话、180 个多轮任务；这不是模型吞吐或生产 SLA。 |
+| MySQL 单一数据层 | ✅ Mac 真库已验收 | 生产组合连接 MySQL；公司云 MySQL 网络、CA 与恢复演练仍待验证。 |
+| 公司 Linux / 内部模型 / 生产开放 | 🚧 待预发布验收 | 尚未取得真实 Provider、Linux 隔离、20 用户真实模型压测和灾备证据。 |
 
-在这个体系中，**OpenCode 是 Agent 执行引擎**：它连接公司内部模型，负责 Agent、Loop、Skill 和工具的实际运行；**本项目是建立在 OpenCode 之上的团队工作台**：它提供团队统一入口，并补齐多人使用所需的账号、权限、会话、知识、审计和资产治理能力。
+**请勿将 Demo、模拟任务或 Mac 验收理解为已经在公司生产上线。** 生产开放前必须完成[公司内网预发布交接清单](docs/operations/company-preflight-handoff.md)。完整阶段、验收口径和已知边界见[产品路线图](docs/ROADMAP.md)。
+
+## OpenCode 在这里做什么
+
+OpenCode 是唯一的 Agent Runtime：它连接公司内部的 OpenAI 兼容模型，执行 Agent Loop、工具与 Skill。本项目不另造 Agent、不让前端直连模型，而是在 OpenCode 之上补齐团队使用所需的账号、权限、持久会话、资产治理、审计与运行管理。
 
 ```mermaid
-flowchart TB
-    M[公司内部模型 Provider] --> O[OpenCode Agent Harness<br/>Model / Loop / Skill / Tool / Context]
-    O --> W[OpenCode 团队 AI 工作台<br/>账号 / 权限 / 会话 / 知识 / Skill / 审计]
-    W --> U[团队成员]
+flowchart LR
+  U[团队成员] --> W[工作台 Web UI]
+  W --> P[账号、需求、会话、知识、方案、Skill]
+  P --> G[OpenCode Gateway]
+  G --> O[OpenCode Runtime<br/>Loop / Tool / Skill / Context]
+  O --> M[公司内部模型 Provider]
+  P --> D[(公司云 MySQL)]
 ```
 
-因此，工作台不是另一个 Agent，也不替代 OpenCode。它解决的是如何把面向个人的 Agent 执行能力，建设成一个可供团队长期、集中、安全使用的内部 AI 工作平台。
+这意味着账号、Conversation、OpenCode Session、Runtime 和执行槽位是相互独立的：一个人可以拥有多个长期会话；多个会话由常驻 Runtime 与公平队列承载；模型服务的并发限制则是另一层需要在公司环境实测的约束。
 
-## 它解决什么问题
+## 为什么需要它
 
-- **统一使用入口：** 团队成员不再分别维护模型配置、工具链和本地环境。
-- **保护个人空间：** 对话、知识和方案默认归属于创建者，不会自动变成团队公开内容。
-- **沉淀工作成果：** 有价值的对话可以经过人工确认，继续整理为方案、知识和 Skill。
-- **建立管理边界：** 账号、角色和操作记录统一管理，明确每一次操作由谁发起。
-- **复用团队能力：** 让个人经验逐步变成所有成员都能找到、安装和使用的团队资产。
+- **把沟通落下来：** 手工记录 IIM、电话、会议和导入资料，形成有负责人、BU 与状态的需求。
+- **把 AI 协作留得住：** 私有 Conversation 可生成结构化草稿，必须经用户核对、修改和确认后才创建需求。
+- **把经验变成资产：** 对话可沉淀为方案和知识；成员可开发、校验、发布、安装、升级或回滚 Skill。
+- **让团队可控地共享：** 内容默认私有，显式确认后才共享；管理员管理账号和运行，不默认获得成员私人正文。
+- **让上线有边界：** 生产数据使用外部云 MySQL，模型调用统一经 OpenCode，密钥不进入前端、仓库、数据库或日志。
 
-## 当前可以体验
+## 当前可体验的能力
 
-- 使用管理员分配的用户名和密码登录；
-- 创建和切换多个私人 Conversation，通过常驻 OpenCode Gateway 持续对话；
-- 搜索自己的 Conversation、按页查看、归档暂不推进的沟通，并在需要时恢复原有私有上下文；
-- 查看排队、运行、完成、中断等执行状态，并可停止任务；
-- 搜索、新建、编辑和上传个人知识；
-- 对知识和方案查看历史版本，并把选定历史内容恢复为新的当前版本；
-- 将确认过的对话保存为个人方案；
-- 创建、编辑和归档自己的私人 Skill 草稿，维护受控附加文件并查看校验报告；
-- 将已校验的私人 Skill 人工发布到团队目录；成员可各自安装、经 OpenCode 验证后启用；
-- 为已发布 Skill 创建默认私有的新版本草稿；成员自主升级或回滚，升级/回滚后必须重新通过 OpenCode 验证；
-- 由创建者或管理员停用并归档团队 Skill；停用后不会再被后续 Conversation 工作区发现；
-- 由管理员创建账号、重置密码、停用账号和撤销登录会话；
-- 在没有真实模型和密钥的情况下运行完整 Demo。
-
-> 当前版本用于产品体验和持续研发。Stage 2 常驻 Gateway、Stage 3 知识与方案闭环、Stage 4 团队 Skill 中心均已完成 Mac 应用级验收；MySQL 8.4 生产组合、内容与附件恢复演练也已在本机真库通过。当前研发主线已经进入 Stage 5 Linux 内网生产化：应用容器连接公司云 MySQL，不在 Compose 内自建数据库；配置门禁、聚合指标和内部 Provider 联调门禁已具备，真实内部 Provider/OpenCode 全链路、Linux 进程级沙箱、容量与灾备验收仍须在公司预发布机完成。
-
-[查看产品路线图](docs/ROADMAP.md) · [查看整体设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md) · [查看 Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) · [查看内网部署手册](docs/operations/intranet-deployment.md)
+| 工作区 | 成员可以做什么 |
+| --- | --- |
+| 我的工作台 | 登录后查看自己的工作入口与运行状态。 |
+| 需求与场景 | 新建、筛选、编辑默认私有需求；记录沟通；关联自己的会话、知识和方案。 |
+| AI 对话 | 创建多个私有 Conversation，搜索、分页、归档、恢复，并查看排队、运行和中断状态。 |
+| 知识与方案 | 上传和编辑个人资料；查看版本、来源、附件、差异与历史恢复；将确认的对话沉淀为方案。 |
+| 团队 Skill 中心 | 以私有草稿开发 Skill，校验后人工发布；成员独立安装、启用、升级或回滚。 |
+| 管理 | 管理员创建/停用账号、重置密码、维护 BU 与统一字段、撤销登录会话、查看脱敏运行概况。 |
 
 ![OpenCode 团队 AI 工作台多会话界面](docs/dev-loop-runs/2026-09-04-stage-2-opencode-gateway/artifacts/screenshots/stage-2d3-conversations-desktop.png)
 
 ## 三分钟体验
 
-无需 OpenCode、模型服务或 API Key，即可启动完整前后端 Demo：
+无需配置 OpenCode、模型服务或 API Key，即可启动隔离的无密钥 Demo：
 
 ```bash
 git clone https://github.com/rainerzhao/opencode-ia.git
@@ -62,268 +66,61 @@ npm ci
 npm run demo
 ```
 
-打开终端显示的地址，默认是 `http://127.0.0.1:4317`。脚本会为本次临时环境生成随机密码的 `demo-admin`，账号和密码只输出到当前终端。用该账号登录后，可以体验完整工作台、账号管理和受认证保护的 REST/WebSocket 链路。
+打开终端显示的地址（默认 `http://127.0.0.1:4317`），使用终端临时生成的 `demo-admin` 凭证登录。Demo 使用明确标注的模拟回复，不调用真实模型；数据仅保留在本次临时目录，关闭后会清理。
 
-Demo 包含：
+Demo 适合产品评审和流程体验，包含登录、账号管理、需求与沟通、知识、方案、私有多会话、Skill 生命周期等页面；不适合证明公司模型质量、生产并发或安全合规。
 
-- 完整的登录、退出和账号管理体验；
-- 知识搜索、新建、编辑和上传体验；
-- 多 Conversation 对话、执行状态与“沉淀为方案”体验；
-- 私人 Skill 草稿、附加文件和校验报告体验；
-- 展示三篇示例知识文档；
-- 使用明确标注的“Demo 模拟回复”，不调用真实模型；
-- 所有数据只用于本次体验，关闭 Demo 后自动清理。
+## 生产部署路线
 
-如需指定端口：
+生产目标是公司内网的一台 Linux 服务，不在应用 Compose 中自建 MySQL：
 
-```bash
-DEMO_PORT=4321 npm run demo
-```
+1. 公司提供非 root 服务账号、HTTPS/Nginx、外部 MySQL 8.4 与内部 CA。
+2. 将公司内部 OpenAI 兼容模型配置在 OpenCode 受保护的运行环境中。
+3. 应用使用 `WORKBENCH_DATABASE_URL` 连接公司云 MySQL，并通过启动门禁后才监听端口。
+4. 在预发布机完成真实多会话、20 用户、取消/断线、Runtime/MySQL 故障、备份恢复与回滚演练。
+5. 由人工确认残余风险后，再开放内网访问。
 
-## 产品能力一览
-
-| 产品能力 | 状态 | 用户可以做什么 |
-| --- | --- | --- |
-| AI 工作台 | ✅ 可体验 | 登录后使用对话、知识、方案和 Skill 入口 |
-| 个人知识 | ✅ 可体验 | 搜索、新建、编辑和上传知识文件 |
-| 个人方案 | ✅ 可体验 | 将人工确认过的对话沉淀为私有方案 |
-| 账号与角色 | ✅ 可体验 | 管理员管理账号，普通成员只使用业务功能 |
-| 数据与操作边界 | ✅ 已具备 | 个人内容默认私有，关键操作保留账号归属 |
-| 多人在线使用 | ✅ 基础版可体验 | 多名成员可同时登录，私人 Conversation 和身份彼此隔离 |
-| 常驻多会话 Gateway | ✅ Mac 已验收 | 多 Runtime/多 Session、公平排队、会话粘性、故障恢复、断线续传和 React 多会话已接通 |
-| 运行管理 | ✅ Mac 可体验 | 管理员在账号管理页查看健康、Worker 和任务状态，二次确认取消任务；私人内容不向管理员展示 |
-| 工具与产物边界 | ✅ Mac 应用级验收 | 每个账号和 Conversation 使用独立工作目录，默认关闭 Bash、联网、子代理和外部插件 |
-| 私人 Skill 草稿 | ✅ Mac 可体验 | 成员创建、编辑和归档自己的 `SKILL.md` 草稿，默认不向团队公开 |
-| 团队 Skill 中心 | ✅ Stage 4 已完成 Mac 验收 | 成员发布私有 Skill，独立安装/启用、升级/回滚；创建者或管理员可停用并归档，历史版本保留 |
-| MySQL 单一数据层 | ✅ Mac 真库已验收 | MySQL-only 生产组合、真实 MySQL HTTP/WebSocket 冒烟及 SQL/附件恢复演练已通过；Linux 切换仍待预发布验收 |
-| 知识与方案闭环 | ✅ Stage 3 已完成 Mac 验收 | 对话可人工沉淀为私有方案，再转换为私有知识；支持来源、附件、预览、导入导出、版本差异和历史版本恢复 |
-| 需求与场景工作台 | ✅ P1A–P2B 已完成 Demo 浏览器验收 | 管理员维护 BU 和统一字段；成员创建、筛选、编辑默认私有需求，记录 IIM/电话/会议原始材料和版本化字段值；从私有 Conversation 请求 OpenCode 草稿、人工确认后建需求，并关联自己的会话/知识/方案 |
-| 20 用户容量回归 | ✅ 模拟 Gateway 验收 | 20 登录用户、20 条浏览器连接、60 个持久 Conversation、3 轮共 180 个任务；5 执行槽公平排队，单用户同时执行最多 1；真实内部模型与 Linux 压测仍待验收 |
-| 内网生产服务 | 🚧 Linux CI 已通过 | 云 MySQL/TLS、Linux 镜像构建和基础运行检查通过；公司环境、内部模型与生产验收待进行 |
-
-多人产品的目标是：每人可以持续使用多个独立会话，由后台常驻运行服务统一承载；会话数量、Runtime 数量和同时推理槽位彼此独立。Mac 已通过 **1 个常驻 OpenCode Runtime、5 个账号、15 个会话、3 轮共 45 次真实模型请求**验收：15 个 Session 同时提交，由 5 个公平执行槽承载，峰值排队 10，跨轮方案标识及账号读取隔离检查通过；另一次真实进程演练验证了 Runtime 被强制终止后自动换进程恢复、运行任务明确中断、原 Session 校验成功后排队任务继续。该结论是 Mac 短时验收，不代表 Linux 容量或商业生产 SLA。
+部署命令、环境变量和模板见[内网部署手册](docs/operations/intranet-deployment.md)。公司交接时请按[预发布交接清单](docs/operations/company-preflight-handoff.md)逐项留存证据，并按[内部 Provider 联调清单](docs/operations/internal-provider.md)完成真实模型验证。
 
 ## 产品原则
 
-- 所有模型推理、Agent、Skill 和工具执行必须经过 OpenCode；工作台不直连模型 API。
-- 对话和个人产物默认私有，用户明确确认后才能发布为团队知识或解决方案。
-- 普通成员可以开发 Skill；发布前必须经过自动校验，并保留版本、禁用和回滚能力。
-- AI 辅助处理和生成，人负责判断、风险复核与最终交付。
-- IP 只可用于网络层限制，不作为用户身份；审计身份来自账号登录。
+- OpenCode 是唯一 Agent Runtime；工作台不直接调用模型 Provider。
+- 用户身份来自用户名/密码登录，不以办公电脑 IP 作为身份。
+- Conversation、知识、方案和 Skill 草稿默认私有；共享必须由人明确确认。
+- 账号、Conversation、OpenCode Session、Runtime 与执行槽位分层治理，不将会话数误当成并发推理数。
+- AI 负责辅助生成，人负责事实核对、风险复核和最终交付。
 
-## 架构概览
+## 文档导航
 
-```mermaid
-flowchart LR
-    U[团队成员浏览器] --> W[工作台 Web UI]
-    W --> A[Express REST API]
-    W --> S[WebSocket 会话层]
-    A --> F[Markdown / 文件资产]
-    A --> D[(业务数据库<br/>公司云 MySQL 8.4 / SQLite Demo)]
-    S --> G[Gateway 控制面<br/>Stage 2D 产品链路已验证]
-    G --> Q[公平队列与会话映射]
-    Q --> W1[OpenCode Worker 1]
-    Q --> W2[OpenCode Worker 2]
-    W1 --> O[OpenCode]
-    W2 --> O
-    O --> M[内部 OpenAI 兼容模型<br/>Linux 阶段]
-    O --> K[团队 Skills]
-```
+| 想了解什么 | 文档 |
+| --- | --- |
+| 产品目标、阶段出口与验收边界 | [产品目标](docs/PRODUCT_GOAL.md) · [研发路线图](docs/ROADMAP.md) |
+| Runtime、会话与数据库分工 | [数据层与 Agent Runtime 架构](docs/architecture/data-and-runtime-architecture.md) · [Gateway 设计](docs/architecture/stage-2-opencode-gateway.md) |
+| 公司内网部署与真实模型联调 | [内网部署手册](docs/operations/intranet-deployment.md) · [预发布交接清单](docs/operations/company-preflight-handoff.md) · [Provider 联调清单](docs/operations/internal-provider.md) |
+| 需求与场景产品方向 | [当前产品目标](docs/PRODUCT_GOAL.md) |
 
-当前使用 React/Vite 前端 + 模块化 Express 后端。Stage 2A 建立持久状态，Stage 2B 验证受保护的常驻 OpenCode 进程与 HTTP/SSE 协议，Stage 2C 完成默认双 Worker 调度，Stage 2D 已将这些能力接入正式生产组合和成员界面：私人 Conversation、排队与停止状态、WebSocket 断线补发、恢复边界和历史重建均经过 Mac 浏览器验收。
+## 开发与验证
 
-关于为什么产品同时需要 MySQL 与 OpenCode Runtime，以及 Conversation、Session、Worker 和执行槽位如何分工，见[数据层与 Agent Runtime 架构](docs/architecture/data-and-runtime-architecture.md)。
-
-Stage 4 已把 Skill 从私人开发产品推进到可控的团队共享闭环：成员先在默认私有空间创建和校验；只有当前内容、静态报告和 OpenCode Runtime 同时通过，创建者或管理员才能人工发布。每位成员随后独立安装；只有该成员安装目录经真实 OpenCode 发现验证，才可启用并在其 Conversation 工作区出现。发布、安装、启用是三个独立动作，启用不绑定 Runtime，也不会影响其他账号。后继版本保持私有直到再次发布；升级/回滚是成员自主选择，都会回到“已安装”并重新验证。为避免常驻 Runtime 缓存旧 Skill，版本集变化会让该 Conversation 绑定新的受管工作区与 OpenCode Session；停用后不会在新工作区被发现，归档保留历史而不做永久删除。
-
-![Stage 4C 团队 Skill 发布安装界面](docs/dev-loop-runs/2026-09-09-stage-4c-skill-publish-install/artifacts/screenshots/stage-4c-skill-desktop-final.png)
-
-## 真实模式：Mac 开发启动
-
-### 要求
-
-- macOS（当前开发和验收环境）
-- Node.js 24.x（已验证：24.15.0）
-- npm 11.x
-- 已安装并能独立运行的 OpenCode
-
-安装依赖：
+本机真实模式需要可独立运行的 OpenCode；Provider 凭证仅配置在 OpenCode 的受保护环境中。开发前复制 `.env.example` 为 `.env`，按部署文档配置运行路径后执行：
 
 ```bash
 npm ci
-```
-
-复制并检查环境变量：
-
-```bash
-cp .env.example .env
-```
-
-至少确认 `OPENCODE_CMD`、`OPENCODE_CWD` 和 `OPENCODE_CONFIG_FILE`。项目不接收模型 API Key；Provider 地址和凭证只配置在 OpenCode 自己的受保护环境中。Linux 预发布还需执行 `npm run preflight:opencode`。
-
-```bash
-set -a
-. ./.env
-set +a
 npm start
 ```
 
-默认打开 `http://127.0.0.1:3000`。
-
-## 配置
-
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `WORKBENCH_ROOT` | 项目目录 | 工作台文件根目录 |
-| `WORKBENCH_DATA_DIR` | `<root>/data` | 生产持久数据根目录；部署模板使用 `/var/lib/opencode-workbench` |
-| `CONTENT_ATTACHMENT_ROOT` | `<data>/content-attachments` | 知识附件目录，可独立覆盖 |
-| `PORT` | `3000` | HTTP/WebSocket 端口 |
-| `MAX_SESSIONS` | `20` | WebSocket 全局会话上限 |
-| `OPENCODE_CMD` | `$HOME/.opencode/bin/opencode` | OpenCode 可执行文件 |
-| `OPENCODE_CWD` | 工作台根目录 | OpenCode 运行目录 |
-| `OPENCODE_TIMEOUT_MS` | `120000` | 单次消息超时，单位毫秒 |
-| `OPENCODE_MAX_OUTPUT_BYTES` | `10485760` | stdout 与 stderr 总字节上限 |
-| `OPENCODE_WORKER_BASE_PORT` | `4319` | 常驻 Worker 起始回环端口 |
-| `OPENCODE_WORKER_COUNT` | `2` | Mac 默认常驻 Worker 数 |
-| `OPENCODE_WORKER_CAPACITY` | `1` | 单个 Runtime 的同时执行槽；与可保存的 Session 数分离 |
-| `OPENCODE_WORKER_HEARTBEAT_MS` | `5000` | Worker 心跳间隔 |
-| `OPENCODE_WORKER_HEARTBEAT_TIMEOUT_MS` | `2000` | 单次心跳等待上限 |
-| `OPENCODE_WORKER_STARTUP_TIMEOUT_MS` | `10000` | Worker 启动健康等待上限 |
-| `OPENCODE_WORKER_READINESS_INTERVAL_MS` | `100` | Worker 启动阶段健康检查间隔 |
-| `OPENCODE_WORKER_STOP_GRACE_MS` | `2000` | Worker 优雅停止等待时间 |
-| `OPENCODE_WORKER_KILL_GRACE_MS` | `1000` | 强制停止后的最终等待时间 |
-| `OPENCODE_WORKER_USERNAME` | `opencode` | 仅供回环 Worker 使用的 Basic Auth 用户名 |
-| `OPENCODE_VERIFIED_VERSION` | `1.18.25` | 当前完成协议验证的 OpenCode 版本 |
-| `GATEWAY_GLOBAL_RUNNING` | `2` | 全局同时运行任务上限 |
-| `GATEWAY_USER_RUNNING` | `1` | 单用户同时运行任务上限 |
-| `GATEWAY_USER_QUEUED` | `3` | 单用户排队任务上限 |
-| `GATEWAY_WORKSPACE_ROOT` | `<root>/data/workspaces` | 服务端生成的 Conversation 工作目录根 |
-| `SKILL_INSTALL_ROOT` | `<root>/data/skill-installations` | 服务端受管的按账号 Skill 安装包目录；不会自动成为全局 Skill |
-| `KNOWLEDGE_DIR` | `<root>/knowledge` | Markdown 知识目录 |
-| `SKILLS_DIR` | `<root>/.opencode/skills` | Skill 展示目录 |
-| `DATABASE_PATH` | `<root>/data/workbench.db` | 当前历史 SQLite 运行库；MySQL 单一数据层迁移期间保留，切换完成后删除 |
-| `WORKBENCH_DATABASE_URL` | 空 | 生产环境必填公司云 MySQL 8.4 连接串；凭证只存在受保护的运行环境 |
-| `MYSQL_POOL_SIZE` | `10` | MySQL 连接池上限（1–100） |
-| `MYSQL_SSL_CA_FILE` | 空 | 公司云 MySQL 的内部 CA PEM 文件绝对路径；与 `mysqls://` 一起使用 |
-| `UPLOAD_TEMP_DIR` | `<root>/data/tmp/uploads` | 上传暂存目录 |
-| `COOKIE_SECURE` | 生产环境为 `true` | HTTPS 下为认证 Cookie 增加 `Secure` |
-| `SESSION_TTL_SECONDS` | `28800` | 登录 Session 有效期，单位秒 |
-| `LOGIN_MAX_FAILURES` | `5` | 登录窗口内最大失败次数 |
-| `LOGIN_WINDOW_SECONDS` | `900` | 登录失败统计窗口，单位秒 |
-| `LOGIN_LOCK_SECONDS` | `900` | 触发限速后的锁定时长，单位秒 |
-| `KNOWLEDGE_FETCH_ALLOWED_HOSTS` | 空 | URL 导入精确主机白名单 |
-
-URL 导入默认禁用。启用后不支持通配符，非默认端口必须写为 `host:port`；每次重定向都会重新校验，回环、链路本地、云元数据和未授权地址会被拒绝。
-
-服务提供不需要登录的 `GET /healthz`，只返回数据库/Gateway 健康状态，不返回账号、会话、任务正文或模型配置，可用于 Compose、systemd 和 Nginx 前置探活。
-
-服务同时提供不需要登录的 `GET /metrics`，仅输出聚合请求计数、错误计数、活动请求数和 Gateway Worker/队列概况，不包含用户名、标题、会话正文、Provider 或密钥，可接入内网 Prometheus。
-
-MySQL 生产备份使用 `npm run backup:mysql` / `npm run restore:mysql`：SQL dump 与 Knowledge 附件 sidecar 分开生成，各自带 SHA-256 清单；恢复必须显式传入 `--confirm`，附件恢复需显式传入 `--attachments <dir>`，密码仅通过 `MYSQL_PWD` 子进程环境传递。SQLite 备份命令只服务于 Mac Demo 过渡。Knowledge 附件可通过受认证的 `/preview` 接口预览安全文本，并通过 `/export` 下载带摘要清单的私有知识包；DOCX/PDF 当前明确返回“不支持预览”。
-
-Linux 预发布启动前可执行 `npm run preflight:production`：它会拒绝 root、非 production 模式、SQLite 路径混用、非 Secure Cookie、缺失/非绝对 OpenCode 可执行文件，以及超过 Worker 池容量的全局并发上限。该检查只输出非敏感配置摘要，不会打印数据库 URL 或 Provider 凭证。
-
-生产部署必须使用 `npm run start:production`（Docker 与 systemd 模板已默认使用），它会在打开 HTTP 端口前强制执行生产配置和 OpenCode Provider 两项门禁。Provider 配置必须为 `0600` 且归运行服务账号所有；任一门禁失败，服务都不会启动。普通 `npm start` 仅保留给 Mac 开发流程。
-
-### MySQL 生产组合（内网部署前置）
-
-生产环境由工作台容器连接公司云 MySQL 8.4，不在应用 Compose 内启动或维护 MySQL。设置 `WORKBENCH_DATABASE_URL` 后，生产启动器会选择 MySQL 组合：启动前检查版本、字符集、UTC 时区和中文 `ngram` 能力，执行受锁保护的迁移，并将账号、审计、Conversation/Gateway、知识/方案和 Skill 全部装配到同一个 MySQL Repository。云数据库负责实例高可用、自动备份和基础监控，应用仍负责 schema migration 与兼容性门禁。未配置该变量时仍使用历史 SQLite 组合，仅便于 Mac Demo；两种组合不会混用业务 Store。MySQL 组合已完成代码级装配和真实 MySQL 分域回归，完整 HTTP/WebSocket 全栈验收与 Linux 切换仍在后续阶段。
-
-公司云 MySQL 可通过 `mysqls://` 加密连接，并校验证书和数据库域名；应用、管理员初始化、备份与恢复共用 CA 配置。使用内部 CA 时，按[部署手册](docs/operations/intranet-deployment.md)挂载证书文件。
-
-部署模板将附件、受管工作区、Skill 安装包及 OpenCode 运行数据保存在独立持久目录，更新代码时继续使用同一份数据；已验证更换代码目录后附件可读取，以及真实 OpenCode Worker 重启后保留 Session 身份。Compose 通过宿主机回环端口接入 Nginx。Linux 镜像已通过 CI 构建与基础检查，公司环境仍需实际验收。
-
-### Stage 1A：创建首位管理员
-
-首次初始化使用本机交互式命令，不提供默认账号，也不接受密码命令参数：
-
-```bash
-npm run admin:create -- --username admin --display-name 管理员
-```
-
-密码会隐藏输入两次，并使用 `scrypt` 和独立随机盐保存。
-
-首次部署到公司云 MySQL 时，这条命令会使用与工作台相同的 `WORKBENCH_DATABASE_URL` 完成数据库检查、迁移和管理员初始化；并发执行也只能创建一个首位管理员。生产环境缺少连接串或数据库连接失败时会直接报错。容器内的具体操作见[内网部署手册](docs/operations/intranet-deployment.md)。
-
-### Stage 1B–1E：认证、业务权限与 React 浏览器体验
-
-当前已提供并接入前端的能力：
-
-- `POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`；
-- `POST /api/auth/change-password`；
-- `GET/POST /api/admin/users`；
-- 管理员密码重置、账号启停和 Session 强制撤销接口。
-- 所有业务 REST 和 WebSocket 强制登录，业务写请求强制 CSRF；
-- 方案和知识草稿按登录用户默认私有，成员之间不可互读；
-- WebSocket 绑定 `userId`、角色和登录 Session，执行前重新验证撤销状态；
-- 关键知识、方案和 OpenCode 执行动作写入脱敏审计。
-- 浏览器启动先调用 `/api/auth/me`，未登录跳转到独立登录页；不在 `localStorage`、`sessionStorage` 或 JavaScript 中保存 Session Token；
-- 所有业务请求统一经过认证客户端，写请求自动携带服务端签发的 CSRF 值；
-- 管理员页面支持建号、遮蔽输入的密码重置、账号启停和 Session 撤销；普通成员看不到管理入口；
-- 知识页面支持搜索、新建 Markdown、查看/编辑和安全上传；私人知识按账号隔离；
-- AI 对话通过认证 WebSocket 接入 OpenCode，用户明确点击后才能把对话沉淀为私人方案；
-- 需求方案从浏览器本地存储迁移到服务端私有方案目录。
-
-Session 使用高熵不透明 Cookie，数据库只保存 SHA-256 摘要；写操作同时校验 Session Cookie、可读 CSRF Cookie、`X-CSRF-Token` 请求头与数据库摘要。`npm run demo` 使用隔离临时目录、随机临时账号和本地模拟 OpenCode，不调用真实模型或密钥。
-
-## 验证与安全
+提交前运行：
 
 ```bash
 npm test
+npm run build
 npm run check
 npm run security:scan
 ```
 
-- 默认自动测试覆盖真实 HTTP/WebSocket、私人 Conversation API、Gateway 续传与取消、OpenCode 子进程、Gateway 持久状态、双 Worker 调度、公平队列、20 用户模拟、路径、上传、URL 安全边界及 React 前端契约；默认不调用真实模型。
-- `npm run test:runtime-crash` 会启动并强制终止它自己创建的真实 OpenCode Runtime，验证自动重启、任务中断和 Session 安全恢复；只在已配置可用模型的 Mac/Linux 验收环境显式运行。
-- `npm run test:tool-isolation` 会让真实 OpenCode 在所属 Conversation 写入产物并尝试跨目录读取随机 canary，验证越界拒绝和不泄漏；同样只在显式验收环境运行。
-- `npm run test:skill-validation` 会让真实 OpenCode 从一次性私人目录发现并加载待校验 Skill，验证受限工具策略和运行目录清理；只在已配置可用模型的验收环境显式运行。
-- `npm run test:skill-install-discovery` 会以两个账号验证已启用安装包只在所属成员 Conversation 工作区被 OpenCode 发现；只在已配置可用模型的验收环境显式运行。
-- `npm run test:skill-version-discovery` 会以真实 OpenCode 验证升级后只发现 0.2.0、回滚后只发现 0.1.0、另一账号隔离，以及停用后不再发现；只在已配置可用模型的验收环境显式运行。
-- 语法检查只检查仓库自有 JavaScript 文件。
-- 密钥扫描只输出相对路径和规则名，不输出疑似密钥原文。
-- `.env` 和本机运维交接文档被 Git 忽略；曾经暴露的 Provider Key 必须在 Provider 后台轮换。
+真实 OpenCode、生产配置和真实 20 用户验收均为显式选择的环境测试，详见[路线图](docs/ROADMAP.md)和[预发布交接清单](docs/operations/company-preflight-handoff.md)。
 
-![Stage 1D 管理员账号管理](docs/dev-loop-runs/2026-09-01-stage-1-product-foundation/artifacts/screenshots/stage-1d-account-admin-desktop.png)
+## 贡献与安全
 
-## 已知限制与下一阶段
+欢迎以 Issue 或 Pull Request 讨论改进。提交前请勿写入模型密钥、Cookie、真实 Prompt/响应、公司域名、用户名或生产数据库连接串；仓库的密钥扫描和安全检查是最低门槛，不能替代公司安全审查。
 
-服务重启后会恢复安全的排队任务，将结果未知的运行任务标记为中断，并检查原 OpenCode 会话是否仍可使用。如果旧上下文已经不可用，依赖它的排队任务不会静默进入新会话执行，成员需要确认上下文后重新发送。管理员可在账号管理页查看健康、Runtime 和任务状态并取消任务，但不能读取私人标题或正文。
-
-运行期间 Runtime 异常也会把关联会话置为恢复中：原 Session 可用时继续排队任务，不可用时中断相关任务并提示成员。确定性故障测试和真实 OpenCode 进程强制终止、自动重启、上下文恢复演练均已通过。
-
-- Stage 2 已完成 Mac 端验收：常驻 Gateway、多会话、公平排队、恢复、运行管理以及 OpenCode 标准工具面的应用级隔离均已跑通。
-- Stage 3 已完成 Mac 端验收：知识与方案具备默认私有、来源追溯、附件、导入导出、版本差异、备份恢复和历史版本恢复；恢复会生成新的不可变版本，不覆盖历史。
-- Stage 4 已完成 Mac 端验收：普通成员可以创建、校验并人工发布默认私有的 Skill 草稿；成员独立安装，安装包原子落盘、启用前再经真实 OpenCode 发现验证。后继草稿不改变团队当前版本；升级、回滚与停用会刷新受管工作区，避免常驻 Runtime 沿用已缓存版本。
-- MySQL Skill 与内容/Gateway 分域真库回归已通过，MySQL-only 组合已完成 HTTP/WebSocket 冒烟（模拟 Worker）；内部 Provider 与真实 OpenCode 全链路仍待验收，不能误写成生产切换完成。
-- 历史 `/api/solutions` 文件接口已退役，方案统一使用 `/api/content/solutions` 和 MySQL/SQLite 版本化内容仓储。
-- 前端资源已全部本地打包，不依赖公共 CDN；真实 OpenCode 与内部模型尚未联调。
-- 当前完成的是 Mac 开发验收，不代表公司内网 Linux 已达到生产标准。
-
-下一交付点是 **Stage 5D 公司 Linux 预发布部署与真实内部 Provider/OpenCode 联调**，随后进入 Stage 5E 的安全、容量、灾备和生产回滚验收。知识包导入始终生成新的私有草稿；历史版本恢复始终生成新的不可变当前版本。完整决策与验收标准见 [Stage 2 Gateway 架构](docs/architecture/stage-2-opencode-gateway.md)、[内部 Provider 联调清单](docs/operations/internal-provider.md) 和 [团队 Skill 中心设计](docs/superpowers/specs/2026-09-09-team-skill-center-design.md)。
-
-## 项目目录
-
-```text
-apps/web/     React/Vite 前端
-apps/server/  生产服务组合入口
-packages/     前后端共享契约
-src/          后端、OpenCode 执行和安全策略
-knowledge/    示例 Markdown 知识
-scripts/      Demo、语法检查和密钥扫描
-test/         Node 自动测试
-docs/         架构设计、路线图和验收证据
-server.js     兼容的生产模式薄启动入口
-```
-
-## Linux 迁移边界
-
-生产目标是公司内网单台 Linux 服务器。迁移时保持工作台与模型配置分离，由非 root 进程运行，使用 Nginx 提供 HTTPS、反向代理和可选内网网段限制。
-
-在账号、权限、MySQL 应用切换与审计、备份恢复、内部模型联调和并发验收完成前，本项目只能用于开发和演示，不能宣称已生产上线。
-
-## 参与开发
-
-每次推送和 Pull Request 都会触发 [Linux 验证](https://github.com/rainerzhao/opencode-ia/actions/workflows/linux-verification.yaml)：真实 MySQL/TLS 回归、构建与密钥扫描、Linux 镜像构建和镜像内运行检查。CI 使用临时数据库，无需模型密钥；公司环境和真实模型验收另行执行。
-
-开始修改前先阅读 [ROADMAP](docs/ROADMAP.md) 和 [架构设计](docs/superpowers/specs/2026-09-01-team-ai-workbench-design.md)。提交前必须执行三项验证，并确保没有把真实 API Key、`.env`、运行数据或日志加入 Git。
+本仓库当前提供的是可验证的研发成果与预发布交付基础，不提供生产 SLA 或内部模型服务保证。
