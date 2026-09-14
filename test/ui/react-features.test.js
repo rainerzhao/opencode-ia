@@ -25,6 +25,25 @@ test('gateway operations shows safe metadata and only active jobs offer cancella
   });
 });
 
+test('home workbench summarizes only safe private work metadata and exposes next actions', async () => {
+  await withViteModule('features/home/HomePage.jsx', ({ HomePage }) => {
+    const html = renderToStaticMarkup(React.createElement(HomePage, {
+      go: () => {},
+      initialData: {
+        requirements: [{ status: 'clarifying', title: 'PRIVATE REQUIREMENT' }, { status: 'resolved', title: 'OLD REQUIREMENT' }],
+        conversations: [{ id: 'conversation-1', title: 'PRIVATE CONVERSATION' }],
+        knowledge: [{ status: 'draft', visibility: 'private', title: 'PRIVATE KNOWLEDGE' }],
+        solutions: [{ status: 'published', visibility: 'team', title: 'TEAM SOLUTION' }]
+      }
+    }));
+    assert.match(html, /待推进需求/);
+    assert.match(html, /待澄清/);
+    assert.match(html, />继续 AI 对话</);
+    assert.match(html, /动态概览/);
+    assert.doesNotMatch(html, /PRIVATE REQUIREMENT|OLD REQUIREMENT|PRIVATE CONVERSATION|PRIVATE KNOWLEDGE|TEAM SOLUTION/);
+  });
+});
+
 async function withViteModule(relativePath, callback) {
   const { createServer } = await import('vite');
   const server = await createServer({
