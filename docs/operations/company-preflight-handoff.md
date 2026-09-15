@@ -22,12 +22,13 @@
 ## 在公司 Linux 依次执行
 
 ```bash
+npm run preflight:release
 npm run preflight:production
 npm run preflight:opencode
 npm run start:production
 ```
 
-门禁全部通过后，按 [内部 Provider 联调清单](internal-provider.md) 运行：两个账号的多会话短测、20×3×3 真实模型任务、取消/断线、Runtime 与 MySQL 故障恢复、备份恢复和升级回滚。每一步记录 Git SHA、OpenCode 版本、迁移版本、耗时和安全错误码摘要；不记录 Prompt、响应正文、Cookie 或密钥。
+`preflight:release` 是两项静态门禁的脱敏汇总报告；失败时仍会输出 `not_ready` JSON 与安全错误代码，便于留档，但不能代替后续单项门禁或真实环境验收。门禁全部通过后，按 [内部 Provider 联调清单](internal-provider.md) 运行：两个账号的多会话短测、20×3×3 真实模型任务、取消/断线、Runtime 与 MySQL 故障恢复、备份恢复和升级回滚。每一步记录 Git SHA、OpenCode 版本、迁移版本、耗时和安全错误码摘要；不记录 Prompt、响应正文、Cookie 或密钥。
 
 ## 开放访问的否决条件
 

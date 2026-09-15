@@ -82,6 +82,8 @@ Demo 适合产品评审和流程体验，包含登录、账号管理、需求与
 
 部署命令、环境变量和模板见[内网部署手册](docs/operations/intranet-deployment.md)。公司交接时请按[预发布交接清单](docs/operations/company-preflight-handoff.md)逐项留存证据，并按[内部 Provider 联调清单](docs/operations/internal-provider.md)完成真实模型验证。
 
+在启动服务前，可运行 `npm run preflight:release` 生成一份脱敏 JSON 就绪报告：它同时执行生产配置与 OpenCode Provider 两项门禁，任一失败即返回非零退出码。该报告只证明本机配置是否满足静态门槛，不检查公司网络、MySQL、模型能力或 Linux 运行结果。
+
 ## 产品原则
 
 - OpenCode 是唯一 Agent Runtime；工作台不直接调用模型 Provider。
