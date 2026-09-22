@@ -1,0 +1,36 @@
+.shell.wb-shell { min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0, 1fr); background: var(--wb-canvas); }
+.wb-shell__rail { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 24px 16px 18px; overflow: hidden; color: #aebccc; background: linear-gradient(180deg, var(--wb-ink) 0%, #122337 100%); border-right: 1px solid rgb(255 255 255 / 7%); }
+.wb-shell__brand { display: flex; align-items: center; gap: 12px; padding: 0 4px 22px; border-bottom: 1px solid rgb(255 255 255 / 10%); }
+.wb-shell__brand .mark { width: 40px; height: 40px; border-radius: 11px; color: #fff; background: var(--wb-signal); box-shadow: 0 8px 20px rgb(22 127 134 / 28%); }
+.wb-shell__brand div { display: grid; gap: 3px; }
+.wb-shell__brand strong { color: #fff; font-size: 16px; letter-spacing: -.02em; }
+.wb-shell__brand small { color: #8598aa; font-size: 11px; }
+.wb-shell__nav { display: grid; gap: 20px; margin-top: 22px; }
+.wb-shell__group { display: grid; gap: 5px; }
+.wb-shell__group-label { margin: 0 10px 5px; color: #708397; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.wb-shell__rail .wb-shell__nav-button { display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 9px; width: 100%; padding: 10px 11px; border: 1px solid transparent; border-radius: 8px; color: #afbdcc; background: transparent; text-align: left; }
+.wb-shell__nav-button svg { width: 17px; height: 17px; stroke: currentColor; }
+.wb-shell__nav-button:hover { color: #fff; background: rgb(255 255 255 / 6%); }
+.wb-shell__nav-button.active { color: #fff; background: #1d6670; border-color: rgb(93 220 224 / 25%); box-shadow: inset 3px 0 #4ed0d3; }
+.wb-shell__rail-note { margin-top: auto; padding: 16px 10px 0; border-top: 1px solid rgb(255 255 255 / 10%); }
+.wb-shell__rail-note strong { display: block; color: #d5e0e8; font-size: 12px; }
+.wb-shell__rail-note span { display: block; margin-top: 5px; color: #74889a; font-size: 11px; line-height: 1.5; }
+.wb-shell__main { min-width: 0; display: grid; grid-template-rows: 72px minmax(0, 1fr) 36px; }
+.wb-shell__header { height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; background: rgb(255 255 255 / 94%); border-bottom: 1px solid var(--wb-line); }
+.wb-shell__context { display: grid; gap: 4px; }
+.wb-shell__context h1 { margin: 0; color: var(--wb-text); font-size: 18px; line-height: 1.1; }
+.wb-shell__context p { margin: 0; color: var(--wb-muted); font-size: 11px; }
+.wb-shell__scope { display: flex; align-items: center; gap: 16px; }
+.wb-shell__scope .user { display: flex; align-items: center; gap: 10px; }
+.wb-shell__scope .user > span { background: var(--wb-signal-soft); color: var(--wb-signal); }
+.wb-shell__scope .ghost { padding: 8px 12px; }
+.wb-shell__workspace { min-width: 0; width: 100%; max-width: 1600px; padding: 24px 28px 30px; }
+.wb-shell__runtime { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 28px; color: var(--wb-muted); background: #f8fafc; border-top: 1px solid var(--wb-line); font-size: 11px; }
+.wb-shell__runtime strong { color: var(--wb-text); font-size: 11px; }
+.wb-shell__runtime i { width: 7px; height: 7px; border-radius: 50%; background: var(--wb-success); box-shadow: 0 0 0 4px rgb(44 128 96 / 10%); }
+.wb-shell__runtime span:last-child { margin-left: auto; }
+
+@media (max-width: 1180px) {
+  .shell.wb-shell { grid-template-columns: 220px minmax(0, 1fr); }
+  .wb-shell__workspace, .wb-shell__header, .wb-shell__runtime { padding-inline: 20px; }
+}

@@ -1,0 +1,33 @@
+:root {
+  color-scheme: light;
+  font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #142237;
+  background: #eef2f6;
+  --wb-ink: #101c2b;
+  --wb-ink-soft: #172a3d;
+  --wb-canvas: #eef2f6;
+  --wb-surface: #ffffff;
+  --wb-surface-muted: #f6f8fa;
+  --wb-line: #d6dee8;
+  --wb-line-strong: #bec9d6;
+  --wb-text: #142237;
+  --wb-muted: #5f6e82;
+  --wb-faint: #8390a2;
+  --wb-signal: #167f86;
+  --wb-signal-soft: #e3f2f2;
+  --wb-attention: #b87320;
+  --wb-attention-soft: #fff1df;
+  --wb-danger: #b74444;
+  --wb-success: #2c8060;
+  --wb-radius-sm: 6px;
+  --wb-radius-md: 10px;
+  --wb-radius-lg: 14px;
+  --wb-shadow-float: 0 18px 48px rgb(16 28 43 / 10%);
+  --wb-space-1: 4px;
+  --wb-space-2: 8px;
+  --wb-space-3: 12px;
+  --wb-space-4: 16px;
+  --wb-space-5: 20px;
+  --wb-space-6: 24px;
+  --wb-space-8: 32px;
+}

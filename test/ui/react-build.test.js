@@ -42,6 +42,27 @@ test('keeps React source grouped by product feature instead of one legacy script
   }
 });
 
+test('keeps the P2E desktop design system local and split by responsibility', () => {
+  const files = [
+    'apps/web/src/design/tokens.css',
+    'apps/web/src/design/foundation.css',
+    'apps/web/src/shell/workbench-shell.css'
+  ];
+  for (const relativePath of files) {
+    assert.equal(fs.existsSync(path.join(root, relativePath)), true, `missing ${relativePath}`);
+  }
+
+  const manifest = fs.readFileSync(path.join(root, 'apps/web/src/styles.css'), 'utf8');
+  for (const relativePath of ['design/tokens.css', 'design/foundation.css', 'shell/workbench-shell.css']) {
+    assert.match(manifest, new RegExp(`@import ["']\\./${relativePath.replaceAll('.', '\\.')}["']`));
+  }
+
+  const css = files.map((relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8')).join('\n');
+  assert.match(css, /--wb-ink:/);
+  assert.match(css, /:focus-visible/);
+  assert.doesNotMatch(css, /url\(["']?https?:\/\//i);
+});
+
 test('serves the React entry for both workbench and login routes', async (t) => {
   const fixture = await createAuthenticatedWorkbench(t, { staticDir: dist });
   for (const pathname of ['/', '/login.html']) {

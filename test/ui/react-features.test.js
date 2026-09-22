@@ -8,6 +8,20 @@ const { renderToStaticMarkup } = require('react-dom/server');
 
 const root = path.resolve(__dirname, '../..');
 
+test('desktop shell exposes grouped work navigation and a persistent runtime status', async () => {
+  await withViteModule('shell/WorkbenchShell.jsx', ({ WorkbenchShell }) => {
+    const html = renderToStaticMarkup(React.createElement(WorkbenchShell, {
+      user: { username: 'admin', displayName: 'Demo Administrator', role: 'admin' },
+      onLogout: () => {}
+    }));
+    assert.match(html, /data-workbench-shell="desktop"/);
+    assert.match(html, /aria-label="业务工作区"/);
+    assert.match(html, /aria-label="资产工作区"/);
+    assert.match(html, /<main class="wb-shell__main"/);
+    assert.match(html, /OpenCode Runtime/);
+  });
+});
+
 test('gateway operations shows safe metadata and only active jobs offer cancellation', async () => {
   await withViteModule('features/admin/GatewayPanel.jsx', ({ GatewayPanel }) => {
     const html = renderToStaticMarkup(React.createElement(GatewayPanel, {

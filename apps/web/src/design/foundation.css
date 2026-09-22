@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+
+html { min-width: 1024px; background: var(--wb-canvas); }
+body { margin: 0; min-width: 1024px; color: var(--wb-text); background: var(--wb-canvas); }
+button, input, textarea, select { font: inherit; }
+button, a, input, textarea, select { transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+:focus-visible { outline: 2px solid var(--wb-signal); outline-offset: 3px; }
+button:disabled { cursor: not-allowed; opacity: .48; }
+
+.wb-eyebrow { margin: 0; color: var(--wb-signal); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.wb-panel { background: var(--wb-surface); border: 1px solid var(--wb-line); border-radius: var(--wb-radius-lg); }
+.wb-status { display: inline-flex; align-items: center; gap: 7px; min-height: 26px; padding: 4px 9px; border: 1px solid var(--wb-line); border-radius: 999px; color: var(--wb-muted); background: var(--wb-surface-muted); font-size: 12px; font-weight: 700; }
+.wb-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.wb-status--active { color: var(--wb-success); background: #eaf6f0; border-color: #c9e7d9; }
+.wb-status--attention { color: var(--wb-attention); background: var(--wb-attention-soft); border-color: #efd3af; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
