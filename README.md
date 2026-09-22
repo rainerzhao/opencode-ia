@@ -84,6 +84,8 @@ Demo 适合产品评审和流程体验，包含登录、账号管理、需求与
 
 在启动服务前，可运行 `npm run preflight:release` 生成一份脱敏 JSON 就绪报告：它同时执行生产配置与 OpenCode Provider 两项门禁，任一失败即返回非零退出码。该报告只证明本机配置是否满足静态门槛，不检查公司网络、MySQL、模型能力或 Linux 运行结果。
 
+公司预发布机在两项门禁通过后，可运行 `npm run test:capacity:20:real`：它明确启动 4 个常驻 OpenCode Worker、每个 5 个执行槽位，以 20 个账号 × 3 个 Conversation × 3 轮任务验证工作台的 20 活跃任务调度。该命令尚未在公司 Provider/Linux/MySQL 环境运行，不能据此承诺模型并发或生产 SLA。
+
 ## 产品原则
 
 - OpenCode 是唯一 Agent Runtime；工作台不直接调用模型 Provider。

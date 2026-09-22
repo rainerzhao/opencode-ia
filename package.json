@@ -16,6 +16,7 @@
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "test:runtime-crash": "WORKBENCH_RUNTIME_CRASH_ACCEPTANCE=1 node --test test/integration/runtime-crash-recovery.test.js",
     "test:capacity:20": "WORKBENCH_TWENTY_USER_ACCEPTANCE=1 WORKBENCH_MULTI_SESSION_ACCEPTANCE=1 node --test test/integration/five-users-multiround.test.js",
+    "test:capacity:20:real": "WORKBENCH_REAL_ACCEPTANCE=1 WORKBENCH_TWENTY_USER_ACCEPTANCE=1 WORKBENCH_MULTI_SESSION_ACCEPTANCE=1 WORKBENCH_ACCEPTANCE_WORKER_COUNT=4 WORKBENCH_ACCEPTANCE_WORKER_CAPACITY=5 node --test test/integration/five-users-multiround.test.js",
     "test:tool-isolation": "WORKBENCH_TOOL_ISOLATION_ACCEPTANCE=1 node --test test/integration/tool-isolation.test.js",
     "test:skill-validation": "WORKBENCH_SKILL_RUNTIME_ACCEPTANCE=1 node --test test/integration/skill-runtime-validation.test.js",
     "test:skill-install-discovery": "WORKBENCH_SKILL_INSTALL_DISCOVERY_ACCEPTANCE=1 node --test test/integration/skill-install-discovery.test.js",

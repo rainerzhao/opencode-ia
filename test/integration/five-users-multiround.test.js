@@ -21,11 +21,11 @@ const { loadCapacityAcceptanceProfile } = require('../../src/gateway/capacity-ac
 const real = process.env.WORKBENCH_REAL_ACCEPTANCE === '1';
 const multiSession = process.env.WORKBENCH_MULTI_SESSION_ACCEPTANCE === '1';
 const profile = loadCapacityAcceptanceProfile(process.env);
-const workerCount = multiSession ? 1 : 2;
+const workerCount = multiSession ? profile.workerCount : 2;
 // Fifteen persistent sessions submit together, while provider-facing execution
 // slots remain a separately governed resource. Five slots keep all five users
 // active without assuming the configured model API safely sustains 15 streams.
-const capacity = multiSession ? profile.executionSlots : 1;
+const capacity = multiSession ? profile.workerCapacity : 1;
 const globalRunning = multiSession ? profile.executionSlots : 2;
 const userRunning = 1;
 

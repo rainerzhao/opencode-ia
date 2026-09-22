@@ -25,10 +25,11 @@
 ## 联调顺序
 
 1. `chmod 600 /etc/opencode-workbench/opencode.json`，确认文件归属 OpenCode 服务账号。
-2. 执行 `npm run preflight:production`，再执行 `npm run preflight:opencode`；任一失败都停止发布。
+2. 执行 `npm run preflight:release`，再执行 `npm run preflight:production` 与 `npm run preflight:opencode`；任一失败都停止发布。汇总报告不输出 URL、密钥或路径，但不替代单项门禁。
 3. 先用 OpenCode 自身的健康/无害模型请求验证 Provider，再启动工作台；工作台 `/healthz` 只验证数据库和 Worker，不回显 Provider 配置。
 4. 登录两个测试账号，各创建两个 Conversation，分别执行三轮短请求，确认上下文连续、会话互不串线、取消和断线续传正常。
-5. 记录 Provider、OpenCode 版本、Git SHA、迁移版本、请求耗时和错误码摘要；不得记录 Prompt、响应正文、Cookie 或密钥。
+5. 运行 `npm run test:capacity:20:real`，它以 4 Worker × 每 Worker 5 槽位完成 20 用户、60 Conversation、3 轮 180 个真实任务，并验证跨轮标识、跨 Conversation 隔离、跨账号 404、单用户限流与队列。若出现 401/403/429、超时或任何任务错误则视为失败，不能回退到模拟模式。
+6. 记录 Provider、OpenCode 版本、Git SHA、迁移版本、Worker/槽位数、请求耗时和错误码摘要；不得记录 Prompt、响应正文、Cookie 或密钥。
 
 ## 失败边界
 
