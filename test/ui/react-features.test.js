@@ -52,8 +52,12 @@ test('home workbench summarizes only safe private work metadata and exposes next
     }));
     assert.match(html, /待推进需求/);
     assert.match(html, /待澄清/);
+    assert.match(html, /今日推进/);
+    assert.match(html, /下一步要做/);
+    assert.match(html, /进行中协作/);
+    assert.match(html, /资产沉淀/);
+    assert.match(html, /OpenCode Runtime/);
     assert.match(html, />继续 AI 对话</);
-    assert.match(html, /动态概览/);
     assert.doesNotMatch(html, /PRIVATE REQUIREMENT|OLD REQUIREMENT|PRIVATE CONVERSATION|PRIVATE KNOWLEDGE|TEAM SOLUTION/);
   });
 });
