@@ -12,6 +12,7 @@ PASS_WITH_NOTES
 | CI 等价真库回归 | MySQL/TLS 全量：407 pass、0 fail、6 skip、75 秒 | PASS |
 | 前端生产构建 | `npm run build` 通过 | PASS |
 | 静态与密钥门禁 | 204 文件语法检查、密钥扫描、`git diff --check` 均通过 | PASS |
+| Linux CI | [GitHub run 35681594053](https://github.com/rainerzhao/opencode-ia/actions/runs/35681594053) 完整成功，包括真实 MySQL/TLS 与 Linux 镜像门禁 | PASS |
 | 公司环境验收 | 未接入公司 Linux、MySQL 或 Provider | NOT RUN |
 
 本机隔离 MySQL 通过不能代替公司云 MySQL 网络、CA 或内部 Provider 验收。

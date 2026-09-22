@@ -7,3 +7,4 @@
 5. 草稿测试先删 `requirement_drafts` 再删用户，符合草稿到 Conversation 的 `RESTRICT` 外键。
 6. 定向迁移、需求仓储真库测试均通过；完整真库/TLS 套件通过 407 pass、0 fail、6 skip，75 秒。
 7. 额外质量门禁已通过：`npm run build`（Vite 生产构建）、`npm run check`（204 个 JavaScript 文件）、`npm run security:scan`（无密钥发现）以及 `git diff --check`。
+8. 提交 `804c9e3` 已推送到 `main`；GitHub Linux verification `35681594053` 成功通过真实 MySQL/TLS、Linux 镜像构建、容器非 root/持久目录及失败关闭入口检查。
