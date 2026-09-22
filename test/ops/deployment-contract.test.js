@@ -23,6 +23,9 @@ test('deployment templates keep runtime, cloud database and proxy boundaries exp
   assert.doesNotMatch(compose, /MYSQL_ROOT_PASSWORD|WORKBENCH_MYSQL_|mysql-data/);
   assert.match(compose, /WORKBENCH_DATABASE_URL:\s*\$\{WORKBENCH_DATABASE_URL:\?set WORKBENCH_DATABASE_URL\}/);
   assert.match(compose, /OPENCODE_CMD: \/opt\/opencode\/bin\/opencode/);
+  assert.match(compose, /OPENCODE_WORKER_COUNT: "4"/);
+  assert.match(compose, /OPENCODE_WORKER_CAPACITY: "5"/);
+  assert.match(compose, /GATEWAY_GLOBAL_RUNNING: "20"/);
   assert.match(systemd, /User=opencode/);
   assert.match(systemd, /ExecStart=\/usr\/bin\/node \/opt\/opencode-ia\/scripts\/start-production\.js/);
   assert.match(systemd, /NoNewPrivileges=true/);

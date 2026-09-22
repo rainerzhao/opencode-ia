@@ -12,6 +12,9 @@ services:
       OPENCODE_CMD: /opt/opencode/bin/opencode
       OPENCODE_CONFIG_FILE: /etc/opencode-workbench/opencode.json
       OPENCODE_VERIFIED_VERSION: ${OPENCODE_VERIFIED_VERSION:?set OPENCODE_VERIFIED_VERSION}
+      OPENCODE_WORKER_COUNT: "4"
+      OPENCODE_WORKER_CAPACITY: "5"
+      GATEWAY_GLOBAL_RUNNING: "20"
       COOKIE_SECURE: "true"
     volumes:
       - workbench-data:/var/lib/opencode-workbench

@@ -120,7 +120,7 @@ function loadConfig({ env = process.env, projectDir }) {
       env.GATEWAY_GLOBAL_RUNNING,
       2,
       'GATEWAY_GLOBAL_RUNNING',
-      16
+      20
     ),
     gatewayUserRunning: boundedPositiveInteger(
       env.GATEWAY_USER_RUNNING,

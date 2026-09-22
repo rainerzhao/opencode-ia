@@ -128,6 +128,24 @@ test('loads bounded persistent OpenCode worker settings without a stored passwor
   assert.equal(Object.hasOwn(config, 'opencodeWorkerPassword'), false);
 });
 
+test('accepts the product maximum of twenty active Gateway tasks', () => {
+  const config = loadConfig({
+    env: {
+      OPENCODE_WORKER_COUNT: '4',
+      OPENCODE_WORKER_CAPACITY: '5',
+      GATEWAY_GLOBAL_RUNNING: '20'
+    },
+    projectDir: '/srv/workbench'
+  });
+
+  assert.equal(config.gatewayGlobalRunning, 20);
+  assert.equal(config.opencodeWorkerCount * config.opencodeWorkerCapacity, 20);
+  assert.throws(
+    () => loadConfig({ env: { GATEWAY_GLOBAL_RUNNING: '21' }, projectDir: '/srv/workbench' }),
+    /GATEWAY_GLOBAL_RUNNING/
+  );
+});
+
 test('rejects an invalid worker port and unsafe worker identity text', () => {
   assert.throws(
     () => loadConfig({ env: { OPENCODE_WORKER_BASE_PORT: '70000' }, projectDir: '/srv/workbench' }),

@@ -14,7 +14,7 @@
 ## Compose 方式
 
 1. 在权限为 `0600` 的受保护环境文件中填写完整的 `WORKBENCH_DATABASE_URL`、`OPENCODE_INSTALL_ROOT`、`OPENCODE_CONFIG_FILE_HOST` 和 `OPENCODE_VERIFIED_VERSION`。生产优先使用云数据库提供的 TLS 连接地址（`mysqls://`）；不要把连接串写入 Compose、镜像或 Git。Provider 配置须为 `0600`，并由容器内 `node` 用户对应的主机 UID（默认 `1000`）拥有，否则启动门禁会拒绝运行。
-2. 将 `deploy/compose.intranet.yaml` 的数据卷和 OpenCode 安装路径替换为内网值；Nginx 域名和 TLS 路径在独立配置中调整。模板仅发布 `127.0.0.1:3000:3000`，供宿主机 Nginx 访问；对外入口为 HTTPS。Compose 配置自动重启、init 子进程回收及 30 秒停止宽限期。
+2. 将 `deploy/compose.intranet.yaml` 的数据卷和 OpenCode 安装路径替换为内网值；Nginx 域名和 TLS 路径在独立配置中调整。模板仅发布 `127.0.0.1:3000:3000`，供宿主机 Nginx 访问；对外入口为 HTTPS。默认 Runtime 拓扑为 4 Worker × 每 Worker 5 个槽位，Gateway 全局最多同时执行 20 个任务；这只是工作台侧调度边界，不能绕过 Provider 的并发、限流或配额。Compose 配置自动重启、init 子进程回收及 30 秒停止宽限期。
 3. 从部署主机确认公司云 MySQL 健康且网络可达，再运行 `docker compose -f deploy/compose.intranet.yaml config --quiet` 检查必填配置。
 4. 启动唯一的工作台服务：`docker compose -f deploy/compose.intranet.yaml up -d workbench`，检查 `curl -fsS http://127.0.0.1:3000/healthz`。
 5. 首次初始化管理员在受控终端执行 `docker compose -f deploy/compose.intranet.yaml exec workbench npm run admin:create -- --username admin --display-name 管理员`。容器使用与服务相同的 `WORKBENCH_DATABASE_URL`，通过能力检查和迁移后将首位管理员写入公司云 MySQL；密码按提示输入两次。已有账号时拒绝重复初始化，并发初始化由数据库锁串行处理。若服务尚未启动，也可用 `docker compose -f deploy/compose.intranet.yaml run --rm --no-deps workbench npm run admin:create -- --username admin --display-name 管理员`。

@@ -86,6 +86,8 @@ Demo 适合产品评审和流程体验，包含登录、账号管理、需求与
 
 公司预发布机在两项门禁通过后，可运行 `npm run test:capacity:20:real`：它明确启动 4 个常驻 OpenCode Worker、每个 5 个执行槽位，以 20 个账号 × 3 个 Conversation × 3 轮任务验证工作台的 20 活跃任务调度。该命令尚未在公司 Provider/Linux/MySQL 环境运行，不能据此承诺模型并发或生产 SLA。
 
+内网 Compose 模板使用同一 4 Worker × 5 槽位、全局最多 20 个运行任务的产品配置；这是工作台调度上限，不等于公司模型 API 已承诺 20 路并发。实际开放人数、模型限流和超时策略必须以公司预发布验收记录为准。
+
 ## 产品原则
 
 - OpenCode 是唯一 Agent Runtime；工作台不直接调用模型 Provider。
