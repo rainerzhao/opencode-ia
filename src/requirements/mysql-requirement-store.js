@@ -13,7 +13,10 @@ function date(value) { return toIsoTimestamp(value); }
 function unit(row) { return row && ({ id: row.id, name: row.name, status: row.status, createdByUserId: row.created_by_user_id, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }); }
 function interaction(row) { return row && ({ id: row.id, requirementId: row.requirement_id, channel: row.channel, content: row.content, occurredAt: date(row.occurred_at), recordedAt: date(row.recorded_at) }); }
 function link(row) { return row && ({ id: row.id, requirementId: row.requirement_id, resourceType: row.resource_type, resourceId: row.resource_id, versionId: row.version_id, title: row.title, createdAt: date(row.created_at) }); }
-function json(value) { return typeof value === 'string' ? JSON.parse(value) : value; }
+function json(value) {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
 function template(row) { return row && ({ id: row.id, key: row.field_key, label: row.label, type: row.field_type, options: json(row.options_json), required: Boolean(row.required), status: row.status, schemaVersion: row.schema_version, createdAt: date(row.created_at), updatedAt: date(row.updated_at) }); }
 function fieldValue(row) { const schema = json(row.template_snapshot_json); return { templateId: row.template_id, key: schema.key, label: schema.label, type: schema.type, schemaVersion: row.template_schema_version, value: json(row.value_json) }; }
 function draft(row) { return row && ({ id: row.id, ownerUserId: row.owner_user_id, sourceConversationId: row.source_conversation_id, sourceFirstSequence: Number(row.source_first_sequence), sourceLastSequence: Number(row.source_last_sequence), sourceSha256: row.source_sha256, gatewayJobId: row.gateway_job_id, status: row.status, draft: row.draft_json ? json(row.draft_json) : null, errorCode: row.error_code, confirmedRequirementId: row.confirmed_requirement_id, createdAt: date(row.created_at), updatedAt: date(row.updated_at), resolvedAt: date(row.resolved_at) }); }

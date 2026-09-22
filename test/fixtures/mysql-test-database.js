@@ -3,6 +3,9 @@
 const { parseMySqlUrl } = require('../../src/db/mysql-database');
 
 const TABLES_IN_DROP_ORDER = Object.freeze([
+  'requirement_field_values',
+  'requirement_drafts',
+  'requirement_field_templates',
   'requirement_links',
   'requirement_interactions',
   'requirements',

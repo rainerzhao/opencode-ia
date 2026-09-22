@@ -41,7 +41,7 @@ test('persists versioned private field values on MySQL and refuses archived temp
 test('keeps OpenCode draft confirmation private and idempotent on MySQL', { skip: !testUrl }, async (t) => {
   const db = await createMySqlDatabase({ url: testUrl, poolSize: 2 }); await migrateMySqlDatabase(db);
   const suffix = Date.now().toString(36); const owner = `draft-owner-${suffix}`, admin = `draft-admin-${suffix}`;
-  t.after(async () => { await db.query('DELETE FROM users WHERE id IN (?, ?)', [owner, admin]); await db.close(); });
+  t.after(async () => { await db.query('DELETE FROM requirement_drafts WHERE owner_user_id = ?', [owner]); await db.query('DELETE FROM users WHERE id IN (?, ?)', [owner, admin]); await db.close(); });
   await db.query(`INSERT INTO users (id, username, display_name, password_hash, role, status, created_at, updated_at) VALUES (?, ?, 'Owner', 'hash', 'member', 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)), (?, ?, 'Admin', 'hash', 'admin', 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, [owner, `draft.owner.${suffix}`, admin, `draft.admin.${suffix}`]);
   let serial = 0; const store = createMySqlRequirementStore(db, { idFactory: () => `mysql-draft-${suffix}-${++serial}`, clock: () => '2026-09-14T00:00:00.000Z' });
   const bu = await store.createBusinessUnit({ actorUserId: admin, actorRole: 'admin', name: `草稿 BU ${suffix}` });

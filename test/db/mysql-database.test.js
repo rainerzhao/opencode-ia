@@ -52,13 +52,13 @@ test('uses a real MySQL 8.4 database with utf8mb4 UTC, ngram and repeatable vers
       'users', 'login_sessions', 'audit_logs', 'conversations', 'gateway_workers',
       'opencode_sessions', 'gateway_jobs', 'gateway_events', 'skills', 'skill_versions',
       'skill_installations', 'skill_files', 'knowledge_documents', 'knowledge_versions',
-    'solutions', 'solution_versions', 'content_references', 'conversation_reference_details', 'content_attachments', 'business_units', 'requirements', 'requirement_interactions', 'requirement_links', 'schema_migrations'
+    'solutions', 'solution_versions', 'content_references', 'conversation_reference_details', 'content_attachments', 'business_units', 'requirements', 'requirement_interactions', 'requirement_links', 'requirement_field_templates', 'requirement_field_values', 'requirement_drafts', 'schema_migrations'
     ) ORDER BY table_name
   `);
   assert.deepEqual(tables.map((row) => row.name), [
     'audit_logs', 'business_units', 'content_attachments', 'content_references', 'conversation_reference_details', 'conversations', 'gateway_events', 'gateway_jobs',
     'gateway_workers', 'knowledge_documents', 'knowledge_versions', 'login_sessions',
-    'opencode_sessions', 'requirement_interactions', 'requirement_links', 'requirements', 'schema_migrations', 'skill_files', 'skill_installations',
+    'opencode_sessions', 'requirement_drafts', 'requirement_field_templates', 'requirement_field_values', 'requirement_interactions', 'requirement_links', 'requirements', 'schema_migrations', 'skill_files', 'skill_installations',
     'skill_versions', 'skills', 'solution_versions', 'solutions', 'users'
   ]);
 
