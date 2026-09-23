@@ -1,0 +1,12 @@
+.asset-workspace { border-color: var(--wb-line); border-radius: var(--wb-radius-lg); box-shadow: none; }
+.asset-workspace > .section-head { padding-bottom: 16px; border-bottom: 1px solid var(--wb-line); }
+.asset-workspace .section-head h3 { margin: 4px 0 5px; font-size: 21px; letter-spacing: -.02em; }
+.asset-workspace .section-head > div { min-width: 0; }
+.asset-workspace .knowledge-toolbar { border-color: var(--wb-line); border-radius: var(--wb-radius-md); background: var(--wb-surface-muted); }
+.asset-workspace .knowledge-item { border-color: var(--wb-line); border-radius: var(--wb-radius-md); box-shadow: none; }
+.asset-workspace .knowledge-item:hover { border-color: #a7d0d3; background: #f7fbfb; box-shadow: none; }
+.asset-workspace .content-card { position: relative; gap: 10px; padding: 0; border: 0; }
+.asset-workspace .content-card > .publish, .asset-workspace .content-card > .ghost { position: absolute; right: 14px; bottom: 14px; padding: 7px 9px; font-size: 11px; }
+.editor-panel { border-color: var(--wb-line); border-radius: var(--wb-radius-lg); }
+.editor-panel .section-head { padding-bottom: 14px; border-bottom: 1px solid var(--wb-line); }
+.editor-panel .source-card { border-color: var(--wb-line); background: var(--wb-surface-muted); }

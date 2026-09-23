@@ -159,6 +159,7 @@ test('administrator can reach every account recovery control', async () => {
       }]
     }));
 
+    assert.match(html, /团队治理控制台/);
     assert.match(html, /type="password"/);
     assert.match(html, />重置密码</);
     assert.match(html, />撤销会话</);
@@ -182,6 +183,7 @@ test('administrator can configure the BU and controlled fields that private requ
 test('knowledge page exposes search, authoring, and upload workflows', async () => {
   await withViteModule('features/knowledge/KnowledgePage.jsx', ({ KnowledgePage }) => {
     const html = renderToStaticMarkup(React.createElement(KnowledgePage));
+    assert.match(html, /知识资产/);
     assert.match(html, /placeholder="搜索标题或正文"/);
     assert.match(html, />新建文档</);
     assert.match(html, />上传文件</);
@@ -201,6 +203,7 @@ test('content pages show private state and explicit in-page publish or withdraw 
     const html = renderToStaticMarkup(React.createElement(SolutionsPage, {
       initialItems: [{ id: 'solution-1', title: '团队方案', status: 'published', visibility: 'team', version: 2 }]
     }));
+    assert.match(html, /方案资产/);
     assert.match(html, /团队已发布/);
     assert.match(html, />撤回团队</);
   });
@@ -241,6 +244,7 @@ test('Skill center exposes private draft creation and editing controls', async (
       initialSelectedSkill: skill
     }));
 
+    assert.match(html, /团队 Skill 中心/);
     assert.match(html, /私人草稿/);
     assert.match(html, /GPU 规划助手/);
     assert.match(html, /0\.1\.0/);
@@ -432,6 +436,7 @@ test('chat page exposes private conversation navigation and running controls', a
       initialActiveJobId: 'job-1',
       initialConnection: 'connected'
     }));
+    assert.match(html, /上下文协作/);
 
     assert.match(html, />新建对话</);
     assert.match(html, />季度预算分析</);

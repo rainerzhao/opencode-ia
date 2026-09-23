@@ -1,0 +1,14 @@
+.admin-workspace { display: grid; gap: 12px; }
+.admin-workspace__header { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding: 2px 2px 4px; }
+.admin-workspace__header h2 { margin: 5px 0 4px; font-size: 24px; letter-spacing: -.035em; }
+.admin-workspace__header p:last-child { margin: 0; color: var(--wb-muted); font-size: 13px; }
+.admin-workspace .panel { border-color: var(--wb-line); border-radius: var(--wb-radius-lg); box-shadow: none; }
+.admin-workspace .gateway-panel, .admin-workspace .requirement-configuration { margin: 0; }
+.admin-workspace .section-head { gap: 18px; }
+.admin-workspace .admin-grid { gap: 12px; }
+.admin-workspace .user-row { padding: 15px 2px; }
+.admin-workspace .config-list > div { border-top-color: var(--wb-line); }
+
+@media (max-width: 1180px) {
+  .admin-workspace__header { align-items: start; }
+}

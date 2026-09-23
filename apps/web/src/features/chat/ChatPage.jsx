@@ -192,6 +192,7 @@ export function ChatPage({ initialMessages = [], initialConversations = [], init
   }
 
   return <section className="conversation-workspace">
+    <header className="conversation-workspace__header"><div><p className="eyebrow">上下文协作</p><h2>AI 对话工作区</h2><p>每个长期会话保持私有上下文；运行、排队与恢复状态均由 OpenCode Runtime 管理。</p></div><span className="wb-status wb-status--active">OpenCode Runtime</span></header>
     <ConversationList conversations={conversations} activeId={activeId} busy={creating} status={conversationStatus} query={conversationQuery} hasMore={hasMoreConversations} onCreate={createConversation} onQuery={(query) => changeConversationLibrary(conversationStatus, query)} onStatus={(status) => changeConversationLibrary(status)} onLoadMore={() => loadConversations({ offset: conversationOffset, append: true })} onArchive={archiveConversation} onRestore={restoreConversation} onSelect={(id) => { activeRef.current = id; setActiveId(id); setNotice(''); }} />
     <div className="panel chat">
       <ExecutionStatus connection={connection} executionStatus={current.status} activeJobId={current.activeJobId} onCancel={cancel} />

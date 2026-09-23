@@ -262,6 +262,7 @@ export function SkillsPage({currentUser=null,initialSkills=null,initialSelectedS
     report?.verdict==='pass'&&report?.runtime?.status==='passed');
   const installationBySkill=new Map(installations.map(item=>[item.skillId,item]));
   return <section className="skills-workspace">
+    <header className="skills-workspace__header"><div><p className="eyebrow">团队能力资产</p><h2>团队 Skill 中心</h2><p>从私人草稿到校验、发布、安装与启用，版本状态始终可追溯。</p></div><span className="wb-status">按账号安装</span></header>
     <aside className="panel skill-rail">
       <div className="section-head"><div><p className="eyebrow">Stage 4D</p><h3>私人草稿</h3></div><button onClick={startCreate}>新建 Skill</button></div>
       <p className="muted">草稿仅本人可见，校验并人工发布后才会成为团队资产。</p>

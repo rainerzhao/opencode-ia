@@ -114,7 +114,8 @@ export function AdminPage({ user, initialUsers = [], initialBusinessUnits = [], 
     }
   }
 
-  return <>
+  return <section className="admin-workspace">
+    <header className="admin-workspace__header"><div><p className="eyebrow">团队治理</p><h2>团队治理控制台</h2><p>维护账号、统一字段与运行健康；成员的私人内容不会在这里出现。</p></div><span className="wb-status wb-status--attention">受控操作</span></header>
     <GatewayPanel />
     <RequirementConfiguration initialBusinessUnits={initialBusinessUnits} initialFieldTemplates={initialFieldTemplates} />
     <div className="admin-grid">
@@ -152,5 +153,5 @@ export function AdminPage({ user, initialUsers = [], initialBusinessUnits = [], 
         </form>
       </section>
     </div>}
-  </>;
+  </section>;
 }
