@@ -39,7 +39,7 @@ export function WorkbenchShell({ user, onLogout }) {
   const [page, setPage] = useState('home');
   const navigation = user.role === 'admin' ? [...groups, { label: '团队治理', items: [['admin', '账号管理', 'admin']] }] : groups;
   const views = {
-    home: <HomePage go={setPage} />,
+    home: <HomePage go={setPage} user={user} />,
     requirements: <RequirementsPage />,
     chat: <ChatPage />,
     solutions: <SolutionsPage />,

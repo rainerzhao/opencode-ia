@@ -24,7 +24,7 @@
 .wb-shell__scope .user { display: flex; align-items: center; gap: 10px; }
 .wb-shell__scope .user > span { background: var(--wb-signal-soft); color: var(--wb-signal); }
 .wb-shell__scope .ghost { padding: 8px 12px; }
-.wb-shell__workspace { min-width: 0; width: 100%; max-width: 1600px; padding: 24px 28px 30px; }
+.wb-shell__workspace { min-width: 0; width: 100%; max-width: 1600px; margin-inline: auto; padding: 24px 28px 30px; }
 .wb-shell__runtime { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 28px; color: var(--wb-muted); background: #f8fafc; border-top: 1px solid var(--wb-line); font-size: 11px; }
 .wb-shell__runtime strong { color: var(--wb-text); font-size: 11px; }
 .wb-shell__runtime i { width: 7px; height: 7px; border-radius: 50%; background: var(--wb-success); box-shadow: 0 0 0 4px rgb(44 128 96 / 10%); }

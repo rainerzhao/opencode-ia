@@ -16,7 +16,7 @@
 - OpenCode remains the only Agent Runtime and the browser does not call a Provider.
 - Preserve APIs, WebSocket events, authentication, CSRF, ownership, audit and MySQL behavior.
 - No public font CDN, external image service, analytics, or runtime design-system dependency.
-- Private titles and bodies never appear in home summaries.
+- The authenticated member may see titles returned by owner-scoped endpoints on their personal home; bodies and another member's private content never appear in home, administrator or team summaries.
 - Demo, Mac and CI evidence must not be presented as company production verification.
 
 ## Review Focus
@@ -64,7 +64,7 @@ Run: `node --test test/ui/react-build.test.js test/ui/react-features.test.js && 
 
 Expected: PASS; Vite emits a self-contained CSS asset without remote resources.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/design apps/web/src/shell apps/web/src/styles.css test/ui/react-build.test.js test/ui/react-features.test.js
@@ -80,28 +80,28 @@ git commit -m "feat: 建立 P2E 桌面工作台设计系统"
 - Modify: `test/ui/react-features.test.js`
 
 **Interfaces:**
-- Consumes: Task 1 `.wb-*` primitives and existing `HomePage({ go, initialData, fetcher })` contract.
-- Produces: a task-first home surface with safe aggregate metrics and navigation actions.
+- Consumes: Task 1 `.wb-*` primitives and existing owner-scoped requirements, conversations, knowledge and solutions endpoints.
+- Produces: a task-first personal command center with real owner-visible work rows, bounded operational lists and navigation actions.
 
-- [ ] **Step 1: Add a failing home contract**
+- [x] **Step 1: Add a failing home contract**
 
-Require the rendered page to contain `今日推进`, `下一步要做`, `待推进需求`, `待澄清`, `进行中协作`, `资产沉淀`, and `OpenCode Runtime`, while continuing to reject all supplied private titles.
+Require the rendered page to contain the greeting, `下一步要做`, five work signals, `待推进需求`, `待澄清`, `进行中协作`, `资产沉淀`, `近期里程碑`, and `OpenCode Runtime`. Owner-scoped titles render, while supplied private bodies remain absent.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `node --test --test-name-pattern="home workbench" test/ui/react-features.test.js`
 
 Expected: FAIL on the new approved labels/regions.
 
-- [ ] **Step 3: Implement the command home**
+- [x] **Step 3: Implement the command home**
 
-Keep `deriveWorkbenchSnapshot` and its safe counts. Replace the hero/card composition with a compact briefing, one dominant next action, a priority grid, asset path and low-emphasis Runtime status. Add `home.css` and import it from `styles.css`.
+Expand the pure home view model and replace the hero/card composition with a compact briefing, one dominant next action, five signals, a real requirement table, clarification queue, asset lifecycle, active conversations, milestones and low-emphasis Runtime status.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `node --test --test-name-pattern="home workbench" test/ui/react-features.test.js && npm run build`
 
-Expected: PASS with no private strings in rendered HTML.
+Expected: PASS with owner titles present, bodies absent and bounded list/count behavior verified.
 
 - [ ] **Step 5: Commit**
 

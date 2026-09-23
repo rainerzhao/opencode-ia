@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>个人作战台重构摘要</title>
+  <style>
+    :root{font-family:"Avenir Next","PingFang SC",sans-serif;color:#142237;background:#eef2f6}*{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:48px 28px 72px}header{padding:34px;border-left:5px solid #167f86;background:#fff}h1{margin:8px 0 12px;font-size:38px;letter-spacing:-.04em}h2{margin-top:34px;font-size:21px}.eyebrow{color:#167f86;font-size:12px;font-weight:800;letter-spacing:.12em}.lead{max-width:780px;color:#5f6e82;line-height:1.7}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}.card,details{padding:20px;background:#fff;border:1px solid #d6dee8;border-radius:10px}.card strong{display:block;font-size:28px}.card span{color:#5f6e82;font-size:12px}.shots{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}.shots img{width:100%;border:1px solid #d6dee8}summary{cursor:pointer;font-weight:800}li{margin:8px 0;line-height:1.55}.ok{color:#2c8060}.warn{color:#b87320}@media(max-width:800px){.grid,.shots{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <header><p class="eyebrow">P2E · PERSONAL COMMAND CENTER</p><h1>把卡片拼图改成真正可工作的个人作战台</h1><p class="lead">首页现在围绕“下一步”组织真实的本人需求、澄清队列、持续会话、资产生命周期和里程碑。OpenCode Runtime 保持为底层状态，默认私有边界没有改变。</p></header>
+  <section class="grid"><article class="card"><strong>5</strong><span>对齐的工作信号</span></article><article class="card"><strong>0</strong><span>两档桌面的页面级横向溢出</span></article><article class="card"><strong class="ok">392 / 0</strong><span>自动化通过 / 失败</span></article></section>
+  <h2>用户可见变化</h2>
+  <ul><li>问候、日期、业务标语与一个明确的下一步。</li><li>真实的本人需求表、澄清列表和私有会话，不再使用两行占位文案。</li><li>资产生命周期和近期里程碑让沉淀过程可见。</li><li>1440px 使用 12 栅格；1024px 使用明确的双列办公布局。</li></ul>
+  <h2>浏览器证据</h2><section class="shots"><figure><img src="artifacts/screenshots/home-1440-populated.png" alt="1440 像素个人作战台"><figcaption>1440×1000 · 填充状态</figcaption></figure><figure><img src="artifacts/screenshots/home-1024-populated.png" alt="1024 像素个人作战台"><figcaption>1024×900 · 最小办公宽度</figcaption></figure></section>
+  <h2>验收</h2><details open><summary>自动化与安全</summary><ul><li class="ok">416 项：392 pass、0 fail、24 个真实环境用例按预期 skip。</li><li class="ok">构建、语法检查、密钥扫描、diff 检查全部通过。</li><li>SSR 合同证明本人标题可见，但需求正文、知识正文和方案正文不进入概览。</li></ul></details>
+  <details><summary>浏览器与可访问性</summary><ul><li>1440×1000 和 1024×900 的 body 宽度与 viewport 相同。</li><li>键盘首个 Tab 到达当前导航，并显示 2px 青绿色焦点环。</li><li>填充态含 4 条需求、2 条澄清、3 个会话；空状态保持同一布局骨架。</li></ul></details>
+  <details><summary>仍未完成的生产验收</summary><ul><li class="warn">公司 Linux、内部 Provider、云 MySQL、真实 20 活跃任务与灾备演练不在本次本地 UI 验收范围内。</li><li>完整 P2E 全站 1440/1024 浏览器矩阵仍需继续。</li></ul></details>
+</main></body></html>

@@ -76,7 +76,11 @@ The shell becomes a stable three-zone structure:
 
 ### Workbench home
 
-The home page becomes a personal operating brief rather than a hero banner. Its top row presents date/context, one dominant next action and compact runtime health. Below it, requirements, clarification queue, active conversations and assets to curate form an asymmetric priority grid. Counts are secondary to the title and next action; zero states must not dominate the screen.
+The home page becomes a high-density personal command center rather than a hero banner or a collection of unrelated cards. Its top row presents the member greeting, date/context, one dominant next action and compact reminders. A five-column signal strip separates requirements to advance, active collaboration, weekly review, clarification work and reusable assets. Below it, a real requirement table, clarification queue, asset lifecycle, active conversations and recent milestones form a stable 12-column grid whose rows align at both 1440px and 1024px.
+
+The page may render titles and operational metadata returned by owner-scoped endpoints because the authenticated member is viewing their own work. It must not render another member's private content, include private titles in administrator/team aggregates, or promote any private item to a shared asset. Empty/loading/error states keep the same grid footprint so the page does not collapse into uneven boxes.
+
+The visual reference supplied on 2026-09-23 is the structural baseline: dark rail, calm light canvas, restrained teal system signals, amber attention states, dense tables and low-noise runtime status. It is not a raster asset to copy, and sample customer names, avatars and metrics in the reference are not product data.
 
 ### Requirements and scenarios
 

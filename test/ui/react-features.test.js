@@ -39,26 +39,76 @@ test('gateway operations shows safe metadata and only active jobs offer cancella
   });
 });
 
-test('home workbench summarizes only safe private work metadata and exposes next actions', async () => {
+test('home workbench renders a dense owner-scoped command center without exposing private bodies', async () => {
   await withViteModule('features/home/HomePage.jsx', ({ HomePage }) => {
     const html = renderToStaticMarkup(React.createElement(HomePage, {
       go: () => {},
+      user: { displayName: '张伟' },
+      now: new Date('2026-09-23T09:30:00+08:00'),
       initialData: {
-        requirements: [{ status: 'clarifying', title: 'PRIVATE REQUIREMENT' }, { status: 'resolved', title: 'OLD REQUIREMENT' }],
-        conversations: [{ id: 'conversation-1', title: 'PRIVATE CONVERSATION' }],
-        knowledge: [{ status: 'draft', visibility: 'private', title: 'PRIVATE KNOWLEDGE' }],
-        solutions: [{ status: 'published', visibility: 'team', title: 'TEAM SOLUTION' }]
+        requirements: [
+          { id: 'req-1', status: 'in_progress', title: '华东制造上云方案', buName: '制造 BU', updatedAt: '2026-09-22T08:00:00.000Z', description: 'PRIVATE REQUIREMENT BODY' },
+          { id: 'req-2', status: 'clarifying', title: '确认数据库部署边界', buName: '零售 BU', updatedAt: '2026-09-23T01:00:00.000Z', description: 'PRIVATE CLARIFICATION BODY' },
+          { id: 'req-3', status: 'resolved', title: '已完成需求', buName: '金融 BU', updatedAt: '2026-09-20T01:00:00.000Z' }
+        ],
+        conversations: [{ id: 'conversation-1', status: 'active', title: 'GPU 集群容量讨论', updatedAt: '2026-09-23T00:30:00.000Z' }],
+        knowledge: [{ id: 'knowledge-1', status: 'draft', visibility: 'private', title: '架构约束清单', updatedAt: '2026-09-22T03:00:00.000Z', content: 'PRIVATE KNOWLEDGE BODY' }],
+        solutions: [{ id: 'solution-1', status: 'published', visibility: 'team', title: '数据库选型方案', updatedAt: '2026-09-21T03:00:00.000Z', content: 'PRIVATE SOLUTION BODY' }]
       }
     }));
+    assert.match(html, /上午好，张伟/);
     assert.match(html, /待推进需求/);
-    assert.match(html, /待澄清/);
-    assert.match(html, /今日推进/);
+    assert.match(html, /进行中会话/);
+    assert.match(html, /本周有更新/);
+    assert.match(html, /待澄清问题/);
+    assert.match(html, /团队可复用/);
     assert.match(html, /下一步要做/);
     assert.match(html, /进行中协作/);
     assert.match(html, /资产沉淀/);
+    assert.match(html, /近期里程碑/);
     assert.match(html, /OpenCode Runtime/);
     assert.match(html, />继续 AI 对话</);
-    assert.doesNotMatch(html, /PRIVATE REQUIREMENT|OLD REQUIREMENT|PRIVATE CONVERSATION|PRIVATE KNOWLEDGE|TEAM SOLUTION/);
+    assert.match(html, /确认数据库部署边界/);
+    assert.match(html, /华东制造上云方案/);
+    assert.match(html, /GPU 集群容量讨论/);
+    assert.match(html, /aria-label="待推进需求列表"/);
+    assert.doesNotMatch(html, /<button[^>]+role="row"/);
+    assert.doesNotMatch(html, /PRIVATE REQUIREMENT BODY|PRIVATE CLARIFICATION BODY|PRIVATE KNOWLEDGE BODY|PRIVATE SOLUTION BODY/);
+  });
+});
+
+test('home view model prioritizes clarification work and bounds operational lists', async () => {
+  await withViteModule('features/home/HomePage.jsx', ({ buildWorkbenchView }) => {
+    const view = buildWorkbenchView({
+      requirements: [
+        { id: 'draft-new', status: 'draft', title: '草稿需求', updatedAt: '2026-09-23T08:00:00.000Z' },
+        { id: 'clarify-old', status: 'clarifying', title: '先澄清事实', updatedAt: '2026-09-20T08:00:00.000Z' },
+        { id: 'active-new', status: 'in_progress', title: '推进中的需求', updatedAt: '2026-09-23T07:00:00.000Z' },
+        { id: 'resolved', status: 'resolved', title: '已解决', updatedAt: '2026-09-23T09:00:00.000Z' },
+        { id: 'clarify-new', status: 'clarifying', title: '更新的澄清', updatedAt: '2026-09-22T08:00:00.000Z' },
+        { id: 'active-old', status: 'in_progress', title: '较早推进', updatedAt: '2026-09-19T08:00:00.000Z' },
+        { id: 'draft-old', status: 'draft', title: '较早草稿', updatedAt: '2026-09-18T08:00:00.000Z' }
+      ],
+      conversations: [], knowledge: [], solutions: []
+    }, new Date('2026-09-23T10:00:00.000Z'));
+
+    assert.equal(view.nextAction.id, 'clarify-new');
+    assert.deepEqual(view.requirementRows.map((item) => item.id), ['clarify-new', 'clarify-old', 'active-new', 'active-old', 'draft-new']);
+    assert.deepEqual(view.clarificationRows.map((item) => item.id), ['clarify-new', 'clarify-old']);
+    assert.equal(view.activeRequirements, 6);
+    assert.equal(view.requirementRows.length, 5);
+
+    const manyClarifications = buildWorkbenchView({
+      requirements: Array.from({ length: 6 }, (_, index) => ({ id: `clarify-${index}`, status: 'clarifying', title: `澄清 ${index}`, updatedAt: `2026-09-${String(10 + index).padStart(2, '0')}T08:00:00.000Z` }))
+    }, new Date('2026-09-23T10:00:00.000Z'));
+    assert.equal(manyClarifications.clarifyingRequirements, 6);
+    assert.equal(manyClarifications.clarificationRows.length, 4);
+
+    const conversationOnly = buildWorkbenchView({
+      conversations: [{ id: 'conversation-only', status: 'active', title: '继续架构讨论', updatedAt: '2026-09-23T09:00:00.000Z' }]
+    }, new Date('2026-09-23T10:00:00.000Z'));
+    assert.equal(conversationOnly.nextAction.id, 'conversation-only');
+    assert.equal(conversationOnly.nextDestination, 'chat');
   });
 });
 
