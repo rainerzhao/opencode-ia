@@ -85,7 +85,15 @@ test('requirement workbench makes private BU work discoverable and recordable', 
       initialBusinessUnits: [{ id: 'bu-1', name: '零售 BU' }],
       initialFieldTemplates: []
     }));
-    assert.match(html, /我的需求流/);
+    assert.match(html, /需求作战台/);
+    assert.match(html, /aria-label="需求队列"/);
+    assert.match(html, /aria-label="事实与证据"/);
+    assert.match(html, /aria-label="推进控制"/);
+    assert.match(html, /当前状态/);
+    assert.match(html, /class="requirement-item__title"/);
+    assert.match(html, /class="requirement-detail__title"/);
+    assert.match(html, /IM 工具沟通/);
+    assert.doesNotMatch(html, /IIM 沟通/);
     assert.match(html, /默认私有/);
     assert.match(html, /门店网络改造/);
     assert.match(html, /placeholder="搜索需求、场景或沟通背景"/);

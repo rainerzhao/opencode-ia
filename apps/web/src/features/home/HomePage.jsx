@@ -62,7 +62,7 @@ export function HomePage({ go, initialData = null, fetcher = request }) {
 
     <section className="home-next wb-panel" aria-label="下一步要做">
       <div className="home-next__accent" />
-      <div className="home-next__body"><p className="wb-eyebrow">下一步要做</p><h1>{primaryLabel}</h1><p>{snapshot.clarifyingRequirements ? `有 ${snapshot.clarifyingRequirements} 项需求等待补充业务事实或确认边界。` : '从 IIM、电话或会议事实开始，建立可以持续推进的需求记录。'}</p></div>
+      <div className="home-next__body"><p className="wb-eyebrow">下一步要做</p><h1>{primaryLabel}</h1><p>{snapshot.clarifyingRequirements ? `有 ${snapshot.clarifyingRequirements} 项需求等待补充业务事实或确认边界。` : '从 IM 工具、电话或会议事实开始，建立可以持续推进的需求记录。'}</p></div>
       <div className="home-next__meta"><span>需求队列</span><strong>{value(snapshot.activeRequirements)}</strong><small>项待推进</small></div>
       <button type="button" onClick={() => go('requirements')}>{snapshot.activeRequirements ? '继续处理' : '快速记录沟通'} <span aria-hidden="true">→</span></button>
     </section>
@@ -89,7 +89,7 @@ export function HomePage({ go, initialData = null, fetcher = request }) {
 
       <section className="home-assets wb-panel">
         <div className="home-section-head"><div><p className="wb-eyebrow">资产沉淀</p><h3>从私人草稿到团队复用</h3></div></div>
-        <ol><li><span>01</span><div><strong>沟通事实</strong><small>IIM、电话、会议与资料</small></div></li><li><span>02</span><div><strong>需求与方案</strong><small>人工确认后形成版本</small></div></li><li><span>03</span><div><strong>团队资产</strong><small>明确发布后才可复用</small></div></li></ol>
+        <ol><li><span>01</span><div><strong>沟通事实</strong><small>IM 工具、电话、会议与资料</small></div></li><li><span>02</span><div><strong>需求与方案</strong><small>人工确认后形成版本</small></div></li><li><span>03</span><div><strong>团队资产</strong><small>明确发布后才可复用</small></div></li></ol>
         <button className="ghost" type="button" onClick={() => go('solutions')}>查看方案资产</button>
       </section>
 
