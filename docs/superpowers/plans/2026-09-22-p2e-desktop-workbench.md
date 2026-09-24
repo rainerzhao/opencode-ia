@@ -44,21 +44,21 @@
 - Produces: semantic CSS tokens `--wb-*`, reusable classes `.wb-*`, and shell landmarks/classes consumed by every later task.
 - Preserves: `WorkbenchShell({ user, onLogout })`, page ids and `setPage` navigation behavior.
 
-- [ ] **Step 1: Add failing source-contract tests**
+- [x] **Step 1: Add failing source-contract tests**
 
 Add assertions that the three new CSS files exist, `styles.css` imports them, the shell renders grouped navigation and a `main` workspace landmark, and no CSS contains remote `url(http...)` resources.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run: `node --test test/ui/react-build.test.js test/ui/react-features.test.js`
 
 Expected: FAIL because the design files and shell markers do not exist.
 
-- [ ] **Step 3: Implement the foundation and shell**
+- [x] **Step 3: Implement the foundation and shell**
 
 Create the semantic tokens and focus/field/button primitives. Rewrite `WorkbenchShell.jsx` into readable JSX with navigation groups, context header and persistent runtime footer. Convert `styles.css` into the import manifest while retaining legacy feature rules until their owning tasks replace them.
 
-- [ ] **Step 4: Run focused tests and build**
+- [x] **Step 4: Run focused tests and build**
 
 Run: `node --test test/ui/react-build.test.js test/ui/react-features.test.js && npm run build`
 
@@ -103,7 +103,7 @@ Run: `node --test --test-name-pattern="home workbench" test/ui/react-features.te
 
 Expected: PASS with owner titles present, bodies absent and bounded list/count behavior verified.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/features/home apps/web/src/styles.css test/ui/react-features.test.js
@@ -122,27 +122,27 @@ git commit -m "feat: 重构个人任务工作台首页"
 - Consumes: Task 1 workspace grid and status tokens; current requirements REST behavior remains unchanged.
 - Produces: semantic record rail, detail timeline and next-action pane, with the same create/edit/filter/communication/asset/draft actions.
 
-- [ ] **Step 1: Add failing requirements contracts**
+- [x] **Step 1: Add failing requirements contracts**
 
 Require `需求作战台`, `需求队列`, `事实与证据`, and `推进控制` regions, a current-state text label, long-title-safe element markers, and all existing privacy/communication/asset actions.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `node --test --test-name-pattern="requirement workbench|requirement detail|requirement draft" test/ui/react-features.test.js`
 
 Expected: FAIL on the new region labels/classes.
 
-- [ ] **Step 3: Implement the requirements workspace**
+- [x] **Step 3: Implement the requirements workspace**
 
 Refactor only presentation markup and small view helpers. Preserve every request function and form field name. Add a dense filter command row, semantic list items, a center evidence pane, and a 1024px fallback that moves the action pane below the detail.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `node --test --test-name-pattern="requirement workbench|requirement detail|requirement draft" test/ui/react-features.test.js && npm run build`
 
 Expected: PASS; all existing requirement lifecycle controls remain present.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/features/requirements apps/web/src/styles.css test/ui/react-features.test.js
@@ -167,27 +167,27 @@ git commit -m "feat: 重构需求与场景作战台"
 - Consumes: Task 1 primitives and Tasks 2–3 visual language.
 - Produces: consistent workspace framing without altering component public props or business actions.
 
-- [ ] **Step 1: Add failing cross-workspace contracts**
+- [x] **Step 1: Add failing cross-workspace contracts**
 
 Require an explicit contextual collaboration heading and lifecycle labels for solution, knowledge, Skill and administration surfaces. Assert the existing publish/install/enable/version/account controls still render.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `node --test test/ui/react-features.test.js`
 
 Expected: FAIL on the new semantic page framing.
 
-- [ ] **Step 3: Implement aligned workspaces**
+- [x] **Step 3: Implement aligned workspaces**
 
 Add page headers and shared asset workspace classes, then move visual rules into the three feature CSS files. Keep chat event handling, asset lifecycle actions, Skill validation and administrator operations unchanged.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `node --test test/ui/react-features.test.js && npm run build`
 
 Expected: PASS; all user-visible lifecycle actions remain available.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/features apps/web/src/styles.css test/ui/react-features.test.js
@@ -207,17 +207,17 @@ git commit -m "feat: 统一 AI 与团队资产工作区体验"
 - Consumes: the complete P2E UI from Tasks 1–4.
 - Produces: browser evidence and truthful project status for maintainers and colleagues.
 
-- [ ] **Step 1: Run the automated quality gate**
+- [x] **Step 1: Run the automated quality gate**
 
 Run: `npm test && npm run build && npm run check && npm run security:scan && git diff --check`
 
 Expected: all non-environment tests pass; any real OpenCode-only skips are named in the report.
 
-- [ ] **Step 2: Run the Demo and browser acceptance**
+- [x] **Step 2: Run the Demo and browser acceptance**
 
 At 1440×1000 visit all seven destinations. At 1024×900 visit home, requirements, AI, Skills and administration. Verify no page-level horizontal overflow, visible focus, working navigation and populated/empty states. Save screenshots under the task artifact directory.
 
-- [ ] **Step 3: Record evidence and update product documents**
+- [x] **Step 3: Record evidence and update product documents**
 
 Document the exact viewports, paths, actions and limitations. Mark P2E complete only for local desktop browser acceptance; keep company Linux, Provider and production gates pending.
 

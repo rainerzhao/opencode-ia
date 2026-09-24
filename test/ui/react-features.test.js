@@ -238,6 +238,20 @@ test('knowledge page exposes search, authoring, and upload workflows', async () 
     assert.match(html, />新建文档</);
     assert.match(html, />上传文件</);
     assert.match(html, /导入知识包/);
+    assert.match(html, /class="asset-empty-state"/);
+    assert.match(html, /建立第一份知识资产/);
+    assert.match(html, />创建第一篇文档</);
+  });
+});
+
+test('empty solution library explains the private-to-team lifecycle and offers a first action', async () => {
+  await withViteModule('features/solutions/SolutionsPage.jsx', ({ SolutionsPage }) => {
+    const html = renderToStaticMarkup(React.createElement(SolutionsPage));
+    assert.match(html, /class="asset-empty-state"/);
+    assert.match(html, /建立第一份方案资产/);
+    assert.match(html, /私有草稿/);
+    assert.match(html, /人工发布/);
+    assert.match(html, />创建第一份方案</);
   });
 });
 
@@ -305,6 +319,9 @@ test('Skill center exposes private draft creation and editing controls', async (
     assert.match(html, /name="displayName"/);
     assert.match(html, /name="description"/);
     assert.match(html, /name="skillMd"/);
+    assert.match(html, /aria-label="Skill 生命周期工作区"/);
+    assert.match(html, /aria-label="私人草稿与团队目录"/);
+    assert.match(html, /aria-label="Skill 草稿编辑器"/);
   });
 });
 
