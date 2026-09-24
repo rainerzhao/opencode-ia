@@ -221,7 +221,7 @@ At 1440×1000 visit all seven destinations. At 1024×900 visit home, requirement
 
 Document the exact viewports, paths, actions and limitations. Mark P2E complete only for local desktop browser acceptance; keep company Linux, Provider and production gates pending.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 ```bash
 git add README.md docs/PRODUCT_GOAL.md docs/ROADMAP.md docs/dev-loop-runs/2026-09-22-p2e-desktop-workbench
@@ -229,8 +229,10 @@ git commit -m "docs: 完成 P2E 桌面工作台验收"
 git push origin main
 ```
 
-- [ ] **Step 5: Verify remote state**
+- [x] **Step 5: Verify remote state**
 
 Run: `git fetch origin main && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"`
 
 Expected: exit 0 and the Linux verification run for `HEAD` succeeds.
+
+Delivered as `4ddbe45` on `origin/main`; local and remote revisions were matched after `git fetch origin main`. This closes only P2E Mac / isolated Demo acceptance. Company Linux, internal Provider, cloud MySQL and real-capacity verification remain P3 gates.
