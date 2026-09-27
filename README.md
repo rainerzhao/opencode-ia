@@ -91,6 +91,8 @@ Demo 适合产品评审和流程体验，包含登录、账号管理、需求与
 
 容量验收分为两层：`npm run test:capacity:20:real` 使用测试 SQLite 数据层验证真实 OpenCode Runtime、20 个账号、60 个 Conversation 和 180 个多轮任务；它不能证明生产数据库链路。公司 Linux 上必须另行使用一个**全新且库名包含 `acceptance` 的专用 MySQL 8.4 数据库**，再运行 `npm run test:capacity:20:production`。后者会重复执行生产配置与 Provider 门禁，直接启动 MySQL production composition、4 个常驻 OpenCode Worker × 每个 5 槽位，并验证 20 个同时活跃任务、上下文隔离、跨账号 404 和排队边界。该命令尚未取得公司环境执行证据，不能据此承诺模型并发或生产 SLA，也不得指向正式业务库。
 
+生产路径 Harness 的设计、TDD 证据和剩余风险见 [P3A1 验收报告](docs/dev-loop-runs/2026-09-24-p3a-production-capacity/04-acceptance-report.md)。
+
 内网 Compose 模板使用同一 4 Worker × 5 槽位、全局最多 20 个运行任务的产品配置；这是工作台调度上限，不等于公司模型 API 已承诺 20 路并发。实际开放人数、模型限流和超时策略必须以公司预发布验收记录为准。
 
 ## 产品原则
