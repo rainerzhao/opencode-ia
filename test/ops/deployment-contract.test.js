@@ -34,3 +34,18 @@ test('deployment templates keep runtime, cloud database and proxy boundaries exp
   assert.match(runbook, /不包含任何真实密码、证书或 Provider 配置/);
   assert.doesNotMatch(`${dockerfile}\n${compose}\n${systemd}\n${nginx}`, /\bsk-[A-Za-z0-9_-]{16,}\b/);
 });
+
+test('production capacity acceptance uses the MySQL production composition and an explicit command', () => {
+  const packageJson = JSON.parse(read('package.json'));
+  const harness = read('test/integration/production-capacity.test.js');
+  assert.equal(
+    packageJson.scripts['test:capacity:20:production'],
+    'WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE=1 node --test test/integration/production-capacity.test.js'
+  );
+  assert.match(harness, /createMySqlProductionWorkbench/);
+  assert.match(harness, /loadProductionCapacityProfile/);
+  assert.match(harness, /validateProductionConfig/);
+  assert.match(harness, /validateOpenCodeProviderConfig/);
+  assert.match(harness, /maxUserRunning/);
+  assert.doesNotMatch(harness, /createAuthenticatedWorkbench/);
+});
