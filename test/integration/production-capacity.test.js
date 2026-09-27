@@ -16,6 +16,7 @@ const { authHeaders, login, readJson } = require('../fixtures/authenticated-work
 const { runAdminCli } = require('../fixtures/admin-cli');
 
 const enabled = process.env.WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE === '1';
+const recoveryEnabled = process.env.WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE === '1';
 
 async function reservePortBlock(size) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -65,6 +66,13 @@ async function expectJsonStatus(responsePromise, expected, operation) {
   return readJson(response);
 }
 
+function answerFor(messages, jobId) {
+  return messages
+    .filter((event) => event.jobId === jobId && event.type === 'message.delta')
+    .map((event) => event.data.text)
+    .join('');
+}
+
 test('twenty users complete isolated multi-round work through MySQL production and real OpenCode', {
   skip: !enabled,
   timeout: 3_600_000
@@ -81,6 +89,8 @@ test('twenty users complete isolated multi-round work through MySQL production a
     WORKBENCH_DATA_DIR: path.join(root, 'data'),
     OPENCODE_CWD: path.join(root, 'runtime'),
     OPENCODE_WORKER_BASE_PORT: String(workerBasePort),
+    XDG_DATA_HOME: path.join(root, 'opencode-data'),
+    XDG_CACHE_HOME: path.join(root, 'opencode-cache'),
     COOKIE_SECURE: 'true'
   };
   fs.mkdirSync(env.OPENCODE_CWD, { recursive: true });
@@ -100,7 +110,7 @@ test('twenty users complete isolated multi-round work through MySQL production a
   });
   assert.equal(bootstrap.code, 0, `fresh acceptance database bootstrap failed: ${bootstrap.stderr.trim()}`);
 
-  const workbench = await createMySqlProductionWorkbench({
+  let workbench = await createMySqlProductionWorkbench({
     env,
     projectDir: path.resolve(__dirname, '../..'),
     logger: { log() {}, error() {} }
@@ -241,8 +251,140 @@ test('twenty users complete isolated multi-round work through MySQL production a
   assert.equal(maxRunning, profile.executionSlots);
   assert.equal(maxUserRunning, profile.userRunning);
   assert.ok(maxQueued > 0);
+
+  let recovery = null;
+  if (recoveryEnabled) {
+    const track = tracks[0];
+    const capacityJobIds = track.messages
+      .filter((event) => event.type === 'job.accepted' && event.conversationId === track.conversation.id)
+      .map((event) => event.jobId);
+    assert.equal(capacityJobIds.length, profile.rounds, 'capacity job ids are incomplete before recovery drill');
+
+    track.socket.send(JSON.stringify({
+      type: 'prompt',
+      conversationId: track.conversation.id,
+      idempotencyKey: `${track.conversation.id}-recovery-crash`,
+      text: '继续分析当前会话，但先进行充分思考，稍后再回答。不要使用工具。'
+    }));
+    const crashAccepted = await until(() => track.messages.find((event) =>
+      event.type === 'job.accepted'
+      && event.conversationId === track.conversation.id
+      && !capacityJobIds.includes(event.jobId)
+    ));
+    await until(() => track.messages.find((event) =>
+      event.type === 'job.started' && event.jobId === crashAccepted.jobId
+    ));
+
+    const jobsAtCrash = await expectJsonStatus(fetch(`${origin}/api/admin/gateway/jobs`, {
+      headers: authHeaders(admin)
+    }), 200, 'recovery job metadata');
+    const runningJob = jobsAtCrash.jobs.find((job) => job.id === crashAccepted.jobId);
+    assert.equal(runningJob?.status, 'running', 'recovery crash job was not running');
+    assert.ok(runningJob.workerId, 'recovery crash job has no worker binding');
+    const originalWorker = workbench.gatewayService.snapshot().pool.workers.find((worker) =>
+      worker.id === runningJob.workerId
+    );
+    assert.equal(originalWorker?.status, 'healthy', 'recovery crash worker was not healthy');
+    assert.ok(Number.isInteger(originalWorker.processId) && originalWorker.processId > 1, 'recovery crash worker has no process');
+
+    track.socket.send(JSON.stringify({
+      type: 'prompt',
+      conversationId: track.conversation.id,
+      idempotencyKey: `${track.conversation.id}-recovery-queued`,
+      text: `只原样输出本会话第一轮唯一标识 ${track.marker}，不要使用工具。`
+    }));
+    const queuedAccepted = await until(() => track.messages.find((event) =>
+      event.type === 'job.accepted'
+      && event.conversationId === track.conversation.id
+      && ![...capacityJobIds, crashAccepted.jobId].includes(event.jobId)
+    ));
+    await until(() => track.messages.find((event) =>
+      event.type === 'job.queued' && event.jobId === queuedAccepted.jobId
+    ));
+
+    try {
+      process.kill(originalWorker.processId, 'SIGKILL');
+    } catch {
+      assert.fail('recovery crash signal could not be delivered');
+    }
+    await until(() => track.messages.find((event) =>
+      event.type === 'job.interrupted' && event.jobId === crashAccepted.jobId
+    ));
+    const restartedWorker = await until(() => {
+      const worker = workbench.gatewayService.snapshot().pool.workers.find((item) => item.id === originalWorker.id);
+      return worker?.status === 'healthy'
+        && Number.isInteger(worker.processId)
+        && worker.processId !== originalWorker.processId
+        ? worker
+        : null;
+    });
+    assert.equal(
+      restartedWorker.processId !== originalWorker.processId,
+      true,
+      'recovery worker process was not replaced'
+    );
+
+    const queuedTerminal = await until(() => track.messages.find((event) =>
+      event.jobId === queuedAccepted.jobId
+      && ['job.completed', 'job.interrupted', 'job.failed'].includes(event.type)
+    ));
+    let recoveryMode;
+    if (queuedTerminal.type === 'job.completed') {
+      assert.ok(answerFor(track.messages, queuedAccepted.jobId).includes(track.marker), 'recovered session lost its marker');
+      recoveryMode = 'session-restored';
+    } else {
+      assert.equal(queuedTerminal.type, 'job.interrupted', 'queued recovery job failed instead of reaching a safe boundary');
+      assert.ok(track.messages.some((event) =>
+        event.type === 'conversation.recovery_boundary' && event.conversationId === track.conversation.id
+      ), 'unavailable session did not publish a recovery boundary');
+      recoveryMode = 'safe-recovery-boundary';
+    }
+
+    const acceptedJobIds = [...capacityJobIds, crashAccepted.jobId, queuedAccepted.jobId];
+    assert.equal(new Set(acceptedJobIds).size, 5, 'recovery drill did not produce five distinct jobs');
+    recovery = {
+      conversationId: track.conversation.id,
+      username: track.member.user.username,
+      acceptedJobIds,
+      mode: recoveryMode,
+      processReplaced: true
+    };
+  }
+
   await workbench.stop();
   stopped = true;
+  for (const socket of sockets) socket.terminate();
+
+  if (recovery) {
+    workbench = await createMySqlProductionWorkbench({
+      env,
+      projectDir: path.resolve(__dirname, '../..'),
+      logger: { log() {}, error() {} }
+    });
+    stopped = false;
+    const restartedAddress = await workbench.start(0, '127.0.0.1');
+    const restartedOrigin = `http://127.0.0.1:${restartedAddress.port}`;
+    const restartedMember = await login(restartedOrigin, recovery.username, memberPassword);
+    assert.equal(restartedMember.response.status, 200, 'member login after workbench restart failed');
+    const persistedConversation = await expectJsonStatus(fetch(
+      `${restartedOrigin}/api/conversations/${recovery.conversationId}`,
+      { headers: authHeaders(restartedMember) }
+    ), 200, 'persisted conversation read');
+    assert.equal(persistedConversation.conversation.id, recovery.conversationId);
+    const history = await expectJsonStatus(fetch(
+      `${restartedOrigin}/api/conversations/${recovery.conversationId}/events?afterSequence=0&limit=1000`,
+      { headers: authHeaders(restartedMember) }
+    ), 200, 'persisted conversation history read');
+    assert.equal(history.hasMore, false, 'recovery acceptance history exceeded its bounded read');
+    const terminalTypes = new Set(['job.completed', 'job.interrupted', 'job.failed']);
+    for (const jobId of recovery.acceptedJobIds) {
+      const terminals = history.events.filter((event) => event.jobId === jobId && terminalTypes.has(event.type));
+      assert.equal(terminals.length, 1, `job ${jobId} does not have exactly one persisted terminal event`);
+    }
+    await workbench.stop();
+    stopped = true;
+  }
+
   t.diagnostic(JSON.stringify({
     schemaVersion: 1,
     mode: 'production-mysql-real-opencode',
@@ -256,6 +398,12 @@ test('twenty users complete isolated multi-round work through MySQL production a
     maxRunning,
     maxUserRunning,
     maxQueued,
-    roundMilliseconds
+    roundMilliseconds,
+    recovery: recovery ? {
+      enabled: true,
+      mode: recovery.mode,
+      processReplaced: recovery.processReplaced,
+      persistedJobs: recovery.acceptedJobIds.length
+    } : { enabled: false }
   }));
 });

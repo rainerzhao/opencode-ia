@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>P3B1 生产恢复 Harness</title>
+  <style>
+    body{font:16px/1.65 system-ui,sans-serif;max-width:960px;margin:0 auto;padding:48px 28px;color:#18242b;background:#f4f7f6}
+    main{background:#fff;border:1px solid #d9e2df;padding:36px}h1,h2{color:#0d4f56}code{background:#edf3f1;padding:.15em .35em}
+    table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #d9e2df;text-align:left}.ok{color:#08745f}.pending{color:#8a5a00}details{margin:18px 0}
+  </style>
+</head>
+<body><main>
+  <p>P3B1 · 2026-09-27</p>
+  <h1>生产恢复 Harness</h1>
+  <p>补齐 MySQL production composition 的故障恢复证据入口：在 20×3×3 容量路径之后强杀真实 OpenCode Worker，验证安全恢复，再重启整套工作台并从同一 MySQL 复读历史。</p>
+  <table>
+    <tr><th>交付</th><th>状态</th></tr>
+    <tr><td>运行任务中断、Worker 新进程恢复</td><td class="ok">代码与契约已验证</td></tr>
+    <tr><td>Session 恢复或明确 recovery boundary</td><td class="ok">失败关闭逻辑已验证</td></tr>
+    <tr><td>整机重建后五个任务唯一终态</td><td class="ok">HTTP 验收路径已就绪</td></tr>
+    <tr><td>公司 Linux + 云 MySQL + 内部 Provider 实跑</td><td class="pending">待公司环境</td></tr>
+  </table>
+  <h2>验证</h2>
+  <p><code>npm test</code>：424 total / 399 pass / 0 fail / 25 skip；build、207 文件语法检查、密钥扫描与 diff 检查通过。Mac 显式运行完整生产命令按设计以 <code>PRODUCTION_CAPACITY_LINUX_REQUIRED</code> 失败。</p>
+  <details><summary>恢复语义</summary><ul><li>运行任务必须中断，不静默重放。</li><li>排队任务只允许保留 marker 完成，或在 recovery boundary 后中断。</li><li>重启后通过账号登录和 HTTP API 读取持久历史，不依赖旧进程内存。</li></ul></details>
+  <details><summary>安全边界</summary><ul><li>不自动清空远端数据库。</li><li>不输出 PID、Prompt、回复、Cookie、数据库 URL、密钥或配置路径。</li><li>Harness 就绪不等于公司生产灾备验收完成。</li></ul></details>
+  <details><summary>剩余工作</summary><p>在公司 Linux 上运行完整命令，再完成 MySQL/附件备份恢复、宿主机重启、升级回滚与长稳验收。</p></details>
+</main></body></html>

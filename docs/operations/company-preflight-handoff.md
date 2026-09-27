@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 业务数据层 | MySQL-only 生产组合、迁移、TLS/附件恢复相关回归 | 不证明公司云数据库网络、账号或 CA 可用 |
 | Runtime 边界 | 常驻 OpenCode Worker、私有 Conversation、队列、恢复测试 | 不证明公司 Provider 的质量、限流或长期稳定性 |
-| 多人调度 | 20 账号、20 WebSocket、60 Conversation、180 模拟任务；MySQL + 真实 OpenCode 生产路径 Harness | Harness 尚未在公司环境实跑，不是模型吞吐 SLA |
+| 多人调度与恢复 | 20 账号、20 WebSocket、60 Conversation、180 模拟任务；MySQL + 真实 OpenCode 的生产容量与 Worker/整机恢复 Harness | Harness 尚未在公司环境实跑，不是模型吞吐或灾备 SLA |
 | 部署门禁 | 非 root、外部 MySQL、Secure Cookie、Runtime 路径、Provider 文件检查 | 尚未在公司 Linux 主机运行 |
 | 产品闭环 | 需求、沟通、私有内容、草稿确认、资产关联、会话资料库 | 隔离 Demo，不是生产验收 |
 
@@ -28,10 +28,10 @@ npm run preflight:production
 npm run preflight:opencode
 npm run start:production
 # 在独立 acceptance 数据库和同一受保护 Provider 配置下：
-npm run test:capacity:20:production
+npm run test:production:acceptance
 ```
 
-`preflight:release` 是两项静态门禁的脱敏汇总报告；失败时仍会输出 `not_ready` JSON 与安全错误代码，便于留档，但不能代替后续单项门禁或真实环境验收。门禁全部通过后，按 [内部 Provider 联调清单](internal-provider.md) 运行：两个账号的多会话短测、MySQL production composition 的 20×3×3 真实模型任务、取消/断线、Runtime 与 MySQL 故障恢复、备份恢复和升级回滚。容量命令会再次执行生产与 Provider 门禁，并在已有账号导致首位管理员初始化失败时停止；它不会删除或重置远端数据。每一步记录 Git SHA、OpenCode 版本、迁移版本、耗时和安全错误码摘要；不记录 Prompt、响应正文、Cookie、数据库 URL 或密钥。
+`preflight:release` 是两项静态门禁的脱敏汇总报告；失败时仍会输出 `not_ready` JSON 与安全错误代码，便于留档，但不能代替后续单项门禁或真实环境验收。门禁全部通过后，按 [内部 Provider 联调清单](internal-provider.md) 运行：两个账号的多会话短测，以及 `test:production:acceptance` 的 MySQL production composition 20×3×3 真实模型任务、Worker 强杀、进程替换、安全恢复边界和整机重启历史复读；再单独完成取消/断线、MySQL/附件备份恢复和升级回滚。完整命令会再次执行生产与 Provider 门禁，并在已有账号导致首位管理员初始化失败时停止；它不会删除或重置远端数据。每一步记录 Git SHA、OpenCode 版本、迁移版本、耗时和安全错误码摘要；不记录 PID、Prompt、响应正文、Cookie、数据库 URL、密钥或配置路径。
 
 ## 开放访问的否决条件
 

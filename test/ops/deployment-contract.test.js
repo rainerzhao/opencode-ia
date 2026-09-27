@@ -49,3 +49,17 @@ test('production capacity acceptance uses the MySQL production composition and a
   assert.match(harness, /maxUserRunning/);
   assert.doesNotMatch(harness, /createAuthenticatedWorkbench/);
 });
+
+test('full production acceptance adds explicit runtime recovery and persisted history checks', () => {
+  const packageJson = JSON.parse(read('package.json'));
+  const harness = read('test/integration/production-capacity.test.js');
+  assert.equal(
+    packageJson.scripts['test:production:acceptance'],
+    'WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE=1 WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE=1 node --test test/integration/production-capacity.test.js'
+  );
+  assert.match(harness, /WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE/);
+  assert.match(harness, /SIGKILL/);
+  assert.match(harness, /conversation\.recovery_boundary/);
+  assert.match(harness, /processReplaced/);
+  assert.match(harness, /\/events\?afterSequence=0&limit=1000/);
+});

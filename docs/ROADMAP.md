@@ -8,7 +8,7 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0–4 与 P2A–P2E 已完成 Mac 应用级验收；MySQL 单一数据层已完成本机真实 HTTP/WebSocket 和恢复演练；Stage 5A–5C、5D1 Linux 镜像检查及 P3A MySQL + 真实 OpenCode 生产路径容量 Harness 已就绪，P3A 实跑与 Stage 5D–5E 的公司环境联调和生产验收仍待完成** 的状态。
+项目当前处于 **Stage 0–4 与 P2A–P2E 已完成 Mac 应用级验收；MySQL 单一数据层已完成本机真实 HTTP/WebSocket 和恢复演练；Stage 5A–5C、5D1 Linux 镜像检查、P3A 生产容量 Harness 与 P3B1 生产恢复 Harness 已就绪，P3A/P3B 公司 Linux + 云 MySQL + 内部 Provider 实跑及 Stage 5D–5E 验收仍待完成** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -79,7 +79,7 @@ Stage 1 已在 Mac 上跑通管理员与成员浏览器闭环、React/Vite 迁�
 - ✅ Stage 2D：私人 Conversation API、WebSocket 订阅/提交/取消、断线补发和恢复边界、生产双 Worker 组合及 React 多会话体验。
 - ✅ Stage 2E：启动与运行期恢复、管理后台、20 用户模拟、真实 5×3×3 多会话和工具执行隔离。
 
-Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。每个 Conversation 的目录和产物相互隔离；Runtime 以 pure 模式运行，并从全局、Agent 和 Prompt 三层关闭高风险工具。Stage 2 在 Mac 的应用级验收已经关闭。`npm run test:capacity:20:real` 用 SQLite 测试数据层验证真实 OpenCode Runtime 的 20×3×3 路径；P3A 新增 `npm run test:capacity:20:production`，直接使用 MySQL production composition 与 4 Worker × 5 槽位，并对 Linux、全新 acceptance 数据库、生产配置和 Provider 配置失败关闭。两个 Harness 都已具备，但后者尚未取得公司 Provider/Linux/云 MySQL 的执行证据。
+Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。每个 Conversation 的目录和产物相互隔离；Runtime 以 pure 模式运行，并从全局、Agent 和 Prompt 三层关闭高风险工具。Stage 2 在 Mac 的应用级验收已经关闭。`npm run test:capacity:20:real` 用 SQLite 测试数据层验证真实 OpenCode Runtime 的 20×3×3 路径；P3A 的 `npm run test:capacity:20:production` 直接使用 MySQL production composition 与 4 Worker × 5 槽位；P3B1 的 `npm run test:production:acceptance` 在同一容量路径后追加 Worker 强杀、进程替换、安全恢复边界及整机重启后的 MySQL 历史复读。生产命令均对 Linux、全新 acceptance 数据库、生产配置和 Provider 配置失败关闭，但尚未取得公司环境执行证据。
 
 出口标准：真实 OpenCode 在 Mac 完成多账号、多 Session、排队、恢复和应用级工具隔离验证。内部 Provider 与 Linux 进程级隔离在 Stage 5 验收。
 
@@ -128,6 +128,8 @@ MySQL 迁移 Phase A/B 已完成代码级装配：Skill、内容、Gateway、账
 已加入预发布配置模板：`deploy/Dockerfile`、连接公司云 MySQL 的 `deploy/compose.intranet.yaml`、systemd 单元、Nginx WebSocket 代理、`/healthz` 探活，以及带摘要清单和显式确认的 MySQL 备份/恢复命令。生产 Compose 只运行工作台，不承担数据库实例、高可用或自动备份。Stage 5A 新增 `npm run preflight:production`，启动前拒绝 root、SQLite 混用、非 Secure Cookie、无效 OpenCode 可执行文件和超出 Worker 池容量的并发配置；Stage 5B 新增聚合 `/metrics`；Stage 5C 新增 `npm run preflight:opencode` 和 [内部 Provider 联调清单](operations/internal-provider.md)。新增 `npm run preflight:release` 将两项静态门禁投影为不含 URL、密钥或路径的 JSON 交接证据，失败也会返回安全错误代码；它不访问公司资源，不能被误读为环境验收。Stage 5D1 已把两项门禁接入 Docker/systemd 受检启动器，生产服务在门禁失败时不会打开端口，并为 Docker build context 排除本机配置、数据库、Git 与交接材料。模板、门禁和指标不包含凭证或证书，尚未在公司 Linux 预发布机执行启动、升级、回滚和故障演练。
 
 P3A1 已补齐生产路径容量 Harness：只在显式开关下运行，要求 Linux、库名含 `acceptance` 的全新专用 MySQL 8.4 数据库、非 root、Secure Cookie、受保护 Provider 配置和固定 4×5/全局 20/单用户 1 拓扑；它通过真实 HTTP/WebSocket 创建 20 个账号、60 个 Conversation、完成 180 个 OpenCode 任务，并检查上下文与账号隔离。Harness 不自动清理远端数据库，避免误删业务数据；尚未在公司环境实跑，因此 P3A 仍未关闭。
+
+P3B1 已在同一生产组合上补齐恢复 Harness：容量任务完成后，向一个已建立上下文的 Conversation 提交运行任务与排队任务，强制 `SIGKILL` 其真实 OpenCode Worker；运行任务必须中断，Worker 必须以新进程恢复，排队任务只能保留原标识完成或以 `conversation.recovery_boundary` 安全中断。随后停止并重建工作台，重新登录并从同一 MySQL 读取五个已接受任务，要求每个任务有且只有一个持久终态。Harness 的诊断摘要不输出 PID、Prompt、回复、Cookie、数据库 URL、密钥或配置路径；公司 Linux 实跑与更广泛的 MySQL/附件备份恢复仍未完成，因此 P3B 仍未关闭。
 
 剩余交付分为两个阶段：
 
