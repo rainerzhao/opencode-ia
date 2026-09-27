@@ -37,3 +37,8 @@ P3A1 已能在 MySQL production composition 上执行 20×3×3 容量任务，�
 - `npm run security:scan`：no findings。
 - `git diff --check`：通过。
 - `npm run test:production:acceptance`（Mac）：按设计失败，错误码 `PRODUCTION_CAPACITY_LINUX_REQUIRED`。
+
+## Git delivery
+
+- 主提交：`cb447da feat: 补齐P3B生产恢复验收入口`。
+- 已推送 `origin/main`，并在 fetch 后确认本地 `HEAD` 与远端一致。

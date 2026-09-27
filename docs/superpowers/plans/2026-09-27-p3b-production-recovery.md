@@ -43,4 +43,4 @@
 
 - [x] Update product and operations documents without closing P3B.
 - [x] Run all quality gates and record evidence.
-- [ ] Commit, push and verify remote main.
+- [x] Commit, push and verify remote main (`cb447da`).
