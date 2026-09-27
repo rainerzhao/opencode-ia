@@ -10,13 +10,16 @@ const path = require('node:path');
 const WebSocket = require('ws');
 const { createMySqlProductionWorkbench } = require('../../apps/server');
 const { loadProductionCapacityProfile } = require('../../src/gateway/production-capacity-profile');
+const { loadProductionSoakProfile } = require('../../src/gateway/production-soak-profile');
 const { validateProductionConfig } = require('../../scripts/check-production-config');
 const { validateOpenCodeProviderConfig } = require('../../scripts/check-opencode-provider');
 const { authHeaders, login, readJson } = require('../fixtures/authenticated-workbench');
 const { runAdminCli } = require('../fixtures/admin-cli');
+const { createProductionSoakSchedule } = require('../fixtures/production-soak');
 
 const enabled = process.env.WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE === '1';
 const recoveryEnabled = process.env.WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE === '1';
+const soakEnabled = process.env.WORKBENCH_PRODUCTION_SOAK_ACCEPTANCE === '1';
 
 async function reservePortBlock(size) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -73,11 +76,33 @@ function answerFor(messages, jobId) {
     .join('');
 }
 
+async function sampleServiceHealth({ origin, admin }) {
+  const [service, gateway] = await Promise.all([
+    expectJsonStatus(fetch(`${origin}/healthz`), 200, 'soak service health sample'),
+    expectJsonStatus(fetch(`${origin}/api/admin/gateway/health`, {
+      headers: authHeaders(admin)
+    }), 200, 'soak gateway health sample')
+  ]);
+  assert.equal(service.status, 'healthy', 'workbench health degraded during soak');
+  assert.equal(gateway.status, 'healthy', 'gateway health degraded during soak');
+}
+
+async function waitForScheduledCycle({ deadline, sample }) {
+  let samples = 0;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, deadline - Date.now())));
+    await sample();
+    samples += 1;
+  }
+  return samples;
+}
+
 test('twenty users complete isolated multi-round work through MySQL production and real OpenCode', {
   skip: !enabled,
-  timeout: 3_600_000
+  timeout: soakEnabled ? 100_800_000 : 3_600_000
 }, async (t) => {
   const profile = loadProductionCapacityProfile();
+  const soakProfile = soakEnabled ? loadProductionSoakProfile() : null;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'production-capacity-'));
   const workerBasePort = await reservePortBlock(profile.workerCount);
   const adminPassword = `Capacity Admin ${crypto.randomBytes(16).toString('hex')}!`;
@@ -355,6 +380,7 @@ test('twenty users complete isolated multi-round work through MySQL production a
   stopped = true;
   for (const socket of sockets) socket.terminate();
 
+  let soak = null;
   if (recovery) {
     workbench = await createMySqlProductionWorkbench({
       env,
@@ -364,6 +390,8 @@ test('twenty users complete isolated multi-round work through MySQL production a
     stopped = false;
     const restartedAddress = await workbench.start(0, '127.0.0.1');
     const restartedOrigin = `http://127.0.0.1:${restartedAddress.port}`;
+    const restartedAdmin = await login(restartedOrigin, 'capacity.admin', adminPassword);
+    assert.equal(restartedAdmin.response.status, 200, 'administrator login after workbench restart failed');
     const restartedMember = await login(restartedOrigin, recovery.username, memberPassword);
     assert.equal(restartedMember.response.status, 200, 'member login after workbench restart failed');
     const persistedConversation = await expectJsonStatus(fetch(
@@ -381,6 +409,117 @@ test('twenty users complete isolated multi-round work through MySQL production a
       const terminals = history.events.filter((event) => event.jobId === jobId && terminalTypes.has(event.type));
       assert.equal(terminals.length, 1, `job ${jobId} does not have exactly one persisted terminal event`);
     }
+
+    if (soakProfile) {
+      const schedule = createProductionSoakSchedule({
+        users: soakProfile.users,
+        cohortSize: soakProfile.cohortSize,
+        durationMs: soakProfile.durationMs,
+        intervalMs: soakProfile.intervalMs
+      });
+      assert.equal(schedule.length, soakProfile.cycles);
+      const soakTracks = [];
+      for (const [userIndex, member] of members.entries()) {
+        const session = await login(restartedOrigin, member.user.username, memberPassword);
+        assert.equal(session.response.status, 200, `soak member ${userIndex + 1} login failed`);
+        const body = await expectJsonStatus(fetch(`${restartedOrigin}/api/conversations`, {
+          method: 'POST',
+          headers: authHeaders(session, { json: true }),
+          body: JSON.stringify({ title: `长稳验收 ${runMarker}-${userIndex}` })
+        }), 201, 'soak conversation creation');
+        const socket = new WebSocket(restartedOrigin.replace('http:', 'ws:'), {
+          headers: { cookie: session.cookie }
+        });
+        sockets.push(socket);
+        const messages = [];
+        socket.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
+        socket.on('error', () => {});
+        await until(() => messages.some((message) => message.type === 'connected'));
+        socket.send(JSON.stringify({
+          type: 'subscribe',
+          conversationId: body.conversation.id,
+          afterSequence: 0
+        }));
+        await until(() => messages.some((message) =>
+          message.type === 'conversation.snapshot' && message.conversationId === body.conversation.id
+        ));
+        soakTracks.push({
+          socket,
+          messages,
+          conversation: body.conversation,
+          marker: `SOAK_${runMarker}_${userIndex}`,
+          turns: 0
+        });
+      }
+
+      const soakStartedAt = Date.now();
+      let completed = 0;
+      let healthSamples = 0;
+      let maxCycleMilliseconds = 0;
+      for (const [cycleIndex, cycle] of schedule.entries()) {
+        healthSamples += await waitForScheduledCycle({
+          deadline: soakStartedAt + cycle.offsetMs,
+          sample: () => sampleServiceHealth({ origin: restartedOrigin, admin: restartedAdmin })
+        });
+        const cycleStartedAt = Date.now();
+        const cohort = cycle.userIndexes.map((userIndex) => soakTracks[userIndex]);
+        const accepted = [];
+        for (const track of cohort) {
+          const acceptedBefore = track.messages.filter((event) => event.type === 'job.accepted').length;
+          const text = track.turns === 0
+            ? `记住唯一标识 ${track.marker}，只原样输出该标识。不要使用工具。`
+            : `只原样输出本会话第一轮唯一标识，再写“长稳第 ${track.turns + 1} 次”。不要使用工具。`;
+          track.socket.send(JSON.stringify({
+            type: 'prompt',
+            conversationId: track.conversation.id,
+            idempotencyKey: `${track.conversation.id}-soak-${track.turns}`,
+            text
+          }));
+          accepted.push(await until(() => {
+            const events = track.messages.filter((event) => event.type === 'job.accepted');
+            return events.length > acceptedBefore ? events.at(-1) : null;
+          }));
+        }
+
+        await until(() => cohort.every((track, cohortIndex) => {
+          const terminal = track.messages.find((event) =>
+            event.jobId === accepted[cohortIndex].jobId
+            && ['job.completed', 'job.failed', 'job.interrupted', 'job.timed_out'].includes(event.type)
+          );
+          if (terminal && terminal.type !== 'job.completed') {
+            assert.fail(`production soak task ended as ${terminal.type}`);
+          }
+          return terminal?.type === 'job.completed';
+        }));
+
+        for (const [cohortIndex, track] of cohort.entries()) {
+          const answer = answerFor(track.messages, accepted[cohortIndex].jobId);
+          assert.ok(answer.includes(track.marker), `soak cycle ${cycleIndex + 1}: context marker lost`);
+          for (const other of soakTracks) {
+            if (other !== track) assert.equal(answer.includes(other.marker), false, 'soak cross-conversation context leak');
+          }
+          track.turns += 1;
+        }
+        completed += cohort.length;
+        maxCycleMilliseconds = Math.max(maxCycleMilliseconds, Date.now() - cycleStartedAt);
+        await sampleServiceHealth({ origin: restartedOrigin, admin: restartedAdmin });
+        healthSamples += 1;
+      }
+      healthSamples += await waitForScheduledCycle({
+        deadline: soakStartedAt + soakProfile.durationMs,
+        sample: () => sampleServiceHealth({ origin: restartedOrigin, admin: restartedAdmin })
+      });
+      assert.equal(soakTracks.every((track) => track.turns > 0), true, 'soak did not cover every member');
+      soak = {
+        durationMinutes: soakProfile.durationMinutes,
+        intervalSeconds: soakProfile.intervalSeconds,
+        cycles: schedule.length,
+        completed,
+        healthSamples,
+        maxCycleMilliseconds
+      };
+    }
+
     await workbench.stop();
     stopped = true;
   }
@@ -404,6 +543,15 @@ test('twenty users complete isolated multi-round work through MySQL production a
       mode: recovery.mode,
       processReplaced: recovery.processReplaced,
       persistedJobs: recovery.acceptedJobIds.length
+    } : { enabled: false },
+    soak: soak ? {
+      enabled: true,
+      durationMinutes: soak.durationMinutes,
+      intervalSeconds: soak.intervalSeconds,
+      cycles: soak.cycles,
+      completed: soak.completed,
+      healthSamples: soak.healthSamples,
+      maxCycleMilliseconds: soak.maxCycleMilliseconds
     } : { enabled: false }
   }));
 });

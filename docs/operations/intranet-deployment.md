@@ -42,4 +42,4 @@
 - 如需应用级导出，在已设置受保护环境的终端执行 `npm run backup:mysql -- --output /var/backups/opencode-workbench-<timestamp>.sql --attachments /var/lib/opencode-workbench/content-attachments`。恢复前在环境中将 `WORKBENCH_DATABASE_URL` 设置为隔离目标库，必要时同步更换 CA，再运行 `npm run restore:mysql -- --input <backup>.sql --attachments <restore-attachments> --confirm`。迁移失败保持旧版本，不手工修改 `schema_migrations`。
 - 运维终端须提供 MySQL 8.4 `mysql` / `mysqldump` 客户端（应用镜像未捆绑它们）。脚本从环境读取数据库连接串，通过 `MYSQL_PWD` 传递密码；不要使用会将连接串放入进程列表的 `--url` 参数。TLS URL 会向两个客户端传递 `--ssl-mode=VERIFY_IDENTITY` 和可选 CA 路径，强制 TCP。SQL dump 的 `.manifest.json` 与附件 sidecar 的 `.attachments.manifest.json` 分开保存并在恢复前逐项校验摘要。附件目录拒绝符号链接，恢复写入新目录并拒绝覆盖已有目录。
 - SQLite `backup:sqlite/restore:sqlite` 仅用于 Mac Demo 过渡，不作为 MySQL 生产备份方案。
-- MySQL 生产备份、恢复演练、日志轮转、容量和故障注入仍需在公司 Linux 预发布环境完成后，才能开放团队访问。
+- MySQL 生产备份、恢复演练、日志轮转、容量和故障注入仍需在公司 Linux 预发布环境完成后，才能开放团队访问。最终长稳入口为 `WORKBENCH_PRODUCTION_SOAK_MINUTES=480 WORKBENCH_PRODUCTION_SOAK_INTERVAL_SECONDS=900 npm run test:production:soak`；它会产生真实模型调用，只能使用全新 acceptance 专用库和受控验收窗口。

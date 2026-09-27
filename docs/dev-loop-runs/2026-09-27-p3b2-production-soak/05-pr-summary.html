@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>P3B2 生产长稳 Harness</title>
+  <style>
+    body{font:16px/1.65 system-ui,sans-serif;max-width:960px;margin:0 auto;padding:48px 28px;color:#18242b;background:#f4f7f6}
+    main{background:#fff;border:1px solid #d9e2df;padding:36px}h1,h2{color:#0d4f56}code{background:#edf3f1;padding:.15em .35em}
+    table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #d9e2df;text-align:left}.ok{color:#08745f}.pending{color:#8a5a00}details{margin:18px 0}
+  </style>
+</head>
+<body><main>
+  <p>P3B2 · 2026-09-27</p>
+  <h1>生产长稳 Harness</h1>
+  <p>在容量、Worker 强杀和整机恢复之后，新增 20 账号持续在线、5 人轮转真实任务和全时段双健康采样，避免把一次性压测误当成长稳证据。</p>
+  <table>
+    <tr><th>交付</th><th>状态</th></tr>
+    <tr><td>60–1440 分钟显式边界与四轮覆盖</td><td class="ok">已验证</td></tr>
+    <tr><td>20 WebSocket 在线、5 人 cohort 轮转</td><td class="ok">代码与契约已验证</td></tr>
+    <tr><td>上下文 marker 与双健康失败关闭</td><td class="ok">验收路径已就绪</td></tr>
+    <tr><td>公司 8 小时真实 OpenCode 运行</td><td class="pending">待公司环境</td></tr>
+  </table>
+  <h2>本机验证</h2>
+  <p><code>npm test</code>：430 total / 405 pass / 0 fail / 25 skip；build、210 文件语法检查、密钥扫描与 diff 检查通过。Mac 显式运行按设计被 Linux 门禁拒绝。</p>
+  <details><summary>推荐公司参数</summary><p><code>WORKBENCH_PRODUCTION_SOAK_MINUTES=480</code> 与 <code>WORKBENCH_PRODUCTION_SOAK_INTERVAL_SECONDS=900</code>，约 32 轮、160 个真实长稳任务。</p></details>
+  <details><summary>失败边界</summary><ul><li>任务非 completed、上下文丢失或串线立即失败。</li><li>服务或 Gateway 任一健康采样退化立即失败。</li><li>不自动重试、降级模型或清理远端数据库。</li></ul></details>
+  <details><summary>尚未关闭</summary><p>公司真实长稳、MySQL/附件恢复、宿主机故障、升级回滚、安全复核和人工上线签字仍待完成。</p></details>
+</main></body></html>

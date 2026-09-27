@@ -21,7 +21,7 @@
 | P2D 动态个人工作台 | 首页汇总个人待推进需求、待澄清事项、进行中会话与待沉淀资产，并提供下一步入口 | 仅用已有 owner-scoped API 的安全元数据；不渲染私人标题/正文；Demo 浏览器验证桌面与 390px 窄屏、操作跳转和无溢出 | ✅ 2026-09-14 隔离 Demo 浏览器验收；真实 MySQL/Linux 待 P3B |
 | P2E 体验与视觉系统 | 将工作台、需求与场景、AI 协作、方案、知识、Skill 和管理工作区重构为统一、克制且具有技术氛围的桌面产品体验；OpenCode 对话作为流程能力入口 | 设计令牌覆盖字体、字号、色彩、间距、状态、表单与动效；1440px 桌面主验收、1024px 最低可用性验收；真实数据状态、键盘焦点、加载/空/错状态可读；无模板化 AI 聊天视觉 | ✅ 2026-09-24 Mac 隔离 Demo 总验收完成；公司环境待 P3B |
 | P3A 多人承载 | 20 账号 × 3 会话；20 在线连接；公平调度和恢复 | 模拟路径已完成 20 账号、20 WebSocket、60 会话、3 轮 180 任务；另有真实 OpenCode + SQLite Runtime Harness。生产路径 Harness 已固定为专用 MySQL production composition、4 Worker × 5 槽位、全局 20/单用户 1，并要求 Linux、全新 acceptance 数据库和生产/Provider 门禁 | 🚧 生产容量 Harness 已就绪；公司 Linux + 云 MySQL + 内部 Provider 实跑待完成 |
-| P3B 内网交付 | 完成原 Stage 5 公司 Linux、Provider、安全、监控及灾备门禁 | 已补齐脱敏 `preflight:release` 与生产恢复 Harness：强杀真实 Worker、验证新进程恢复或安全边界、重启工作台后从同一 MySQL 复读任务终态；仍必须取得公司部署、内部 API、操作系统隔离、数据库/附件恢复及真实演练证据 | 🚧 生产恢复 Harness 已就绪；公司环境待验收 |
+| P3B 内网交付 | 完成原 Stage 5 公司 Linux、Provider、安全、监控及灾备门禁 | 已补齐脱敏 `preflight:release`、Worker/整机恢复与 20 账号轮转长稳 Harness；仍必须取得公司部署、内部 API、操作系统隔离、真实 8 小时长稳、数据库/附件恢复及回滚演练证据 | 🚧 生产恢复与长稳 Harness 已就绪；公司环境待验收 |
 
 ## 约束与范围
 

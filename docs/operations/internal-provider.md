@@ -28,7 +28,7 @@
 2. 执行 `npm run preflight:release`，再执行 `npm run preflight:production` 与 `npm run preflight:opencode`；任一失败都停止发布。汇总报告不输出 URL、密钥或路径，但不替代单项门禁。
 3. 先用 OpenCode 自身的健康/无害模型请求验证 Provider，再启动工作台；工作台 `/healthz` 只验证数据库和 Worker，不回显 Provider 配置。
 4. 登录两个测试账号，各创建两个 Conversation，分别执行三轮短请求，确认上下文连续、会话互不串线、取消和断线续传正常。
-5. 可先运行 `npm run test:capacity:20:real` 验证真实 OpenCode Runtime；该命令仍使用测试 SQLite 数据层，不能作为生产数据库证据。随后在 Linux 上配置一个全新、库名包含 `acceptance` 的专用 MySQL 8.4 数据库，运行 `npm run test:production:acceptance`。完整生产命令会重复执行生产配置与 Provider 门禁，以 4 Worker × 每 Worker 5 槽位完成 20 用户、60 Conversation、3 轮 180 个真实任务，验证跨轮标识、跨 Conversation 隔离、跨账号 404、单用户限流与队列；之后强杀一个真实 Worker，验证运行任务中断、新进程恢复、排队任务恢复或安全边界，并重启工作台从同一 MySQL 复读五个任务的唯一终态。若已有账号、出现 401/403/429、超时、任务无终态或历史丢失则视为失败，不能清库重试、切回模拟模式或指向正式业务库。
+5. 可先运行 `npm run test:capacity:20:real` 验证真实 OpenCode Runtime；该命令仍使用测试 SQLite，不能作为生产证据。随后在 Linux 上配置一个全新、库名包含 `acceptance` 的专用 MySQL 8.4 数据库，以 `WORKBENCH_PRODUCTION_SOAK_MINUTES=480 WORKBENCH_PRODUCTION_SOAK_INTERVAL_SECONDS=900 npm run test:production:soak` 完成最终验收。命令先以 4 Worker × 每 Worker 5 槽位完成 20 用户、60 Conversation、3 轮 180 个任务，再强杀 Worker、验证恢复边界和整机重启历史，最后保持 20 个账号 WebSocket 在线，以每轮 5 人的 cohort 运行约 32 轮/160 个长稳任务并全程采样健康。若已有账号、出现 401/403/429、任务非 completed、上下文丢失、串线、健康退化或历史丢失均视为失败，不能清库重试、切回模拟模式或指向正式业务库。
 6. 记录 Provider、OpenCode 版本、Git SHA、迁移版本、Worker/槽位数、请求耗时和安全错误码摘要；不得记录 PID、Prompt、响应正文、Cookie、数据库 URL、密钥或配置路径。
 
 ## 失败边界

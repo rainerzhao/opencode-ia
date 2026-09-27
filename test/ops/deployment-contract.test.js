@@ -63,3 +63,20 @@ test('full production acceptance adds explicit runtime recovery and persisted hi
   assert.match(harness, /processReplaced/);
   assert.match(harness, /\/events\?afterSequence=0&limit=1000/);
 });
+
+test('production soak acceptance keeps timing explicit and samples real service health', () => {
+  const packageJson = JSON.parse(read('package.json'));
+  const harness = read('test/integration/production-capacity.test.js');
+  assert.equal(
+    packageJson.scripts['test:production:soak'],
+    'WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE=1 WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE=1 WORKBENCH_PRODUCTION_SOAK_ACCEPTANCE=1 node --test test/integration/production-capacity.test.js'
+  );
+  assert.match(harness, /loadProductionSoakProfile/);
+  assert.match(harness, /createProductionSoakSchedule/);
+  assert.match(harness, /WORKBENCH_PRODUCTION_SOAK_ACCEPTANCE/);
+  assert.match(harness, /\/healthz/);
+  assert.match(harness, /\/api\/admin\/gateway\/health/);
+  assert.match(harness, /healthSamples/);
+  assert.match(harness, /maxCycleMilliseconds/);
+  assert.match(harness, /soakStartedAt \+ soakProfile\.durationMs/);
+});
