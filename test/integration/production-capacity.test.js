@@ -10,16 +10,19 @@ const path = require('node:path');
 const WebSocket = require('ws');
 const { createMySqlProductionWorkbench } = require('../../apps/server');
 const { loadProductionCapacityProfile } = require('../../src/gateway/production-capacity-profile');
+const { loadProductionDrProfile } = require('../../src/gateway/production-dr-profile');
 const { loadProductionSoakProfile } = require('../../src/gateway/production-soak-profile');
 const { validateProductionConfig } = require('../../scripts/check-production-config');
 const { validateOpenCodeProviderConfig } = require('../../scripts/check-opencode-provider');
 const { authHeaders, login, readJson } = require('../fixtures/authenticated-workbench');
 const { runAdminCli } = require('../fixtures/admin-cli');
+const { runProductionDrAcceptance } = require('../fixtures/production-dr-acceptance');
 const { createProductionSoakSchedule } = require('../fixtures/production-soak');
 
 const enabled = process.env.WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE === '1';
 const recoveryEnabled = process.env.WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE === '1';
 const soakEnabled = process.env.WORKBENCH_PRODUCTION_SOAK_ACCEPTANCE === '1';
+const drEnabled = process.env.WORKBENCH_PRODUCTION_DR_ACCEPTANCE === '1';
 
 async function reservePortBlock(size) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -103,6 +106,7 @@ test('twenty users complete isolated multi-round work through MySQL production a
 }, async (t) => {
   const profile = loadProductionCapacityProfile();
   const soakProfile = soakEnabled ? loadProductionSoakProfile() : null;
+  const drProfile = drEnabled ? loadProductionDrProfile() : null;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'production-capacity-'));
   const workerBasePort = await reservePortBlock(profile.workerCount);
   const adminPassword = `Capacity Admin ${crypto.randomBytes(16).toString('hex')}!`;
@@ -112,6 +116,7 @@ test('twenty users complete isolated multi-round work through MySQL production a
     ...process.env,
     NODE_ENV: 'production',
     WORKBENCH_DATA_DIR: path.join(root, 'data'),
+    CONTENT_ATTACHMENT_ROOT: path.join(root, 'data', 'content-attachments'),
     OPENCODE_CWD: path.join(root, 'runtime'),
     OPENCODE_WORKER_BASE_PORT: String(workerBasePort),
     XDG_DATA_HOME: path.join(root, 'opencode-data'),
@@ -381,6 +386,7 @@ test('twenty users complete isolated multi-round work through MySQL production a
   for (const socket of sockets) socket.terminate();
 
   let soak = null;
+  let disasterRecovery = null;
   if (recovery) {
     workbench = await createMySqlProductionWorkbench({
       env,
@@ -522,6 +528,17 @@ test('twenty users complete isolated multi-round work through MySQL production a
 
     await workbench.stop();
     stopped = true;
+
+    if (drProfile) {
+      disasterRecovery = await runProductionDrAcceptance({
+        env,
+        root,
+        recovery,
+        memberPassword,
+        projectDir: path.resolve(__dirname, '../..'),
+        logger: { log() {}, error() {} }
+      });
+    }
   }
 
   t.diagnostic(JSON.stringify({
@@ -552,6 +569,12 @@ test('twenty users complete isolated multi-round work through MySQL production a
       completed: soak.completed,
       healthSamples: soak.healthSamples,
       maxCycleMilliseconds: soak.maxCycleMilliseconds
+    } : { enabled: false },
+    disasterRecovery: disasterRecovery ? {
+      enabled: true,
+      databaseRestored: disasterRecovery.databaseRestored,
+      attachmentRestored: disasterRecovery.attachmentRestored,
+      persistedJobs: disasterRecovery.persistedJobs
     } : { enabled: false }
   }));
 });

@@ -1,6 +1,6 @@
 # OpenCode 团队 AI 工作台研发路线图
 
-更新时间：2026-09-27
+更新时间：2026-09-28
 
 ## 已确认的新产品主线
 
@@ -8,7 +8,7 @@
 
 ## 当前结论
 
-项目当前处于 **Stage 0–4 与 P2A–P2E 已完成 Mac 应用级验收；MySQL 单一数据层已完成本机真实 HTTP/WebSocket 和恢复演练；Stage 5A–5C、5D1 Linux 镜像检查、P3A 生产容量、P3B1 恢复与 P3B2 长稳 Harness 已就绪，P3A/P3B 公司 Linux + 云 MySQL + 内部 Provider 实跑及 Stage 5D–5E 验收仍待完成** 的状态。
+项目当前处于 **Stage 0–4 与 P2A–P2E 已完成 Mac 应用级验收；MySQL 单一数据层已完成本机真实 HTTP/WebSocket 和恢复演练；Stage 5A–5C、5D1 Linux 镜像检查、P3A 生产容量、P3B1 恢复、P3B2 长稳与 P3B3 应用级灾备 Harness 已就绪，P3A/P3B 公司 Linux + 云 MySQL + 内部 Provider 实跑及 Stage 5D–5E 验收仍待完成** 的状态。
 
 Mac 上已经跑通 React 前后端、账号权限、默认私有数据边界、常驻 Gateway 多 Session、React 多 Conversation、运行管理、真实多人多轮模型联调、Runtime 崩溃恢复、OpenCode 标准工具面的应用级隔离、私人 Skill 草稿、受控文件包、结构与安全报告、人工发布、按账号安装/启用、版本升级/回滚、停用/归档、真实 OpenCode 发现门禁和无密钥 Demo。Linux OS 沙箱与生产部署不属于本结论。
 
@@ -79,7 +79,7 @@ Stage 1 已在 Mac 上跑通管理员与成员浏览器闭环、React/Vite 迁�
 - ✅ Stage 2D：私人 Conversation API、WebSocket 订阅/提交/取消、断线补发和恢复边界、生产双 Worker 组合及 React 多会话体验。
 - ✅ Stage 2E：启动与运行期恢复、管理后台、20 用户模拟、真实 5×3×3 多会话和工具执行隔离。
 
-Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。每个 Conversation 的目录和产物相互隔离；Runtime 以 pure 模式运行，并从全局、Agent 和 Prompt 三层关闭高风险工具。Stage 2 在 Mac 的应用级验收已经关闭。`npm run test:capacity:20:real` 用 SQLite 测试数据层验证真实 OpenCode Runtime 的 20×3×3 路径；P3A 的 `test:capacity:20:production` 使用 MySQL production composition 与 4 Worker × 5 槽位；P3B1 的 `test:production:acceptance` 追加 Worker 强杀、进程替换、安全恢复边界及整机重启后的 MySQL 历史复读；P3B2 的 `test:production:soak` 再追加 20 WebSocket 在线、每轮 5 人轮转任务和全时段健康采样。生产命令均对 Linux、全新 acceptance 数据库、生产配置和 Provider 配置失败关闭，但尚未取得公司环境执行证据。
+Stage 2E 已完成排队重建、未知运行任务中断、Session 检查、恢复失败后的安全边界、管理员运行视图、真实 5 账号/15 Session/45 请求，以及真实 Runtime 强制终止、自动重启和上下文恢复。每个 Conversation 的目录和产物相互隔离；Runtime 以 pure 模式运行，并从全局、Agent 和 Prompt 三层关闭高风险工具。Stage 2 在 Mac 的应用级验收已经关闭。`npm run test:capacity:20:real` 用 SQLite 测试数据层验证真实 OpenCode Runtime 的 20×3×3 路径；P3A 的 `test:capacity:20:production` 使用 MySQL production composition 与 4 Worker × 5 槽位；P3B1 的 `test:production:acceptance` 追加 Worker 强杀、进程替换、安全恢复边界及整机重启后的 MySQL 历史复读；P3B2 的 `test:production:soak` 再追加 20 WebSocket 在线、每轮 5 人轮转任务和全时段健康采样；P3B3 的 `test:production:dr` 最后将 SQL 和附件恢复到第二个空白 TLS 数据库/目录，并经原账号 HTTP 读取验证。生产命令均对 Linux、专用 acceptance 数据库、生产配置和 Provider 配置失败关闭，但尚未取得公司环境执行证据。
 
 出口标准：真实 OpenCode 在 Mac 完成多账号、多 Session、排队、恢复和应用级工具隔离验证。内部 Provider 与 Linux 进程级隔离在 Stage 5 验收。
 
@@ -133,6 +133,8 @@ P3B1 已在同一生产组合上补齐恢复 Harness：容量任务完成后，�
 
 P3B2 已补齐显式长稳 Harness：时长限制为 60–1440 分钟、轮转间隔为 60–3600 秒，并强制至少四轮覆盖全部 20 个账号；20 个 WebSocket 持续在线，每轮只有 5 个账号执行真实任务，首轮建立 marker，后续不在 Prompt 重复 marker 而从 Conversation 上下文取回。轮次之间每 30 秒采样 `/healthz` 与管理员 Gateway health，最后一轮结束后继续采样到完整时长届满；任何任务非 completed、上下文丢失、跨会话串线或健康退化均失败关闭。推荐公司首轮 480 分钟/900 秒，约 32 轮、160 个长稳任务。当前只完成代码与失败关闭门禁，公司 8 小时真实运行尚未发生。
 
+P3B3 已补齐应用级灾备 Harness：完整容量、Worker 恢复、整机重启与长稳结束后停止源工作台，复用现有 MySQL dump、摘要清单和附件 sidecar，将数据恢复到一个独立、空白、TLS 且名称带 `acceptance` 与 `recovery`/`restore` 的目标数据库和新附件目录。恢复后的 production workbench 必须用原账号重新登录，经 HTTP 读取原 Conversation 与 P3B1 五个 Job 的唯一终态，并逐字节核验附件 canary。URL 只经环境变量传递，成功摘要不含账号、主机、库名、路径或私密正文；Harness 不清理远端库。该入口只验证应用级可迁移恢复，不替代公司云快照/PITR、高可用、宿主机故障、升级回滚或真实环境演练。
+
 剩余交付分为两个阶段：
 
 Linux 基础构建验收已取得独立证据：[首次 CI](https://github.com/rainerzhao/opencode-ia/actions/runs/34756682602) 在 Ubuntu 24.04 上通过 MySQL/TLS 回归、目标 Dockerfile 构建、镜像非 root/持久目录/排除项检查及缺少配置启动拒绝。此项关闭 5D1 的镜像证据缺口；工作流不使用内部模型密钥，未验证公司 OpenCode 服务链路，也未发布镜像到仓库。
@@ -142,7 +144,7 @@ Linux 基础构建验收已取得独立证据：[首次 CI](https://github.com/r
 Stage 5D 的首次部署入口已补齐：管理员 CLI 使用与生产服务相同的云 MySQL，运行能力检查、迁移和带锁的首次初始化。Mac 真库已验证并发初始化只产生一个管理员及审计记录，并由 CLI 创建的账号跑通生产组合 HTTP 登录与会话。云数据库 TLS 已接入主机名和 CA 校验、只读 CA 挂载及加密备份恢复；本地证书验收记录见 `docs/dev-loop-runs/2026-09-13-cloud-mysql-tls/`。公司云数据库实际证书/网络、Linux 镜像和公司环境联调仍待完成。
 
 - 🚧 Stage 5D：在公司 Linux 预发布机以非 root 账号部署 Nginx、OpenCode 常驻 Runtime 和工作台，连接公司云 MySQL，接入真实内部 OpenAI 兼容 Provider，跑通登录、多会话、Skill、知识与审计全链路。
-- 🚧 Stage 5E：容量、Runtime/进程恢复与长稳 Harness 已就绪；仍需在公司环境完成真实 8 小时运行、MySQL/附件备份恢复、宿主机故障、升级回滚、安全检查与上线清单，由人工确认残余风险后再开放访问。
+- 🚧 Stage 5E：容量、Runtime/进程恢复、长稳与应用级 DR Harness 已就绪；仍需在公司环境完成真实 8 小时运行、第二数据库恢复、云快照/PITR、宿主机故障、升级回滚、安全检查与上线清单，由人工确认残余风险后再开放访问。
 
 出口标准：生产检查表全部通过，残余风险和回滚方案由人工确认后再开放访问。
 

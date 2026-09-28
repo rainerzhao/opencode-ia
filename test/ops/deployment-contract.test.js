@@ -80,3 +80,25 @@ test('production soak acceptance keeps timing explicit and samples real service 
   assert.match(harness, /maxCycleMilliseconds/);
   assert.match(harness, /soakStartedAt \+ soakProfile\.durationMs/);
 });
+
+test('production DR acceptance restores into an empty second database and verifies through HTTP', () => {
+  const packageJson = JSON.parse(read('package.json'));
+  const harness = read('test/integration/production-capacity.test.js');
+  const runner = read('test/fixtures/production-dr-acceptance.js');
+  assert.equal(
+    packageJson.scripts['test:production:dr'],
+    'WORKBENCH_PRODUCTION_CAPACITY_ACCEPTANCE=1 WORKBENCH_PRODUCTION_RECOVERY_ACCEPTANCE=1 WORKBENCH_PRODUCTION_SOAK_ACCEPTANCE=1 WORKBENCH_PRODUCTION_DR_ACCEPTANCE=1 node --test test/integration/production-capacity.test.js'
+  );
+  assert.match(harness, /loadProductionDrProfile/);
+  assert.match(harness, /runProductionDrAcceptance/);
+  assert.match(harness, /CONTENT_ATTACHMENT_ROOT:\s*path\.join\(root,/);
+  assert.match(runner, /loadConfig/);
+  assert.match(runner, /WORKBENCH_RECOVERY_DATABASE_URL/);
+  assert.match(runner, /createMySqlDatabase/);
+  assert.match(runner, /assertCapabilities/);
+  assert.match(runner, /information_schema\.tables/);
+  assert.match(runner, /backupMySql/);
+  assert.match(runner, /restoreMySql/);
+  assert.match(runner, /databaseRestored/);
+  assert.match(runner, /attachmentRestored/);
+});

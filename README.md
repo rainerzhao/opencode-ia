@@ -13,8 +13,8 @@ OpenCode 团队 AI 工作台面向不超过 20 人的内部解决方案团队。
 | 产品底座、常驻 Gateway、知识/方案、Skill 中心 | ✅ Mac 已验收 | 已完成账号权限、默认私有、多会话、资产沉淀和团队 Skill 生命周期闭环。 |
 | 需求与场景工作台 | ✅ 本机 Demo 已验收 | 已支持 BU、统一字段、沟通记录、AI 草稿人工确认、资产关联和私有会话资料库；首页会安全汇总个人待推进事项与下一步。 |
 | 工作台体验与视觉系统 | ✅ P2E 本机验收完成 | 七个桌面工作区已统一设计语言，并完成 1440px 主桌面与 1024px 最低可用宽度的浏览器总验收；公司环境仍待 P3 验收。 |
-| 20 用户调度、恢复与长稳 | 🧰 生产验收 Harness 已就绪 | 模拟路径已回归 20 登录用户、60 个持久会话、180 个多轮任务；Linux 入口覆盖真实容量、Worker 强杀、整机重启与 20 账号轮转长稳健康采样，仍待公司环境执行。 |
-| MySQL 单一数据层 | ✅ Mac 真库已验收 | 生产组合连接 MySQL；公司云 MySQL 网络、CA 与恢复演练仍待验证。 |
+| 20 用户调度、恢复、长稳与应用级灾备 | 🧰 生产验收 Harness 已就绪 | 模拟路径已回归 20 登录用户、60 个持久会话、180 个多轮任务；Linux 入口覆盖真实容量、Worker 强杀、整机重启、20 账号轮转长稳，以及向第二个空库恢复历史与附件，仍待公司环境执行。 |
+| MySQL 单一数据层 | ✅ Mac 真库已验收 | 生产组合连接 MySQL；公司云 MySQL 网络、CA、云快照/PITR 与恢复演练仍待验证。 |
 | 公司 Linux / 内部模型 / 生产开放 | 🚧 待预发布验收 | 尚未取得真实 Provider、Linux 隔离、20 用户真实模型压测和灾备证据。 |
 
 **请勿将 Demo、模拟任务或 Mac 验收理解为已经在公司生产上线。** 生产开放前必须完成[公司内网预发布交接清单](docs/operations/company-preflight-handoff.md)。完整阶段、验收口径和已知边界见[产品路线图](docs/ROADMAP.md)。
@@ -89,9 +89,9 @@ Demo 适合产品评审和流程体验，包含登录、账号管理、需求与
 
 在启动服务前，可运行 `npm run preflight:release` 生成一份脱敏 JSON 就绪报告：它同时执行生产配置与 OpenCode Provider 两项门禁，任一失败即返回非零退出码。该报告只证明本机配置是否满足静态门槛，不检查公司网络、MySQL、模型能力或 Linux 运行结果。
 
-验收分为四层：`npm run test:capacity:20:real` 使用测试 SQLite 验证真实 OpenCode Runtime；`npm run test:capacity:20:production` 在 MySQL production composition 上只跑 20 账号、60 Conversation、180 个多轮任务；`npm run test:production:acceptance` 继续强杀 Worker、验证新进程/安全恢复边界，并重启整套工作台复读历史；最终长稳入口 `test:production:soak` 在上述流程后让 20 个账号保持 WebSocket 在线，每轮轮转 5 人执行真实任务并持续采样服务/Gateway 健康，四轮覆盖全员。推荐公司首轮显式设置 `WORKBENCH_PRODUCTION_SOAK_MINUTES=480` 与 `WORKBENCH_PRODUCTION_SOAK_INTERVAL_SECONDS=900`，即 8 小时、约 32 轮/160 个长稳任务；最小允许 60 分钟且仍须覆盖四轮。后三条命令只允许在公司 Linux 上连接一个**全新且库名包含 `acceptance` 的专用 MySQL 8.4 数据库**，会重复执行生产与 Provider 门禁，且不会自动清理远端数据。它们尚未取得公司环境执行证据，不能据此承诺模型并发、长稳或生产 SLA，也不得指向正式业务库。
+验收分为五层：`npm run test:capacity:20:real` 使用测试 SQLite 验证真实 OpenCode Runtime；`npm run test:capacity:20:production` 在 MySQL production composition 上只跑 20 账号、60 Conversation、180 个多轮任务；`npm run test:production:acceptance` 继续强杀 Worker、验证新进程/安全恢复边界，并重启整套工作台复读历史；`npm run test:production:soak` 再让 20 个账号保持 WebSocket 在线，每轮轮转 5 人执行真实任务并持续采样服务/Gateway 健康；最终 `npm run test:production:dr` 在完整长稳后停止源工作台，将 SQL 与附件 sidecar 恢复到第二个空白 TLS 数据库和新附件目录，再通过原账号登录和 HTTP 历史验证数据可用。推荐公司首轮显式设置 `WORKBENCH_PRODUCTION_SOAK_MINUTES=480` 与 `WORKBENCH_PRODUCTION_SOAK_INTERVAL_SECONDS=900`，即 8 小时、约 32 轮/160 个长稳任务；最小允许 60 分钟且仍须覆盖四轮。生产命令只允许在公司 Linux 上连接全新 acceptance 专用库；DR 还要求独立、空白且库名同时包含 `acceptance` 与 `recovery`/`restore` 的目标库。Harness 不清理远端数据库，也不替代云数据库快照、PITR、高可用或宿主机故障演练。它们尚未取得公司环境执行证据，不能据此承诺模型并发、长稳、灾备或生产 SLA，也不得指向正式业务库。
 
-生产容量 Harness 的设计与证据见 [P3A1 验收报告](docs/dev-loop-runs/2026-09-24-p3a-production-capacity/04-acceptance-report.md)；生产恢复与长稳入口分别见 [P3B1 验收报告](docs/dev-loop-runs/2026-09-27-p3b-production-recovery/04-acceptance-report.md)和 [P3B2 验收报告](docs/dev-loop-runs/2026-09-27-p3b2-production-soak/04-acceptance-report.md)。
+生产容量 Harness 的设计与证据见 [P3A1 验收报告](docs/dev-loop-runs/2026-09-24-p3a-production-capacity/04-acceptance-report.md)；生产恢复、长稳与应用级灾备入口分别见 [P3B1 验收报告](docs/dev-loop-runs/2026-09-27-p3b-production-recovery/04-acceptance-report.md)、[P3B2 验收报告](docs/dev-loop-runs/2026-09-27-p3b2-production-soak/04-acceptance-report.md)和 [P3B3 验收报告](docs/dev-loop-runs/2026-09-28-p3b3-production-dr/04-acceptance-report.md)。
 
 内网 Compose 模板使用同一 4 Worker × 5 槽位、全局最多 20 个运行任务的产品配置；这是工作台调度上限，不等于公司模型 API 已承诺 20 路并发。实际开放人数、模型限流和超时策略必须以公司预发布验收记录为准。
 

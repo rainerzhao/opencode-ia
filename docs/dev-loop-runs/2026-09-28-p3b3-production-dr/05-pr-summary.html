@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>P3B3 应用级灾备 Harness</title>
+  <style>
+    body{font:16px/1.65 system-ui,sans-serif;max-width:960px;margin:0 auto;padding:48px 28px;color:#18242b;background:#f4f7f6}
+    main{background:#fff;border:1px solid #d9e2df;padding:36px}h1,h2{color:#0d4f56}code{background:#edf3f1;padding:.15em .35em}
+    table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #d9e2df;text-align:left}.ok{color:#08745f}.pending{color:#8a5a00}details{margin:18px 0}
+  </style>
+</head>
+<body><main>
+  <p>P3B3 · 2026-09-28</p>
+  <h1>应用级灾备恢复 Harness</h1>
+  <p>在容量、Worker 恢复、整机重启和长稳之后，将 SQL 与附件恢复到第二个空白 TLS 数据库和新目录，再由生产工作台以原账号登录、经 HTTP 读取持久历史。</p>
+  <table>
+    <tr><th>交付</th><th>状态</th></tr>
+    <tr><td>独立 TLS recovery acceptance 目标与空库保护</td><td class="ok">已验证</td></tr>
+    <tr><td>复用 SQL/附件 sidecar 备份恢复</td><td class="ok">代码与契约已验证</td></tr>
+    <tr><td>原账号、Conversation、五 Job 终态与附件 canary</td><td class="ok">验收路径已就绪</td></tr>
+    <tr><td>公司双库 8 小时真实运行与云 PITR</td><td class="pending">待公司环境</td></tr>
+  </table>
+  <h2>本机验证</h2>
+  <p><code>npm test</code>：438 total / 413 pass / 0 fail / 25 skip；build、214 文件语法检查、密钥扫描与 diff 检查通过。Mac 显式运行按设计被 Linux 门禁拒绝。</p>
+  <details><summary>公司执行条件</summary><p>准备全新 acceptance 源库、独立空白 recovery/restore acceptance 目标库、MySQL 8.4 客户端与受控附件目录，再以 480 分钟/900 秒参数运行 <code>npm run test:production:dr</code>。</p></details>
+  <details><summary>安全边界</summary><ul><li>目标非空立即失败，不自动清理任何远端库。</li><li>连接串只经环境传递，诊断不输出账号、主机、路径或私密正文。</li><li>恢复成功必须由 production workbench 登录并经 HTTP 复读。</li></ul></details>
+  <details><summary>尚未关闭</summary><p>公司真实双库恢复、云快照/PITR、宿主机故障、升级回滚、安全复核和人工上线签字仍待完成。</p></details>
+</main></body></html>
