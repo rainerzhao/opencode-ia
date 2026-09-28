@@ -38,3 +38,8 @@ P3A1/P3B1 能证明一次 20 用户容量批次和一次 Worker/整机恢复路�
 - `npm run security:scan`：no findings。
 - `git diff --check`：通过。
 - 60 分钟/900 秒显式 soak 命令（Mac）：按设计失败，错误码 `PRODUCTION_CAPACITY_LINUX_REQUIRED`。
+
+## Git delivery
+
+- 主提交：`bcc62a8 feat: 补齐P3B生产长稳验收入口`。
+- 首次推送遇到瞬时 GitHub 连接重置；网络恢复后已推送 `origin/main`，fetch 后本地与远端 SHA 一致。

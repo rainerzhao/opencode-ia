@@ -75,4 +75,4 @@
 - [x] Document the recommended 480-minute/900-second company run and the real-model cost boundary.
 - [x] Run `npm test`, `npm run build`, `npm run check`, `npm run security:scan`, and `git diff --check`.
 - [x] Record local evidence without claiming company soak success.
-- [ ] Commit in Chinese, push `main`, fetch, and verify local/remote SHA equality.
+- [x] Commit in Chinese, push `main`, fetch, and verify local/remote SHA equality (`bcc62a8`).
