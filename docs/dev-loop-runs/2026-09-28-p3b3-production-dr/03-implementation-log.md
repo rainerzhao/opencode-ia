@@ -42,4 +42,4 @@ P3B1/P3B2 已覆盖真实 OpenCode Worker 强杀、整机重启、MySQL 历史�
 
 ## Git delivery
 
-待本阶段提交与推送后补充 SHA；公司 Linux、内部 Provider、云 MySQL 双库和真实 8 小时运行仍待外部环境。
+主提交：`ae02f7b feat: 补齐P3B应用级灾备验收入口`，已推送 `origin/main`。公司 Linux、内部 Provider、云 MySQL 双库和真实 8 小时运行仍待外部环境。
