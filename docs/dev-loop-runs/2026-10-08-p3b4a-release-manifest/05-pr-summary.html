@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>P3B4A 发布清单</title>
+<style>body{max-width:850px;margin:64px auto;padding:0 24px;font:16px/1.8 system-ui;color:#20303b}h1{font-size:30px}summary{cursor:pointer;font-weight:600}section,details{border-top:1px solid #ddd;padding:20px 0}a{color:#24618c}</style>
+<h1>让升级前的发布包身份可检查</h1><p>P3B4A 增加一次性清单生成与部署前校验。静态解析迁移，不执行发布包代码，拒绝错包与覆盖，输出脱敏。</p>
+<section><h2>验收：通过，附边界</h2><p>全量 450 项：425 通过、25 环境相关跳过、0 失败。构建、语法与密钥扫描通过。跨版本自动升级回滚及公司环境实跑仍未完成。</p></section>
+<details><summary>需求与计划</summary><p><a href="00-requirements.md">需求</a> · <a href="01-plan.md">计划</a> · <a href="02-plan-review-rounds.md">内联复核</a></p></details>
+<details><summary>实现与测试</summary><p><a href="03-implementation-log.md">实施记录</a> · <a href="04-acceptance-report.md">完整验收报告</a></p><p>变更范围：清单 API、CLI、12 项聚焦测试、依赖与文档；无前端或生产环境变更。</p></details>
+<details><summary>残余风险</summary><p>SHA 由发布人员声明，不是内容签名。依赖受信 CI 和不可变发布目录，不替代功能、数据库或模型验收。</p></details></html>

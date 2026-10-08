@@ -9,6 +9,7 @@
     "prestart": "npm run build",
     "start": "node server.js",
     "start:production": "node scripts/start-production.js",
+    "release:manifest": "node scripts/release-manifest.js",
     "dev": "node server.js",
     "predemo": "npm run build",
     "demo": "node scripts/start-demo.js",
@@ -36,6 +37,7 @@
     "restore:mysql": "node scripts/restore-mysql.js"
   },
   "dependencies": {
+    "@babel/parser": "7.29.8",
     "@vitejs/plugin-react": "5.0.2",
     "express": "^4.18.2",
     "multer": "^2.3.0",

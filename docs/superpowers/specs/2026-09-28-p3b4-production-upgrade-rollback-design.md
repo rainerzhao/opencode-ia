@@ -41,7 +41,7 @@
 
 比较上一稳定版本与候选版本的 `mysqlSchemaVersion`：
 
-- `code-only`：版本相同。候选失败时允许旧代码重新连接原验收库，但本 Harness 仍执行备份恢复路径，以同时验证标准灾备流程。
+- `code-only`：版本相同，但不代表业务数据语义向后兼容。本 Harness 仍只执行升级前备份恢复路径，不自动让旧代码连接候选已写入的源库。
 - `schema-forward`：候选版本更高。旧代码只能连接升级前备份恢复出的 rollback 数据库，禁止连接已迁移的源库。
 - 候选 Schema 低于上一稳定版本：拒绝执行，错误码 `PRODUCTION_UPGRADE_SCHEMA_DOWNGRADE`。
 - Git SHA 相同：拒绝执行，错误码 `PRODUCTION_UPGRADE_RELEASE_CONFLICT`，避免把重启冒充升级。
@@ -66,7 +66,7 @@
 1. 在开始真实模型调用前校验显式 gate、两个空白数据库、两个发布 Manifest、发布目录安全性和版本关系。
 2. 使用上一稳定发布自己的管理员 CLI 初始化源库；管理员密码通过 stdin，成员密码只在 Harness 内存/环境中传递。
 3. 启动上一稳定发布，创建一个成员账号和三个私有 Conversation；每个 Conversation 完成三轮真实 OpenCode 请求，后两轮必须从上下文取回第一轮 marker，且不得出现跨 Conversation 串线。再创建一份带附件 canary 的私有知识记录。
-4. 停止上一稳定发布，经成员重新登录读取三个 Conversation、九个 Job 的唯一终态与附件；随后复用现有 MySQL/附件备份实现创建升级前快照，URL 只通过环境传递。
+4. 在上一稳定发布仍运行时，经成员重新登录读取三个 Conversation、九个 Job 的唯一终态与附件；复读成功后停止上一稳定发布，再复用现有 MySQL/附件备份实现创建升级前快照，URL 只通过环境传递。
 5. 使用候选发布连接同一源库和持久目录。生产启动器完成能力检查、Migration 与 OpenCode 门禁后，经原成员账号 HTTP 复读升级前数据，再创建一个候选版本专属 Conversation marker 并完成一个真实 OpenCode Job。
 6. 停止候选发布。连接 rollback 数据库，先执行 MySQL 能力检查，再要求表数量严格为 0；随后把升级前 SQL 和附件 sidecar 恢复到新的 rollback 数据根。
 7. 使用上一稳定发布连接 rollback 数据库和恢复附件目录。原成员账号必须能登录、读取原三个 Conversation 和九个 Job 唯一终态，附件 canary 必须逐字节一致。
